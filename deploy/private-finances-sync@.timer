@@ -1,0 +1,12 @@
+[Unit]
+Description=Private Finances background import timer (%i)
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=6h
+RandomizedDelaySec=60s
+AccuracySec=1s
+Unit=private-finances-sync@%i.service
+
+[Install]
+WantedBy=timers.target

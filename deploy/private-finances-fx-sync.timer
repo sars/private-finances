@@ -1,0 +1,12 @@
+[Unit]
+Description=Private Finances daily commercial FX sync timer
+
+[Timer]
+# Check later publication windows too; existing quote days are skipped.
+OnCalendar=*-*-* 05,11,17:00:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+Unit=private-finances-fx-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Private Finances daily report calendar check
+
+[Timer]
+# After the usual 03:00 UTC bank imports; report boundaries remain Europe/Riga.
+OnCalendar=*-*-* 06:00:00 UTC
+Persistent=true
+Unit=private-finances-reports.service
+
+[Install]
+WantedBy=timers.target

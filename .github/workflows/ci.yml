@@ -1,0 +1,29 @@
+name: CI
+# Repository hygiene. Cheap — about a minute — and it applies to documentation
+# as much as to code, so unlike the test suite it runs on every change.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    name: Foundation checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # check_repository.py walks every Git-visible file, so the tree is needed,
+      # but no history is: fetch-depth 1 also keeps `git show HEAD` meaningful.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate foundation
+        run: python3 scripts/check_repository.py
+      - name: Check whitespace
+        run: git show --format= --check HEAD

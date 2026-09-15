@@ -1,0 +1,32 @@
+[Unit]
+Description=Private Finances dashboard
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=private-finances
+Group=private-finances
+WorkingDirectory=/opt/private-finances/current
+Environment=APP_MODE=postgres
+Environment=PORT=3300
+EnvironmentFile=/etc/private-finances/app.env
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=90
+UMask=0077
+StateDirectory=private-finances-consent
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LimitNOFILE=4096
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,387 @@
+import assert from 'node:assert/strict';
+import {
+  mkdtemp,
+  mkdir,
+  rm,
+  writeFile,
+  chmod,
+  readFile,
+  symlink,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import {
+  dailyReplayWindow,
+  parseInstance,
+  runScheduledSync,
+  verifiedMarker,
+  scheduleEnabled,
+} from '../src/schedule.js';
+
+test('PF-002 bank invocation requires both restore and connector enable markers', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-markers-'));
+  let calls = 0;
+  const instance = 'monobank-rodion';
+  const options = {
+    instance,
+    now: new Date(),
+    stateDirectory: directory,
+    ready: () => scheduleEnabled(directory, instance, process.getuid!()),
+    invoke: async () => {
+      calls++;
+      return 'success' as const;
+    },
+  };
+  try {
+    await mkdir(join(directory, 'schedules'));
+    assert.equal(await runScheduledSync(options), 'disabled');
+    await writeFile(
+      join(directory, 'schedules', `${instance}.enabled`),
+      instance,
+      { mode: 0o600 },
+    );
+    assert.equal(await runScheduledSync(options), 'disabled');
+    await rm(join(directory, 'schedules', `${instance}.enabled`));
+    await writeFile(
+      join(directory, 'off-server-restore-verified'),
+      'off-server-restore-verified',
+      { mode: 0o600 },
+    );
+    assert.equal(await runScheduledSync(options), 'disabled');
+    assert.equal(calls, 0);
+    await writeFile(
+      join(directory, 'schedules', `${instance}.enabled`),
+      instance,
+      { mode: 0o600 },
+    );
+    assert.equal(await runScheduledSync(options), 'success');
+    assert.equal(calls, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PF-002 verified local recovery permits only explicitly enabled instances', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-local-recovery-'));
+  const instance = 'monobank-rodion';
+  const uid = process.getuid!();
+  const marker = join(directory, 'local-restore-verified');
+  let calls = 0;
+  const options = {
+    instance,
+    now: new Date(),
+    stateDirectory: directory,
+    ready: () => scheduleEnabled(directory, instance, uid),
+    invoke: async () => {
+      calls++;
+      return 'success' as const;
+    },
+  };
+  try {
+    await mkdir(join(directory, 'schedules'));
+    const enable = join(directory, 'schedules', `${instance}.enabled`);
+    await writeFile(enable, instance, { mode: 0o600 });
+    assert.equal(await runScheduledSync(options), 'disabled');
+    await writeFile(marker, 'off-server-restore-verified', { mode: 0o600 });
+    assert.equal(await runScheduledSync(options), 'disabled');
+    await writeFile(marker, 'local-restore-verified');
+    assert.equal(await scheduleEnabled(directory, instance, uid + 1), false);
+    await chmod(marker, 0o666);
+    assert.equal(await runScheduledSync(options), 'disabled');
+    await chmod(marker, 0o600);
+    await rm(enable);
+    assert.equal(await runScheduledSync(options), 'disabled');
+    await writeFile(enable, 'monobank-katya', { mode: 0o600 });
+    assert.equal(await runScheduledSync(options), 'disabled');
+    assert.equal(calls, 0);
+    await writeFile(enable, instance);
+    assert.equal(await runScheduledSync(options), 'success');
+    assert.equal(calls, 1);
+    assert.equal(
+      await scheduleEnabled(directory, 'monobank-katya', uid),
+      false,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PF-002 rolling replay includes today and spans exactly 31 days across leap year and DST', () => {
+  assert.deepEqual(dailyReplayWindow(new Date('2024-03-31T23:30:00-04:00')), {
+    from: '2024-03-01T03:30:00.000Z',
+    to: '2024-04-01T03:30:00.000Z',
+  });
+  assert.deepEqual(dailyReplayWindow(new Date('2024-03-01T12:00:00Z')), {
+    from: '2024-01-30T12:00:00.000Z',
+    to: '2024-03-01T12:00:00.000Z',
+  });
+  assert.deepEqual(dailyReplayWindow(new Date('2026-01-01T00:00:00Z')), {
+    from: '2025-12-01T00:00:00.000Z',
+    to: '2026-01-01T00:00:00.000Z',
+  });
+  assert.throws(() => dailyReplayWindow(new Date('bad')));
+  assert.throws(() => parseInstance('../monobank-rodion'));
+});
+
+test('PF-002 missing, untrusted, writable and symlink markers fail closed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-gate-'));
+  const path = join(directory, 'marker');
+  const uid = process.getuid!();
+  try {
+    assert.equal(await verifiedMarker(path, 'verified', uid), false);
+    await writeFile(path, 'verified\n', { mode: 0o600 });
+    assert.equal(await verifiedMarker(path, 'verified', uid), true);
+    assert.equal(await verifiedMarker(path, 'verified', uid + 1), false);
+    assert.equal(await verifiedMarker(path, 'different', uid), false);
+    await symlink(path, join(directory, 'link'));
+    assert.equal(
+      await verifiedMarker(join(directory, 'link'), 'verified', uid),
+      false,
+    );
+    await chmod(path, 0o666);
+    assert.equal(await verifiedMarker(path, 'verified', uid), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PF-002 disabled guard makes no invocation; success replays identical bounded window', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-run-'));
+  const calls: string[][] = [];
+  const options = {
+    instance: 'monobank-rodion',
+    now: new Date('2026-09-11T03:00:00Z'),
+    stateDirectory: directory,
+    ready: async () => false,
+    invoke: async (args: string[]) => {
+      calls.push(args);
+      return 'success' as const;
+    },
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'disabled');
+    assert.equal(calls.length, 0);
+    options.ready = async () => true;
+    assert.equal(await runScheduledSync(options), 'success');
+    assert.equal(await runScheduledSync(options), 'success');
+    assert.deepEqual(
+      calls,
+      Array(2).fill([
+        'monobank',
+        'rodion',
+        '2026-08-11T03:00:00.000Z',
+        '2026-09-11T03:00:00.000Z',
+      ]),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PF-002 auth or uncertain failure latches only that connector; transient has no immediate retry', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-failure-'));
+  let calls = 0;
+  const options = {
+    instance: 'enablebanking-katya-wise',
+    now: new Date('2026-09-11T03:00:00Z'),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async () => {
+      calls++;
+      return 'blocked' as const;
+    },
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(calls, 1);
+    const transient = {
+      ...options,
+      instance: 'monobank-katya',
+      invoke: async () => {
+        calls++;
+        return 'transient' as const;
+      },
+    };
+    assert.equal(await runScheduledSync(transient), 'transient');
+    assert.equal(calls, 2);
+    assert.equal(await runScheduledSync(transient), 'deferred');
+    assert.equal(calls, 2);
+    const crash = {
+      ...options,
+      instance: 'monobank-rodion',
+      invoke: async (): Promise<never> => {
+        throw new Error('simulated crash');
+      },
+    };
+    await assert.rejects(runScheduledSync(crash), /simulated crash/);
+    assert.equal(await runScheduledSync(crash), 'blocked');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('per-bank schedules pass the selected bank and isolate blocked consent', async () => {
+  for (const invalid of [
+    'enablebanking-rodion',
+    'monobank-rodion-wise',
+    'enablebanking-katya-other',
+  ])
+    assert.throws(() => parseInstance(invalid));
+  const directory = await mkdtemp(join(tmpdir(), 'pf-bank-schedules-'));
+  const calls: string[][] = [];
+  const options = {
+    instance: 'enablebanking-rodion-wise',
+    now: new Date('2026-09-11T03:00:00Z'),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async (args: string[]) => {
+      calls.push(args);
+      return 'blocked' as const;
+    },
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(
+      await runScheduledSync({
+        ...options,
+        instance: 'enablebanking-rodion-revolut',
+        invoke: async (args) => {
+          calls.push(args);
+          return 'success';
+        },
+      }),
+      'success',
+    );
+    assert.deepEqual(
+      calls.map((args) => [args[0], args[1], args[4]]),
+      [
+        ['enablebanking', 'rodion', 'wise'],
+        ['enablebanking', 'rodion', 'revolut'],
+      ],
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Enable Banking success cannot repeat within six hours, even after a timer restart', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-bank-frequency-'));
+  let calls = 0;
+  const options = {
+    instance: 'enablebanking-rodion-wise',
+    now: new Date(),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async () => {
+      calls++;
+      return 'success' as const;
+    },
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'success');
+    const retryAt = Number(
+      await readFile(
+        join(directory, `${options.instance}.retry-after`),
+        'utf8',
+      ),
+    );
+    assert.ok(retryAt >= options.now.getTime() + 6 * 3600000);
+    assert.equal(
+      await runScheduledSync({ ...options, now: new Date(retryAt - 1) }),
+      'deferred',
+    );
+    assert.equal(calls, 1);
+    assert.equal(
+      await runScheduledSync({ ...options, now: new Date(retryAt) }),
+      'success',
+    );
+    assert.equal(calls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+for (const minutes of [30, 60]) {
+  test(`${minutes}-minute trial persists fallback after rate limits or transient failures, isolated by bank`, async () => {
+    for (const failure of ['rate_limit', 'transient'] as const) {
+      const directory = await mkdtemp(join(tmpdir(), 'pf-hourly-trial-'));
+      const instance = 'enablebanking-rodion-wise';
+      const now = new Date();
+      const options = {
+        instance,
+        now,
+        stateDirectory: directory,
+        ready: async () => true,
+        hourlyPolling: true,
+        halfHourlyPolling: minutes === 30,
+        invoke: async () => 'success' as const,
+      };
+      try {
+        assert.equal(await runScheduledSync(options), 'success');
+        const initial = Number(
+          await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
+        );
+        assert.ok(
+          initial >= now.getTime() + minutes * 60000 &&
+            initial < now.getTime() + minutes * 60000 + 10000,
+        );
+        assert.equal(
+          await runScheduledSync({ ...options, now: new Date(initial - 1) }),
+          'deferred',
+        );
+        assert.equal(
+          await runScheduledSync({
+            ...options,
+            now: new Date(initial),
+            invoke: async () => failure,
+          }),
+          failure,
+        );
+        assert.equal(
+          (
+            await readFile(join(directory, `${instance}.conservative`), 'utf8')
+          ).trim(),
+          failure,
+        );
+        const retry = Number(
+          await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
+        );
+        assert.ok(retry >= initial + 86400000);
+        assert.equal(
+          await runScheduledSync({ ...options, now: new Date(retry - 1) }),
+          'deferred',
+        );
+        assert.equal(
+          await runScheduledSync({ ...options, now: new Date(retry) }),
+          'success',
+        );
+        const slow = Number(
+          await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
+        );
+        assert.equal(slow, retry + 6 * 3600000);
+        assert.equal(
+          await runScheduledSync({
+            ...options,
+            instance: 'enablebanking-rodion-revolut',
+          }),
+          'success',
+        );
+        const other = Number(
+          await readFile(
+            join(directory, 'enablebanking-rodion-revolut.retry-after'),
+            'utf8',
+          ),
+        );
+        assert.ok(
+          other >= now.getTime() + minutes * 60000 &&
+            other < now.getTime() + minutes * 60000 + 10000,
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
+  });
+}

@@ -1,0 +1,19 @@
+[Unit]
+Description=Private Finances local backup before imports
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=private-finances
+Group=private-finances
+EnvironmentFile=/etc/private-finances/app.env
+ExecStart=/usr/bin/python3 /opt/private-finances/current/deploy/local-backup.py
+StateDirectory=private-finances-backups
+StateDirectoryMode=0700
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

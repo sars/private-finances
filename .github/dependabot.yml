@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # The runtime is pinned to Node 24 (`.nvmrc`, and `engines` requires
+      # `<25`), so types describing a newer Node would let code typecheck
+      # against APIs the server does not have and fail only at run time. Lift
+      # this together with the runtime, not before it: Node 24 stays Active LTS
+      # until October 20, 2026 and is supported until April 2028.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']

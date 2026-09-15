@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Private Finances backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+Unit=private-finances-backup.service
+
+[Install]
+WantedBy=timers.target

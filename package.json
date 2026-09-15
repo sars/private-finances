@@ -1,0 +1,51 @@
+{
+  "name": "private-finances",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "scripts": {
+    "postinstall": "node scripts/hide-node-modules-from-spotlight.mjs",
+    "build": "tsc && pnpm build:frontend",
+    "build:frontend": "tsc -p frontend/tsconfig.json && vite build",
+    "typecheck": "tsc --noEmit && tsc -p frontend/tsconfig.json",
+    "test": "tsc && node --test --test-concurrency=2 dist/test/*.test.js",
+    "test:progress": "tsc && node --test --test-concurrency=2 --test-reporter=spec dist/test/*.test.js",
+    "format": "prettier --write src test frontend vite.config.ts package.json tsconfig.json components.json",
+    "format:check": "prettier --check src test frontend vite.config.ts package.json tsconfig.json components.json",
+    "check": "python3 scripts/check_repository.py && pnpm format:check && pnpm test && pnpm build:frontend",
+    "demo": "pnpm build && node dist/src/main.js",
+    "start": "node dist/src/main.js",
+    "sync": "node dist/src/sync-cli.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@tanstack/react-query": "5.102.8",
+    "@tanstack/react-router": "1.170.35",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "1.44.0",
+    "pg": "8.23.0",
+    "radix-ui": "^1.6.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recharts": "3.10.1",
+    "tailwind-merge": "3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "24.13.4",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "prettier": "3.9.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.0"
+  }
+}

@@ -1,0 +1,30 @@
+[Unit]
+Description=Private Finances Telegram clarifications
+After=network-online.target postgresql.service
+Wants=network-online.target
+ConditionPathExists=/etc/private-finances/telegram.enabled
+
+[Service]
+Type=simple
+User=private-finances
+Group=private-finances
+WorkingDirectory=/opt/private-finances/current
+EnvironmentFile=/etc/private-finances/app.env
+EnvironmentFile=/etc/private-finances/telegram.env
+ExecStart=/usr/bin/node dist/src/telegram-cli.js
+Restart=no
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LimitNOFILE=4096
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

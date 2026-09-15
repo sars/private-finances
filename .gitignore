@@ -1,0 +1,27 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials/
+secrets/
+data/
+exports/
+backups/
+logs/
+*.log
+*.sqlite*
+*.dump
+node_modules/
+.next/
+dist/
+coverage/
+__pycache__/
+.venv/
+.worktrees/
+# Local Claude Code client configuration, including permission rules.
+# Machine-specific and security relevant; never share it through Git.
+.claude/

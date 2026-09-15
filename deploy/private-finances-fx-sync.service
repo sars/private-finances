@@ -1,0 +1,27 @@
+[Unit]
+Description=Private Finances daily commercial FX archive sync
+After=network-online.target postgresql.service private-finances-local-backup.service
+Requires=private-finances-local-backup.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=private-finances
+Group=private-finances
+WorkingDirectory=/opt/private-finances/current
+EnvironmentFile=/etc/private-finances/app.env
+ExecStart=/usr/bin/node dist/src/fx-sync-cli.js
+# The initial archive pass can be long; completed provider days are resumable.
+TimeoutStartSec=2h
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LimitNOFILE=4096
+MemoryMax=512M

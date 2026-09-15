@@ -1,0 +1,835 @@
+# Current state
+
+Rewrite this section in place; do not append beside it. Everything below the
+"Recent entries" heading is an append-only record of individual releases, and
+older entries live in [the September archive](status-archive/2026-09.md).
+Keep this file bounded: `python3 scripts/archive_status.py --keep 10` moves
+older entries out. Run `scripts/deploy-status.sh` to compare the deployed
+release with `origin/main` rather than reconstructing it by hand.
+
+## Deployed release
+
+**ba46b1b9f1fa6755d3bd04447a1e3aacf8de9701**, live since September 16, 2026 at
+schema version 37, deployed with `deploy/release.sh` over
+`4fed79a0dfe01857b4da5d5335eee6385a7fd760`. Both `private-finances.service` and
+`private-finances-telegram.service` are active and the ledger holds 4,085
+transactions. Its migration was rehearsed first on a restored copy of the real
+database, which reached schema 37 in 295 milliseconds with the transaction count
+unchanged, 140 refund links still active, no expense without a category and
+nothing filed on a heading.
+
+Verified on the server afterwards: all seven merchants the owner named are
+filed — car insurance 24,909.68 ₴, car repairs 22,894 ₴, padel 6,050 ₴, building
+security 1,050 ₴, speeding fines 694.94 ₴, and the transfers now reading as
+internal at 465 € across five payments. Exactly two rules exist from the batch,
+both the transfer rule, one per member; none of the other six merchants left a
+rule behind. Unspecified personal expenses fell from 324 to 300.
+
+Two lessons from getting here are worth keeping. A migration that writes
+household-specific data must be conditional on that data already being present,
+or it seeds every fresh install and test fixture — this one put seven rules per
+member into every database and broke thirteen tests before CI caught it. And a
+local gate run as `pnpm check | tail` reports *tail's* exit code, so it can
+never fail; run it to a log and read `$?`.
+
+This release closes a gap the owner found: a 12,543 UAH shoe purchase showed as
+Unspecified in July yet never appeared in the review queue. The queue listed a
+payment only while it was unresolved or provisional, so a payment a person had
+classified was finished by that test whatever they classified it as — and the
+move to the shared tree had mapped legacy paths with no successor (`Shopping`,
+`Apps & services / AI tools`, `Other`) onto the root catch-all, flattening 291
+decisions. 96 were still stranded there, worth 3,197 USD across a full year,
+invisible to the one screen whose job is to find them.
+
+The queue now lists anything filed on the root catch-all whoever decided it,
+because a category naming nothing is unfinished work; a branch catch-all such as
+`Food / Unspecified` still names its branch and is left alone. Schema 35 then
+read the merchant category code back over the stranded payments and placed 80 of
+the 96 — 30 Beauty / Cosmetics, 27 Clothes, 16 Apps & services, 6 Beauty /
+Services, 1 Entertainment / Hobbies, verified on the server after the switch.
+Unspecified fell from 407 personal expenses to 324, and all 324 are now reachable
+from review. The remaining 16 stranded payments are six photo-shop charges, four
+transfers to named people, three barber payments carrying no merchant code, two
+marketplace orders and one advertising charge; they were left for the owner
+rather than guessed at.
+
+Historical reporting keeps the narrower test deliberately: those rows already
+count as spending, so estimating them again would double count.
+
+This line of three releases rebuilt the payment review page, let a suggestion
+apply tags, and made an answer in Telegram a decision rather than a proposal.
+`86c4886` rewrote `/review?id=…` around what identifies a payment: labelled
+facts instead of bare words, day and clock time, an account chip, type-to-search
+category and tag pickers, one combined decision, one refund block, and a
+readable bank record over the collapsed complete field list. It also repaired a
+category picker that had been silently empty because the screen read
+`/api/categories` through a type the server never sent. `8f0d2f1` added tags to
+the classifier's proposal as a closed enum of the household's own names, stopped
+Telegram asking for a typed confirmation, and stopped the review page naming
+Enable Banking, which is an aggregator the household does not bank with.
+
+`8f0d2f1` also took the Telegram worker down for fourteen minutes. It reads a
+`message_id` column that was added inside `initializeTelegram`, which only runs
+in the one-time schema version 7 block, so no deployed database ever received
+it; the worker exited a second after systemd started it, on every start. The web
+application was unaffected and nothing was written incorrectly, because the
+worker died before doing any work, and Telegram's own cursor was never advanced,
+so queued messages drained once it was healthy. `8f45084` adds the column as
+schema 34 and covers it in `test/migration-upgrade.test.ts` — the file that
+exists because receipt columns were once lost exactly this way. Two habits
+follow: a schema change needs its own version block, never an initializer, and
+the deploy's `services: active active` check samples at switch time and cannot
+see a crash on first poll.
+
+Earlier releases in this line: schema 26 carried the shared category tree and
+the refund model, schema 27 corrected refund matching, schema 28 introduced the
+provisional resting place, schema 29 reconciled the tree, and schema 30
+identified transfers by the counterparty the owner has stated rather than by
+matching amounts (below), added receipts as evidence rather than a hold on the
+totals, and corrected four merchants filed by name. An attempt on
+September 14 switched to a commit older than the running release and was
+corrected within minutes; see
+[the incident note](incidents/2026-09-14-release-downgrade.md). `release.sh` now
+refuses a target that does not contain the running release.
+
+Refunds are working on real data: **140 active links**, covering 136 of the 138
+merchant reversals in the ledger. The two that remain are unexplainable from
+what we hold rather than undecided — a 45.00 EUR IKEA refund on Katya's card
+whose purchase is on no account we sync, and a 6.00 EUR Riga parking reversal
+with no charge at all. What the matcher still will not decide is recorded in
+[refunds](refunds.md) rather than tracked here, so this section stays current
+rather than growing.
+
+## Live capabilities
+
+Private Tailscale HTTPS deployment with per-owner authentication. Bank imports run
+on enabled systemd timers for five instances: Enable Banking `rodion-wise`,
+`rodion-revolut` and `katya-wise`, plus Monobank `rodion` and `katya`. Daily
+commercial FX ingestion, household report delivery, Telegram clarification
+questions with owner replies and confirmation, bounded AI categorization, and
+receipt photos through the paired family Telegram chat are all working. Home and
+Analytics use explicit periods and separately marked historical estimates. Unknown
+transfers and incomplete bank coverage stay visible rather than hidden.
+
+## Standing limits
+
+The shared AI budget is a hard $10 monthly cap with reservation and settlement; it
+is never raised to finish a task. Off-server encrypted backup to S3 remains
+deferred at the owner's request: local restore works, and that is not off-server
+protection. Automatic failure-triggered rollback is implemented but has never been
+deliberately failure-injection tested. Monobank jars are excluded by choice. Income
+analytics, live dashboard updates and 2025 deletion are outside scope. GitHub
+branch protection is not enforced; reviewed PRs with green CI are a procedural
+rule, not a server-enforced one.
+
+## Recognising the household's own money
+
+A transfer between the household's own accounts is identified from an IBAN when
+a provider states one, from a masked card number when the payment names a card
+the owner has identified, and otherwise from what the owner has said about the
+counterparty by name (migration 30, `src/counterparty-identity.ts`).
+
+The honest shape of this is worth keeping in view. Only about a third of
+transfers carry a counterparty IBAN, and just 38 payments in the whole ledger
+name a card — 22 of those cards appear once, being strangers paid once. The name
+path therefore carries the work, and it holds only what the owner has stated:
+their own classification rules, which is also where a decision they make by
+hand now lands — categorising a transfer writes a rule, so it answers every
+later payment to the same person whatever spelling the bank uses, and it is
+visible and editable wherever rules are. A separate store held this briefly at
+schema 30 and 31; the owner asked why a second mechanism existed when rules
+already did the job, and schema 32 folded it back in.
+
+An earlier version also matched by amount, pairing a payment with the same sum
+arriving on another of our accounts. It was removed at the owner's instruction
+because the system does not hold every account of the household — Kate has cards
+at banks it never sees — so the other half of a real transfer is often absent
+and a pair that does appear may be coincidence.
+
+Run the recognition section of
+[`scripts/category-diagnosis.sql`](../scripts/category-diagnosis.sql) to see how
+far it reaches: how many counterparties are remembered and from where, and how
+many transfers still counted as spending have a counterparty that recurs — those
+are the ones where categorising once stops the repeats. Its four invariants must
+all read zero.
+
+## Known deviations
+
+Two findings from the September 13 inspection, both recorded rather than silently
+changed. The deployment user `radar` has unrestricted passwordless sudo, which
+contradicts the restriction described in [the deployment contract](operations.md).
+Separately, `sshd_config` sets `PermitRootLogin yes`, so root may log in over SSH.
+Together these mean that holding the `radar` key is effectively root on the server.
+
+Neither was altered here: narrowing sudo could affect the sync timers, the Telegram
+unit and `switch-release.py`, and changing SSH authentication on a live host risks
+locking access out. Both need the owner's and the other agent's awareness first, and
+a per-service check afterwards. Tracked as OPS-4.
+
+## Open receipt evidence
+
+Six receipt photos exist. Four are linked to payments. Two are the same Rimi
+purchase photographed twice and stay unlinked while the matching debit is a
+Monobank hold; the duplicate guard ensures only one of them can link. Automatic
+matching of pending payments is designed in ADR 0005 but not yet merged, so until
+it ships an unsettled purchase still waits for the bank.
+
+# Recent entries
+
+# A rule can match part of a description — September 15, 2026
+
+Schema 36 and 37. A rule had to equal the whole description, which a bank
+reference number makes impossible: every `TRANSFER-<number> Sent money to Rodion
+Salnik` is a new string, so one rule answered one payment and the next transfer
+needed another. 323 of the owner's 520 active rules match a single payment for
+reasons like this.
+
+Rules now offer a second way to match: the description *contains* this text.
+There is no pattern syntax — no asterisks to place, nothing to escape — because
+the owner asked for the cleanest possible version and what they actually wanted
+was to type the part that stays the same. Matching ignores case, which also
+merges the two spellings a bank uses for the same person. An exact rule always
+beats a contains rule, and between two contains rules the longer text wins, so a
+broad rule can never outvote a specific decision.
+
+The predicate deciding whether a rule describes a payment had been written out
+four times inside the triage query. It is now the `rule_matches` SQL function,
+written once, with `test/classification-rules.test.ts` holding it and its
+TypeScript twin to the same table of cases so the two cannot drift.
+
+Schema 37 files the seven merchants the owner named while reading their July
+spending: `hotline.finance` is car insurance, `ТОВ "БМ Фікс"` and `ФОП Величко
+Степан Андрійович` are car repairs, `ФОП Петраков Євгеній Сергійович` is padel
+court hire, `ТОВ 'Явір-2000'` is building security, `Дія | Штрафи` are speeding
+fines, and `Sent money to Rodion Salnik` is the owner moving their own money,
+which is not spending at all. None could have been worked out from the data —
+the bank sends a money-transfer code and a sole trader's name. Two categories
+the owner named arrive with them: `Utilities / Security` and
+`Transport / Car / Fines`.
+
+Only the transfers become a standing rule, because that is the only one the
+owner asked to answer future payments as well: "i told about one rule only.
+others were just to categorise once". The distinction is reach — filing answers
+the payments in the ledger and stops, while a rule decides every future payment
+without asking, which is the silent generalisation the invariants forbid. That
+one rule covers both members: money arriving in Rodion's account has not been
+spent by anyone whichever of them sent it, and the ledger does not hold every
+account the household has, so the absence of Katya's side today is not evidence
+it never happens. A merchant is skipped entirely unless the ledger holds a
+payment to
+it, so a fresh install or a test fixture comes out of the migration unchanged;
+the categories are vocabulary and arrive either way.
+
+# Payments stranded on the catch-all come back — September 15, 2026
+
+Schema 35. The owner asked why a 12,543 UAH shoe purchase showed as Unspecified
+yet never appeared in the review queue, and the answer was a gap left by the
+move to the shared tree.
+
+The review queue listed a payment only while it was unresolved or provisional.
+A payment a person had classified was finished by that test, whatever it was
+classified as — including the root catch-all. The tree migration mapped legacy
+paths with no successor (`Shopping`, `Apps & services / AI tools`, `Other`) onto
+that catch-all, so 291 payments lost what their category had meant and 96 of them
+were still sitting there, outside the queue, worth 3,197 USD and spanning a full
+year. Nothing had reported that the flattening happened.
+
+Two changes. The queue now also lists anything filed on the root catch-all,
+whoever decided it, because a category that names nothing is unfinished work; a
+branch catch-all such as `Food / Unspecified` still names its branch and is left
+alone. And schema 35 reads the bank's merchant category code back over the
+stranded payments, which places 80 of the 96 — 30 in Beauty / Cosmetics, 27 in
+Clothes, 16 in Apps & services, 6 in Beauty / Services, 1 in Entertainment /
+Hobbies. This repairs a decision the migration discarded rather than overriding
+one that stands: a payment whose category still names something is never touched,
+and a money-transfer code still places nothing.
+
+The remaining 16 return to the review queue for the owner: six photo-shop
+payments, four transfers to named people, three barber payments that carry no
+merchant code, two marketplace orders and one advertising charge.
+
+Four merchant codes were added to the table on the way — sports and
+miscellaneous apparel, hobby and toy shops, and digital media — chosen by
+reading the merchants rather than by spending classifier budget on them.
+
+# A hold is money already spent — September 15, 2026
+
+No schema change; the meaning of an existing status changes, so the effect is
+immediate on the numbers rather than on the data.
+
+Ninety-nine Monobank outflows, some a year old, were excluded from every total
+as unsettled — roughly 68,578 UAH inside the window being compared against the
+owner's own spreadsheet, and the second largest line in that comparison. The
+money had gone. The balance in Monobank's payload runs straight through these
+rows: 358,113.98 minus 416.41 is 354,054.01, and the next settled operation
+continues from there. Asked again four months later the bank still answers
+`hold: true` for the same operations, so the flag marks an amount that could be
+adjusted rather than money still in the account. The scheduled sync also only
+requests the last 31 days, so a hold older than a month is never re-read.
+
+Holds now enter the confirmed totals, the monthly chart and the resting place.
+The pending figure is still reported wherever it was, as "of which the amount is
+not final". Nothing that waits for settlement was removed: refund links against a
+hold are still marked provisional and re-checked, and a receipt stranded on a
+hold still moves to a settled row if one appears — both were already correct and
+were waiting for an event that, for these rows, never arrives. Enable Banking's
+mapping is untouched, because no Wise or Revolut payment has ever arrived
+pending.
+
+`pnpm check` passes, with four new tests covering the total, the monthly figure,
+the placement and the fact that held _incoming_ money is still not spending.
+
+# Tax and own-card transfers stop counting as spending — September 15, 2026
+
+Schema version 31, recorded as an amendment to
+[ADR 0008](adr/0008-attributes-and-the-classification-pipeline.md).
+
+The owner opened Analytics and saw 1,578,894 UAH for July against the 369,092
+their own spreadsheet reports. The resting place had placed a sole-trader tax
+payment of 880,894 UAH as a personal expense in the catch-all, and a second of
+248,606 eight days earlier. Across the ledger it had placed five treasury
+payments worth 1,145,672 and thirty-two movements to the household's own cards
+worth 502,687.
+
+Both counterparties are named by the bank in its own words, so both are now
+recognised before the merchant code is consulted: a description led by `ГУК`, or
+naming the treasury service, is `non_personal`; `Переказ на картку` with no
+IBAN, comment or card digits of its own is an `internal_transfer` and stays
+**provisional**, because one of those thirty-two really was a payment to a
+therapist. Transfers to people are untouched and still rest in the catch-all,
+which is what ADR 0008 decided. The migration revisits every placement already
+made and skips any payment a person has decided.
+
+The ledger already contradicted itself here: eleven of sixteen treasury payments
+were `non_personal` before the sweep ran, and only the five nobody had reached
+became household spending.
+
+`pnpm check` passes: 467 tests, 463 passing and 4 skipped, 7 of them new.
+
+# Refunds corrected by the owner — September 14, 2026
+
+Merged to `main` with green CI; not deployed. Three corrections to what shipped
+earlier the same day, recorded as an amendment in
+[ADR 0007](adr/0007-refunds-and-reimbursements.md) and described in
+[refunds](refunds.md).
+
+A credit linked to a purchase is no longer classified and no longer listed: it is
+already counted through the purchase, so showing it showed the same money twice
+and classifying it judged the same money twice. Linking now writes nothing to the
+credit, and schema version 26 takes back the `non_personal` classification the
+earlier model wrote, for every link whose credit was still exactly as it left it.
+
+What a purchase finally cost is settled in the account's own currency and then
+converted like any other transaction, at the daily rate for the purchase's date.
+The previous rule converted each side on its own date, which made a charge and its
+reversal net to nothing in the merchant's currency and hid the 7.54 UAH of rate
+movement everywhere except the account currency.
+
+A refunded purchase still has to be categorised. It stays in the review queue and
+in the transaction list, because what the money was for does not change because
+some of it came back.
+
+Two consequences follow. A manual link may cross currencies: the incoming amount
+is converted at the daily rate for the day it arrived, the view shows paid,
+returned and an approximate result, and analytics uses the result. Automatic
+matching now covers the historical backlog rather than only new money, while
+Telegram questions stay limited to money arriving from now on.
+
+`pnpm check` passes: 399 tests, 41 of them about refunds.
+
+# One shared category tree, built — September 14, 2026
+
+ADR 0006 is implemented in schema version 25 and not yet deployed. The two
+per-owner path hierarchies become one household tree; a payment points at a node
+instead of carrying a path string, so renaming a category no longer rewrites
+history. Parents stop being assignable and every branch carries a visible
+`Unspecified` leaf; `Subscriptions` merges into `Apps & services`; tags move out
+of the category table into a household list of their own. `Communication` is kept
+as a branch and `Restaurants` gains a `Dining in` leaf, both departures from the
+ADR's list and both recorded in it.
+
+Three invariants are enforced by the database rather than by review: nothing can
+be filed on a heading, the path text is always re-derived from the node, and depth
+is capped at three. Where the migration cannot place a payment precisely it uses
+the merchant category code the bank recorded, but only for a payment nobody has
+classified and only to replace `Unspecified`, so it can never overwrite a decision.
+Every payment keeps its previous path in `category_migration_log`.
+
+Account purpose stopped being applied while drawing reports. It is now recorded on
+the payment, once, with a reason in the audit trail — so a grocery run on the
+business card can be marked personal, which reporting previously made impossible.
+Totals are unchanged, a decision a person made is never overruled, an investment
+bought from the work card keeps that attribution, and calling the account personal
+again undoes exactly what the policy did.
+
+Verified by `pnpm check`: 362 backend tests pass, including five that carry a
+version 24 database through the real migration.
+`scripts/category-diagnosis.sql` checks the invariants against the live database
+and reports how much is still unspecified, month by month. Trips and the ordinary
+versus exceptional attribute are not built yet.
+
+# One decision can become a rule; the overview banner reaches Review — deployed — September 14, 2026
+
+The owner asked whether a recurring transfer to an account their wife holds could
+be recorded as a rule rather than answered again each month. The machinery already
+existed — a confirmed rule may carry `internal_transfer`, and triage applies such a
+rule without a Telegram question — but the only way to create one was to retype the
+bank description by hand in Categories & rules, where a single character or a
+trailing dot makes an exact matcher that never matches. Review's classify form now
+offers "Apply this to future payments described exactly as …", taking the match text
+from the stored transaction. Re-confirming a different decision for the same
+description replaces that rule instead of leaving two that disagree, a payment with
+no description saves none, and nothing is generalised without the tick.
+
+The same report exposed why the overview's "1 unresolved · 7 pending" banner led to
+an empty Needs review list. Its button linked to `/review` with no parameters, which
+opens on All transactions and on the current-month window, and the counts are
+household-wide while Review lists only the signed-in owner's payments. The link now
+selects the needs-review filter with the window unrestricted, the banner says how
+many unresolved payments belong to the other owner, and the empty state explains
+that settling payments keep their decision under All transactions.
+
+`pnpm check` passes. Deployed in 5a29a1b and verified: the classify route accepts
+the opt-in, `saveRuleFromDescription` is in the running build, and the served
+Overview bundle carries the needs-review link.
+
+# Refunds reduce purchases instead of erasing them — September 14, 2026
+
+Merged to `main` in PR 83 with green CI; not deployed. ADR 0007 is now built and
+described in [refunds](refunds.md). `pnpm check` passes: 388 tests, of
+which 39 cover refunds across matching rules, persistence, totals, automation and
+Telegram questions.
+
+A refund link is no longer an all-or-nothing pairing of equal ledger amounts. It
+carries a reduction of a known size, so a partial return and an exchange-rate
+difference both fit, and matching compares what the merchant charged rather than
+what the ledger recorded. The purchase keeps its bank amount and its category and
+shows what was paid, what came back and what it finally cost; spending totals, the
+household report and historical estimates count the net figure, converting each
+side on its own date, so 17.99 EUR out and back nets to nothing in EUR and to 7.54
+UAH of rate movement in the account currency.
+
+Merchant reversals are matched automatically once a minute in the background
+worker, within one account and roughly four months: an exact original amount, a
+partial refund against the only larger outstanding charge, and two charges nobody
+could tell apart are linked silently. Candidates that differ, an amount a cent
+adrift and money from a person become Telegram questions listing the numbered
+purchases; the answer is parsed deterministically, since the reply decides which
+purchase shrinks. Only money booked after the existing rollout boundary is asked
+about, at most three questions per pass.
+
+Three migrations ship together: version 22 adds the reduction columns, replaces the
+membership table with a partial unique index so one purchase can carry several
+refunds, and restores the fourteen purchases the previous model had rewritten to
+`non_personal`; versions 23 and 24 add the matcher's decisions and the questions.
+The version 22 data change was the one that needed care, and it only touches links
+whose purchase has not been edited since. Deployment must migrate a restored copy
+of production first, as the September 13 rollback required.
+
+# Categorisation and refund designs accepted — September 14, 2026
+
+Two decisions are recorded and not yet built.
+[ADR 0006](adr/0006-classifying-what-money-was-for.md) replaces the present
+category arrangement, where one hierarchy carries several unrelated jobs and
+per-owner trees make family totals unreliable. A payment gets exactly one category
+from one shared tree, so category totals sum without double counting; parents stop
+being assignable, which is what currently lets `Health` mean both a branch and
+"health, unspecified"; and `Subscriptions` merges into `Apps & services`, which are
+one idea split across 258 payments. Owner, account, kind, trip, exceptional and
+tags become attributes that slice the same money without summing with it. A trip
+holds what was spent for the trip rather than everything during it, so it is
+assigned deliberately. Investments sit in a third state: out of the headline figure
+by default, present on request. The catch-all is kept and instrumented so its use
+can be seen falling, since the owner's objection is that it says nothing rather
+than that it should not exist.
+
+[ADR 0007](adr/0007-refunds-and-reimbursements.md) makes returned money reduce what
+a purchase cost. Matching uses the original amount and currency rather than the
+ledger amount, which is why the present feature has produced fourteen links: a
+17.99 EUR subscription refunded forty-one days later differs by 7.54 UAH in the
+ledger and not at all in EUR. Automatic linking stays within one account, which
+keeps one member's refund away from the other's identical subscription on another
+card. A refund reduces a purchase without rewriting it, and the interface shows the
+original amount, the reduction and the result. Questions are asked only when the
+answer would change something: indistinguishable candidates are linked without
+asking, differing ones are asked about, and money from a person is always asked
+about.
+
+Both designs come from the owner's stated requirements; product research informed
+the trade-offs and did not decide them. No code was written at that point; ADR 0007
+was built the same day, in the entry above.
+
+# PDF receipts — implemented and tested, not deployed — September 13, 2026
+
+The bot accepts a PDF in the family chat alongside photos. A PDF is rendered to
+page images with poppler's `pdftoppm`, which was already installed on the server
+and needs no new package, invoked through `execFile` with an argument array in a
+temporary directory removed in a `finally`, bounded by a thirty-second timeout, a
+four-megabyte rendered total and an eight-page cap decided by `pdfinfo` before any
+rendering happens. Rasterisation sits behind an injected `PdfRasterizer`
+interface, so replacing poppler is one function and no test needs it installed.
+
+Pages are sent as separate images in one request rather than stitched together, so
+a multi-page document still costs a single budget reservation. An unreadable or
+over-long PDF is marked failed before anything is reserved and the owner gets a
+fixed reply asking for a photo, so a bad document can never spend money. The
+original PDF is stored as the evidence with a rendered first page as the
+thumbnail; the app shows the thumbnail and links to the PDF through a new
+`/api/receipt-file` route served with `nosniff` and a sandbox policy. Duplicate
+detection by digest runs on the original bytes, so a resent PDF costs nothing.
+
+Schema version 21 adds the preview columns; the migration test fails without the
+version block and passes with it. Server requirements including poppler are
+recorded in [what the production server needs](server-requirements.md).
+
+Verified: `pnpm check` passed, 357 tests (354 pass, 3 pre-existing skips). Real
+poppler rendering was not exercised locally because poppler is not installed on
+the development machine; the implementation was driven end to end against stubs
+reproducing poppler's output shape, and the real binary must be verified on the
+server before this is called working. Not deployed.
+
+# Brand abbreviations match their registered name — September 13, 2026
+
+The first receipt to arrive after the pending-matching release stayed unlinked.
+Its payment was present and agreed exactly on amount, currency and day: an `H&M`
+debit of 62.96 EUR against a receipt naming `H&M Hennes & Mauritz`. Merchant
+comparison was the blocker. Tokenization keeps only fragments of three characters
+or more, so the abbreviation's letters were discarded and the receipt's identifying
+tokens, `hennes` and `mauritz`, appear nowhere in the bank's `H&M`.
+
+One normalized name being a prefix of the other now also counts as a match, in
+either direction; the earlier rule additionally failed when the abbreviation was
+the receipt's own merchant. A prefix rather than a substring, so `Rimi` and
+`RIMAC` or `Apotheka` and `APOTEKA` stay apart, and the exact date, exact total
+and single-candidate rules still decide before a merchant is considered at all.
+
+Verified: `pnpm check` passed, 348 tests (345 pass, 3 pre-existing skips),
+including an end-to-end link of an abbreviated description to a pending payment.
+Not deployed.
+
+# Receipts match pending payments — implemented and tested, not deployed — September 13, 2026
+
+Automatic matching no longer waits for a payment to be booked. The owner's
+reasoning decided it: a receipt records that a purchase happened, and the purchase
+is the same fact whether the bank has settled it yet or not. The rule is uniform
+across banks, recorded in [ADR 0005](adr/0005-matching-pending-payments.md).
+
+Production evidence supported the change. All fourteen recorded pending-to-booked
+settlements kept the same transaction row and the identical amount, and Enable
+Banking has never produced a pending row at all, so the booked-only rule was
+delaying Monobank purchases and doing nothing for Wise or Revolut.
+
+A settlement difference never detaches a receipt. When a linked payment settles at
+a different amount or currency, the link stands and the difference is recorded and
+shown on the receipt card with both amounts. Undoing a correct link because a
+number moved would discard true evidence, and amounts legitimately move through
+tips, fuel pre-authorizations and currency re-rating. A difference on a link the
+owner made by hand is shown but never announced, because they chose that payment
+deliberately; an automatic link is announced once, keyed on the settled amount so
+the same difference is never repeated.
+
+If a bank reports a settlement as a separate row rather than revising the hold, the
+receipt follows the evidence to the settled row instead of being stranded. That
+move requires exactly one settled candidate carrying no receipt of its own, never
+overrides an attachment a person made, and is recorded as an attachment event with
+its previous payment.
+
+Schema version 20 adds `settlement_difference`; the migration test bites, failing
+without the version block. Verified: `pnpm check` passed, 346 tests (343 pass, 3
+pre-existing skips). Not deployed.
+
+# Test suite and CI made roughly twice as fast — September 13, 2026
+
+Measurement contradicted the assumption behind the work. Running `migrate` costs
+about 72 ms; booting a PGlite engine, which runs initdb, costs about 650 ms, nine
+times more. The eighteen migration version blocks were never the problem.
+
+Under `node --test`, `migrate` now restores a throwaway in-memory database from a
+snapshot of the first database migrated in that process, about 140 ms instead of
+720 ms. The snapshot is a by-product of one real migration per process, so the
+migration code still executes everywhere. Four guards keep it out of production:
+only an unnamed `memoryDatabase()` qualifies, only a database that has not been
+queried, only when `NODE_TEST_CONTEXT` is set, and a failed snapshot falls back to
+a real migration. Every production entry point uses `postgresDatabase` and the demo
+uses an on-disk path, so neither is eligible. `test/database-snapshot.test.ts` pins
+isolation and was mutation-tested: injecting a row into the snapshot builder makes
+it fail as intended.
+
+`--test-concurrency` stays at 2. Measured across 1, 2, 3, 4, 6 and 8, anything above
+3 is slower on this machine because parallel files saturate memory bandwidth, not
+CPU. CI now caches the pnpm store keyed on the lockfile. `pnpm test:progress` adds a
+streaming reporter so a watched run shows test names instead of silence.
+
+Verified: `pnpm check` fell from 188-213 s to 93-127 s, confirmed independently at
+93 s by the supervisor after rebasing onto schema version 19. 331 tests, 328 pass,
+3 pre-existing skips, no failures in any run. No test was deleted, skipped or
+weakened. Documentation and test infrastructure only; no application behaviour
+changed. Not deployed.
+
+# Receipt schema upgrade reached production only after a failed release — September 13, 2026
+
+A release of the three merged receipt changes was switched and immediately rolled
+back. The web service started and passed readiness, but the Telegram worker exited
+with its generic configuration_or_poll_error. Inspection showed why: none of the
+new columns existed and `receipt_jobs_state_check` was unchanged, so the new code
+queried `feedback_state` against a column PostgreSQL did not have.
+
+Root cause: the three pull requests added their statements to
+`initializeReceipts`, which runs only inside the one-time schema version 15 block.
+Production is at version 18, so the statements never executed there, while every
+test passed because tests build a schema from scratch. Comments in the code
+asserting that `initializeReceipts` runs at every startup were wrong and are
+corrected.
+
+The additive statements now live in an exported `upgradeReceiptEvidence`, called
+both from `initializeReceipts` for new databases and from a new schema version 19
+block for existing ones. Three tests rebuild an already-migrated database without
+the upgrade and assert that migrate applies it, backfills feedback state for
+resolved receipts only, and changes nothing when re-run; all three fail without
+the version 19 block and pass with it.
+
+Rollback was clean: `switch-release.py` restored the previous release, the worker
+came back active and has run without restarts since. No schema change had been
+applied, so no data migration had to be undone. The ledger held 3,908 transactions
+and six receipt jobs (four matched, two pending) throughout. Verified: `pnpm check`
+passed, 328 tests (325 pass, 3 pre-existing skips). Not redeployed; the next
+attempt must also restore a predeploy dump into a disposable database and run the
+migration against it before switching.
+
+# Status restructure and deterministic tooling — September 13, 2026
+
+docs/STATUS.md is read at the start of every session and had grown to 1,214 lines
+(about 19,000 tokens), with its authoritative-looking "Current status" section
+buried at line 695 and naming a release that was no longer live. It is now a
+rewritten-in-place current-state section, the ten most recent entries, and
+[an archive](status-archive/2026-09.md) holding the rest. `scripts/archive_status.py`
+performs the split deterministically and re-points relative links; content is moved
+verbatim so no recorded result can be silently reworded.
+
+Four deterministic checks replace work that was being re-derived by hand:
+`scripts/deploy-status.sh` compares the deployed release with `origin/main`
+including schema statements, `scripts/receipt-diagnosis.sql` answers "why is this
+receipt unlinked" read-only, `scripts/check_repository.py` now rejects unresolved
+merge-conflict markers, and a test asserts the receipt migration is idempotent
+across repeated startups without re-running the feedback backfill.
+
+The agent working model is written down in
+[how agents work on this project](agent-development-model.md). The unrestricted
+deployment sudo found during inspection is recorded as a known deviation and
+tracked as OPS-4; it was not changed. Verified: `pnpm check` passed, 326 tests
+(323 pass, 3 pre-existing skips). Documentation and tooling only; no application
+code changed.
+
+# Receipt matching, duplicates and double-link guard — implemented and tested, not deployed — September 13, 2026
+
+Read-only production inspection explained two owner-reported problems. A receipt
+extracted as the registered name could never match a card description, because
+matching required the normalized merchant to be a substring of the description.
+Merchant comparison is now token-based, dropping legal forms and geography, so a
+registered name matches its card description while a different brand still does
+not. Enable Banking reports a booking day one to three days after purchase, so its
+candidates now accept a three-day window; Monobank reports the real instant and
+keeps the exact day. Uniqueness is still required across the whole window.
+
+The reported duplicate had no detection at all: intake deduplicated only by
+Telegram message. Identical image bytes are now caught before any paid model call,
+and a second photo of the same purchase is marked after extraction. Separately, a
+payment that already carries a matched receipt never gains a second automatic
+link — the earlier behaviour, which an existing test had asserted as correct, is
+how one purchase acquired two attached receipts. Receipts already pending before
+this release are covered by that guard, since intake checks cannot see them.
+
+Verified locally on branch `feat/receipt-matching-window`: `pnpm check` passed.
+Not deployed. No production data was modified; inspection was read-only.
+
+# Telegram feedback on receipt photos — implemented and tested, not deployed — September 13, 2026
+
+The Telegram worker now answers on the owner's own photo message: a 👍 reaction
+once the receipt is linked to a payment (automatic match or manual link in the
+app), 👀 while the receipt was read but no unique booked payment exists yet, and a
+fixed plain reply for a non-receipt or a failed read. `TelegramTransport` gains
+`react()` and `reply()` behind one bounded fixed-origin request helper; `send()`
+is unchanged. `receipt_jobs` gains `feedback_state`, `feedback_attempts` and
+`feedback_after`; existing rows are backfilled as acknowledged when the columns
+are first created, so the upgrade sends no retroactive reactions. `notifyOne`
+runs once per worker loop, commits the attempt and doubling backoff before the
+network call, abandons a job after five failures, and never puts extraction
+data in a message. Verified locally on branch `feat/receipt-telegram-feedback`
+after rebasing on the merged receipt deletion (PR #70): `pnpm check` passed (see
+PR for counts). Not deployed; no live Telegram call has been made, so the bot's
+reaction permission in the family group is unverified until first use.
+
+# Receipt deletion — implemented and tested, not deployed — September 13, 2026
+
+Owners can delete a receipt photo from the Receipts page after an inline
+confirmation. Deletion is a soft delete: the `receipt_jobs` row remains as a
+`deleted` tombstone because `llm_cost_ledger.receipt_id` references it and the
+shared AI budget accounting must stay intact; the stored image and extracted
+content are removed. A linked payment is detached, its receipt-derived automatic
+category is invalidated and a `receipt_detached` audit event is recorded on the
+payment; attachment history is kept. Deletion is refused (HTTP 409) while the
+photo is being read. The migration widens `receipt_jobs_state_check` idempotently.
+Verified locally on branch `feat/receipt-deletion`: `pnpm check` passed, 312 tests
+(309 pass, 3 pre-existing skips gated on TEST_DATABASE_URL). Not deployed; no
+production data or server state was touched. Motivated by an owner-reported
+duplicate receipt; duplicate detection by image hash remains open.
+
+# One-time polling follow-up completed — September 12, 2026
+
+The scheduled 19:45 Europe/Riga follow-up ran on the next wake after 22:01 Riga.
+Read-only inspection: all three Enable Banking half-hour markers and 30-minute
+post-completion timer drop-ins are active; no blocked/conservative latches exist.
+Since 13:00 UTC, Rodion Wise and Revolut each logged 11 successful scheduler runs;
+Katya Wise logged nine successes and one cooldown deferral. Latest successful
+imports: Rodion Wise 18:56:47 UTC, Revolut 18:56:48 UTC, Katya Wise 18:43:22 UTC.
+Persisted retry-after timestamps equal those successes plus 30 minutes. Import
+windows reach the current day. Zero changed rows on Rodion connections are not
+errors. The obsolete generic enablebanking:rodion row is not a current timer.
+
+Telegram worker is running successfully. Today's outbox has 15 sent questions and
+no other states; no duplicate transaction/revision groups exist. Current eligible,
+triaged live-window payments without any prior question: zero. Today's triage rows:
+193 ready and eight uncertain (historical/current mix; uncertainty is not a worker
+failure). These aggregate checks establish queue health, not a new synthetic
+end-to-end delivery test or proof of complete bank history.
+
+No extra bank/AI requests, messages, server changes or latch resets were performed.
+Sticky six-hour fallback after the existing 24-hour error cooldown remains intact;
+no rate-limit errors were observed to trigger it. The $10 cap is unchanged.
+One-time follow-up is complete; do not repeat on later heartbeat wakes. The missed
+S3 setup reminder is delivered with this result: encrypted backup in existing AWS
+S3, owner-controlled recovery password and off-server restore test remain deferred;
+no paid resources were created. Kate's activation reminder remains cancelled.
+
+# Backend assessment and initial baseline — September 12, 2026
+
+Read-only code audit and live API samples saved in [backend assessment](backend-assessment.md).
+Full-year EUR Overview returns 5.926 MB in 492–572 ms locally; default review
+0.993 MB in 222–235 ms; receipts 1.8 KB in 3.7–6.7 ms. These are three-sample
+server-local observations, not end-to-end browser timings or p95. Individual
+SQL/CPU stage attribution remains unmeasured (isolated probe auth failed).
+Recommendation, not selected migration: retain TypeScript/Node/PostgreSQL, improve
+read shapes and repeated work, and adopt Fastify incrementally for HTTP structure.
+No app code, dependency, financial data or deployment changed.
+
+# Consolidated backlog audit — September 12, 2026
+
+Documentation-only audit of the owner conversation and project plans created
+[TODO](TODO.md) as the canonical open-work checklist. Backend refactoring is now
+explicitly separate from completed query batching and remaining frontend cache
+migration. Restored follow-ups include new-account policies, FX coverage UX,
+settings/navigation audit, rule evaluation, history reconciliation and operational
+failure checks. Closed features are distinguished from deferred item analytics and
+S3 setup. No code, financial data, scheduled jobs or deployment changed.
+
+# Kate Wise coverage clarification — September 12, 2026
+
+Owner confirmed that low Wise transaction volume is expected. A read-only spot-check
+matched the six clearly visible screenshot entries by date and amount against the
+12 imported EUR rows. One payment uses a transfer reference in the API description
+rather than the merchant label visible in Wise. No financial records were changed.
+Remove the suspected low-count coverage issue from active deferred work; reopen only
+if a specific missing entry is identified. This does not claim full statement
+reconciliation or independently prove USD coverage. No application deployment needed.
+
+# Explanation-first review and cash — verified September 12, 2026
+
+Release **7386d2bde260f6c6abfc6b4c6a1e07f525e9f0e8** is live. PR64 merged as
+3b803dc8. Exact-head full CI **34709799822 passed**. Migration 18 adds the durable
+transaction_explanations table. Full backup/restore comparison matched all **36
+tables**. Both logins, 18 APIs, cash page, saved explanation sources, owner isolation,
+receipt access and adjacent-build assets passed live verification. The reported
+confirmed Telegram explanation remains visible in list and payment detail APIs.
+
+Payment review is a full page with current classification, prominent explanations
+and receipt evidence. Text saves before optional AI; suggested type/category/reason
+remain editable and require explicit atomic confirmation. Current saved drafts
+survive Back/Forward/reopening, and detail entry refreshes stale context without
+polling. Confirming or changing ancillary fields keeps the payment page open.
+Manual fields are protected while a suggestion request is pending.
+
+Cash entry accepts amount and description, with editable date/currency and signed-in
+owner. Exact, idempotent manual_cash ledger records use the normal reporting/FX
+pipeline after confirmation. Their description is also saved as app explanation.
+The initial state is unresolved; unavailable AI does not invent a spending category.
+Cash and current app drafts are protected from background questions/classification.
+Existing bank withdrawal classifications were not changed; reconciliation remains
+separate to avoid double counting. Cash lock ordering follows receipt processing.
+
+49 focused backend checks passed before final integration; integrated API/view
+checks and builds passed, followed by 11 focused server tests. Synthetic browser
+checks covered explanation → prefilled fields → history navigation → confirmation,
+and cash creation → saved context → confirmation. Mobile cash layout at 390px had
+no horizontal overflow. Tests used synthetic data and mocked AI; no test cash
+purchases or paid model calls were created in production.
+
+Ledger remains 3,894 rows at verification; four shared receipts are available.
+App, Telegram, all five bank timers and FX timer are active. Shared $10 budget is
+healthy (2,672 measured requests, five legacy, zero uncertain). Source transfer
+approval briefly needed destination evidence; read-only identity checks matched
+the documented Tailscale host and the same transfer then passed automatic review.
+Remaining scope and deferred work are current in roadmap.
+
+# Saved Telegram reply history — verified September 12, 2026
+
+Release **c9eb7c854aa7c8446cf27b67a32a7de2a5b094c2** is live; PR62 merged
+as f594f643. Exact-head full CI **34707679355 passed**. Four focused history/API
+and presentation tests passed locally and on the server; seven existing Telegram
+regressions passed. Browser checks confirmed saved text, status, payment linking
+and in-place refresh; the 390px layout had no horizontal overflow.
+
+The reported explanation was already saved and confirmed. The review API exposed
+only pending replies and the payment modal omitted input history. It now returns
+all owner-scoped reply statuses, and both Replies and payment details show the
+original wording, timestamp and outcome. Live checks verified that exact confirmed
+reply in both API views and rejected cross-owner detail access. No input repair,
+classification rewrite, schema migration, synthetic Telegram messages or paid test
+calls were needed. A previously open client needs to load the updated application;
+subsequent incoming replies use the explicit Refresh controls without page reload.
+
+Full backup/restore comparison matched all 35 tables. Both logins, 18 APIs, settings,
+FX agreement, four shared receipts and both adjacent asset sets passed verification.
+Ledger count was 3,894 after normal imports. App, Telegram, all bank timers and FX
+timer are active. Shared $10 budget healthy (2,672 measured, five legacy, zero
+uncertain requests); its normal worker remains active. Deferred work is unchanged.
+
+# Navigation and settings release — verified September 12, 2026
+
+Release **b417aeea7d7f0db77075e8aeb8ddefcce88c87ce** is live. PR60 merged as
+9a437f47. Exact-head full CI **34706880862 passed**; initial integration CI
+34706465056 also passed. Migration 17 adds settings and audit tables. Full local
+backup/restore comparison matched all **35 tables**. Both owner logins, 18 APIs,
+settings access, review currency/scope and receipt availability passed live checks.
+The ledger has 3,892 rows at verification after normal imports; no classification
+rewrite was part of this release. The shared $10 budget remains healthy, with
+2,670 measured requests, five legacy requests and zero uncertain requests.
+
+TanStack Router 1.170.35 + Query 5.102.8 now provide URL-backed navigation and
+private in-memory caching for Transactions/Receipts. Filters, currency and selected
+details participate in browser history. Rodion-only Settings manages shared default
+hiding of business-account payments, confirmed transfers and confirmed full refunds;
+per-view overrides and direct links remain available. Investment exceptions remain.
+Existing React/Vite, shadcn/Tailwind/Recharts/Lucide and classification semantics
+are retained. Remaining legacy screen cache migration is documented separately.
+
+Mobile 390px checks confirmed an 8px Period label/control gap, no horizontal overflow,
+in-place currency changes, details/Back behavior and Settings saves. Desktop dark
+layout and Receipts navigation were checked with synthetic data. Four focused
+backend tests and five navigation/deployment tests passed locally/on server; the
+asset-retention wrapper includes five Python safety cases. Ten-payment category/tag
+fixture query count fell from 28 to 3 with identical results; production latency is
+not inferred from that fixture. The live 18-API check's slowest response was 0.35s.
+
+Authenticated fingerprinted assets cache privately. Both the previous release's
+31 native assets and this release's 39 remain accessible after the switch, including
+rollback preparation. Retention is bounded to the adjacent build; older tabs may
+still need a refresh. HTML, APIs and receipt images remain no-store.
+
+FX date fix 63be733 remains included. The 2026 check has zero missing conversions
+for UAH/EUR/USD/GBP. The updated FX timer checks 05/11/17 UTC with jitter; app,
+Telegram, all five bank timers and the FX timer are active. Existing report
+snapshots stay unchanged. S3 protection remains deferred; this was a local restore.
+
+Next separate work: scoped resolver conditions/conflict previews/shadow evaluation,
+remaining screen cache migration, receipt items/PDFs, one-time messenger exports
+and S3 recovery. See roadmap for other unfinished coverage and product work.

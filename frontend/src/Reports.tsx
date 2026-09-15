@@ -1,0 +1,431 @@
+import { useUrlField } from './lib/navigation';
+import { useSession, invalidateFinancialData } from './lib/query';
+import { useDisplayCurrency } from './lib/display-currency';
+import { useEffect, useState, type FormEvent } from 'react';
+import {
+  CalendarDays,
+  CircleAlert,
+  FileText,
+  Plus,
+  RefreshCw,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { ReportSnapshot } from '../../src/reports';
+
+type Scope = 'all' | 'rodion' | 'katya';
+const scopeName = (scope: string) =>
+  scope === 'all' ? 'Together' : scope === 'rodion' ? 'Rodion' : 'Katya';
+const exponents: Record<string, number> = {
+  UAH: 2,
+  EUR: 2,
+  USD: 2,
+  GBP: 2,
+  PLN: 2,
+  CHF: 2,
+  CZK: 2,
+  SEK: 2,
+  NOK: 2,
+  DKK: 2,
+  JPY: 0,
+  KWD: 3,
+  BHD: 3,
+};
+function money(minor: string, currency: string) {
+  const value = BigInt(minor),
+    negative = value < 0n,
+    raw = (negative ? -value : value).toString();
+  const exponent = exponents[currency];
+  if (exponent === undefined)
+    return `${negative ? '−' : ''}${raw} minor units ${currency}`;
+  const padded = raw.padStart(exponent + 1, '0');
+  const whole = (exponent ? padded.slice(0, -exponent) : padded).replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    ',',
+  );
+  return `${negative ? '−' : ''}${whole}${exponent ? '.' + padded.slice(-exponent) : ''} ${currency}`;
+}
+function periodLabel(snapshot: ReportSnapshot) {
+  const period = snapshot.report.period;
+  const format = new Intl.DateTimeFormat('en-GB', {
+    timeZone: period.timeZone,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  return `${format.format(new Date(period.from))} – ${format.format(new Date(Date.parse(period.to) - 1))}`;
+}
+export default function Reports() {
+  const { currency: displayCurrency } = useDisplayCurrency();
+  const session = useSession();
+  const [requestedScope, setScope] = useUrlField(
+    'owner',
+    session.data?.actor ?? '',
+  );
+  const scope = ['all', 'rodion', 'katya'].includes(requestedScope)
+    ? requestedScope
+    : (session.data?.actor ?? '');
+  const [requestedPeriod, setPeriod] = useUrlField('period', 'week');
+  const period = requestedPeriod === 'month' ? 'month' : 'week';
+  const csrf = session.data?.csrf ?? '';
+  const [reports, setReports] = useState<ReportSnapshot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [fetchError, setError] = useState('');
+  const error = session.error?.message || fetchError;
+  const [notice, setNotice] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    if (!scope) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    (async () => {
+      try {
+        const response = await fetch(`/api/reports?owner=${scope}`, {
+          signal: controller.signal,
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        });
+        if (!response.ok)
+          throw new Error('We couldn’t load your reports. Please try again.');
+        const data = await response.json();
+        if (!Array.isArray(data.reports))
+          throw new Error(
+            'The report response was incomplete. Please try again.',
+          );
+        if (!controller.signal.aborted) setReports(data.reports);
+      } catch (e) {
+        if (!controller.signal.aborted)
+          setError(e instanceof Error ? e.message : 'Unable to load reports.');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [scope, refresh]);
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    if (!scope || !csrf || saving) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/reports', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: new URLSearchParams({ csrf, owner: scope, period }),
+      });
+      if (!response.ok)
+        throw new Error(
+          response.status === 403
+            ? 'Your session changed. Reload before creating a report.'
+            : 'We couldn’t refresh this report. Please try again.',
+        );
+      await invalidateFinancialData();
+      setNotice('Report refreshed. Unchanged records keep the same version.');
+      setRefresh((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to create report.');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Household finances
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Reports
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Weekly and monthly snapshots, with every revision kept.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={loading || saving}
+          onClick={() =>
+            scope ? setRefresh((n) => n + 1) : void session.refetch()
+          }
+        >
+          <RefreshCw className="mr-2 size-3.5" />
+          Refresh
+        </Button>
+      </div>
+      <form
+        onSubmit={create}
+        className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4"
+      >
+        <div className="min-w-36 flex-1 sm:flex-none">
+          <label
+            htmlFor="report-owner"
+            className="mb-1.5 block text-xs font-medium text-muted-foreground"
+          >
+            Account owner
+          </label>
+          <Select
+            value={scope}
+            onValueChange={(value) => {
+              setScope(value as Scope);
+              setNotice('');
+            }}
+            disabled={saving || !csrf}
+          >
+            <SelectTrigger id="report-owner" className="w-full sm:w-40">
+              <SelectValue placeholder="Loading owner…" />
+            </SelectTrigger>
+            <SelectContent>
+              {(['all', 'rodion', 'katya'] as const).map((owner) => (
+                <SelectItem key={owner} value={owner}>
+                  {scopeName(owner)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-44 flex-1 sm:flex-none">
+          <label
+            htmlFor="report-period"
+            className="mb-1.5 block text-xs font-medium text-muted-foreground"
+          >
+            Create or refresh
+          </label>
+          <Select value={period} onValueChange={setPeriod} disabled={saving}>
+            <SelectTrigger id="report-period" className="w-full sm:w-52">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="week">Previous calendar week</SelectItem>
+              <SelectItem value="month">Previous calendar month</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          type="submit"
+          className="w-full sm:w-auto"
+          disabled={!csrf || !scope || saving}
+        >
+          <Plus className="mr-2 size-4" />
+          {saving ? 'Creating…' : 'Create report'}
+        </Button>
+      </form>
+      <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+        <CalendarDays className="mt-0.5 size-4 shrink-0" />
+        Calendar periods use Europe/Riga. Currencies remain separate; missing
+        historical rates are never replaced by current rates. These saved
+        snapshots keep their original currencies.
+      </p>
+      <a
+        href={`/analytics?display=${displayCurrency}&owner=${scope || 'all'}`}
+        className="inline-flex text-sm font-medium text-primary underline underline-offset-4"
+      >
+        Open live spending analytics in {displayCurrency}
+      </a>
+      {notice && (
+        <p role="status" className="rounded-lg border bg-muted/40 p-3 text-sm">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <Card>
+          <CardContent className="space-y-3 py-5">
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() =>
+                scope ? setRefresh((n) => n + 1) : void session.refetch()
+              }
+            >
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {loading ? (
+        <div role="status" aria-label="Loading reports" className="space-y-4">
+          <Skeleton className="h-52 rounded-xl" />
+          <Skeleton className="h-52 rounded-xl" />
+        </div>
+      ) : !reports.length && !error ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+            <FileText className="size-8 text-muted-foreground" />
+            <h2 className="font-semibold">No reports for this owner yet</h2>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Create a report for the previous calendar week or month. Missing
+              imports remain visible as incomplete coverage.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        !error && (
+          <div className="space-y-5">
+            {reports.map((snapshot) => (
+              <Card key={snapshot.id} className="shadow-none">
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <CardTitle className="text-base">
+                      {snapshot.report.period.kind === 'week'
+                        ? 'Weekly'
+                        : 'Monthly'}{' '}
+                      report · {scopeName(snapshot.report.owner)}
+                    </CardTitle>
+                    <Badge variant="outline">Version {snapshot.version}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {periodLabel(snapshot)}{' '}
+                    <span className="text-xs">
+                      ({snapshot.report.period.timeZone})
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {snapshot.report.transactionCount} imported transactions ·
+                    Created{' '}
+                    {new Intl.DateTimeFormat('en-GB', {
+                      timeZone: 'Europe/Riga',
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    }).format(new Date(snapshot.createdAt))}{' '}
+                    (Riga)
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-relaxed">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>
+                      {snapshot.report.incompleteness.unresolvedCount}{' '}
+                      unresolved · {snapshot.report.incompleteness.pendingCount}{' '}
+                      pending. Bank import coverage is unverified; these figures
+                      may be incomplete.
+                    </span>
+                  </div>
+                  {snapshot.report.byCurrency.length ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {snapshot.report.byCurrency.map((row) => (
+                        <section
+                          key={row.currency}
+                          className="min-w-0 rounded-lg border p-4"
+                        >
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Confirmed personal spending · {row.currency}
+                          </p>
+                          <p className="mt-2 break-all text-xl font-semibold tabular-nums">
+                            {money(row.personalExpenseMinor, row.currency)}
+                          </p>
+                          <dl className="mt-4 space-y-2 text-xs">
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-muted-foreground">
+                                Unresolved
+                              </dt>
+                              <dd className="break-all text-right tabular-nums">
+                                {money(
+                                  row.unresolvedOutflowMinor,
+                                  row.currency,
+                                )}
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-muted-foreground">Pending</dt>
+                              <dd className="break-all text-right tabular-nums">
+                                {money(row.pendingOutflowMinor, row.currency)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </section>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No imported transactions in this period. This does not
+                      prove zero spending.
+                    </p>
+                  )}
+                  {snapshot.report.byPattern && (
+                    <details className="rounded-lg border p-4">
+                      <summary className="cursor-pointer text-sm font-medium">
+                        Routine and exceptional spending
+                      </summary>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Unreviewed payments stay separate until you choose a
+                        spending pattern.
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {snapshot.report.byPattern.flatMap((group) =>
+                          group.byCurrency.map((row) => (
+                            <div
+                              key={group.pattern + row.currency}
+                              className="flex flex-wrap justify-between gap-2 text-sm"
+                            >
+                              <span>
+                                {group.pattern === 'routine'
+                                  ? 'Routine'
+                                  : group.pattern === 'exceptional'
+                                    ? 'Exceptional'
+                                    : 'Not reviewed'}
+                              </span>
+                              <span className="tabular-nums">
+                                {money(row.personalExpenseMinor, row.currency)}
+                              </span>
+                            </div>
+                          )),
+                        )}
+                      </div>
+                    </details>
+                  )}
+                  <details className="rounded-lg border p-4">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      Category breakdown ({snapshot.report.byCategory.length})
+                    </summary>
+                    <div className="mt-4 space-y-3">
+                      {snapshot.report.byCategory.map((row) => (
+                        <div
+                          key={JSON.stringify([
+                            row.owner,
+                            row.currency,
+                            row.category,
+                          ])}
+                          className="flex flex-wrap justify-between gap-2 text-sm"
+                        >
+                          <div className="min-w-0 break-words">
+                            <p>{row.category}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {scopeName(row.owner)}
+                            </p>
+                          </div>
+                          <p className="break-all text-right tabular-nums">
+                            {money(row.personalExpenseMinor, row.currency)}
+                          </p>
+                        </div>
+                      ))}
+                      {!snapshot.report.byCategory.length && (
+                        <p className="text-sm text-muted-foreground">
+                          No classified personal expenses in this snapshot.
+                        </p>
+                      )}
+                    </div>
+                  </details>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
