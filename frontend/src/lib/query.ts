@@ -6,9 +6,10 @@ export type Session = {
   isAdmin?: boolean;
   features: { ai: boolean; telegram: boolean };
   reviewDefaults?: {
-    hideBusiness: boolean;
+    hideNonPersonal: boolean;
     hideInternalTransfers: boolean;
     hideRefunds: boolean;
+    hideZeroAmount: boolean;
   };
 };
 export const queryClient = new QueryClient({

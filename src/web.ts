@@ -436,9 +436,10 @@ export function web(
         const directId = url.searchParams.get('id');
         const listed = await repo.list(actor);
         // A credit linked to a purchase is already counted through that purchase,
-        // so listing it would show the same money twice. The purchase itself
-        // always stays visible: it still needs its category, and it still shows
-        // what it finally cost. A link that disagrees with a later correction
+        // so listing it would show the same money twice. The purchase keeps its
+        // category and still shows what it finally cost; whether it is listed is
+        // now the zero-amount preference's decision, since a purchase refunded in
+        // full came to nothing. A link that disagrees with a later correction
         // brings its credit back, because that needs a person (ADR 0007).
         const hiddenRefunds = new Set(
           preferences.hideRefunds
@@ -875,9 +876,10 @@ export function web(
             actor,
             Number(form.revision),
             {
-              hideBusiness: boolean('hideBusiness'),
+              hideNonPersonal: boolean('hideNonPersonal'),
               hideInternalTransfers: boolean('hideInternalTransfers'),
               hideRefunds: boolean('hideRefunds'),
+              hideZeroAmount: boolean('hideZeroAmount'),
             },
           );
           json(200, { settings });

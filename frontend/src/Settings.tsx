@@ -11,9 +11,10 @@ import { Label } from './components/ui/label';
 import { Card, CardContent } from './components/ui/card';
 type Settings = {
   revision: number;
-  hideBusiness: boolean;
+  hideNonPersonal: boolean;
   hideInternalTransfers: boolean;
   hideRefunds: boolean;
+  hideZeroAmount: boolean;
 };
 export default function Settings() {
   const session = useSession();
@@ -59,9 +60,10 @@ export default function Settings() {
         body: new URLSearchParams({
           csrf: session.data.csrf,
           revision: String(draft.revision),
-          hideBusiness: String(draft.hideBusiness),
+          hideNonPersonal: String(draft.hideNonPersonal),
           hideInternalTransfers: String(draft.hideInternalTransfers),
           hideRefunds: String(draft.hideRefunds),
+          hideZeroAmount: String(draft.hideZeroAmount),
         }),
       });
       if (!response.ok)
@@ -108,9 +110,9 @@ export default function Settings() {
             {(
               [
                 [
-                  'hideBusiness',
-                  'Hide business-account payments',
-                  'Payments from accounts marked business; investment exceptions stay visible.',
+                  'hideNonPersonal',
+                  'Hide non-personal payments',
+                  'Payments classified as not the household\u2019s own spending, wherever they were paid from. The account a payment sits on no longer decides this; investments stay visible.',
                 ],
                 [
                   'hideInternalTransfers',
@@ -119,8 +121,13 @@ export default function Settings() {
                 ],
                 [
                   'hideRefunds',
-                  'Hide fully refunded payments',
-                  'Confirmed full refunds stay in your history and can be shown in Transactions.',
+                  'Hide linked refund credits',
+                  'Money returned against a purchase is already counted through that purchase.',
+                ],
+                [
+                  'hideZeroAmount',
+                  'Hide payments that came to nothing',
+                  'Anything whose amount works out to zero in its own account currency, a purchase refunded in full above all. They stay in your history.',
                 ],
               ] as const
             ).map(([key, title, description]) => (

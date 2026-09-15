@@ -107,9 +107,10 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
         csrf: 'token',
         isAdmin: true,
         reviewDefaults: {
-          hideBusiness: true,
+          hideNonPersonal: true,
           hideInternalTransfers: true,
           hideRefunds: true,
+          hideZeroAmount: true,
         },
         mode: 'postgres',
         release: 'frontend-test',

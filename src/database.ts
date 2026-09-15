@@ -1,5 +1,8 @@
 import { initializePaymentExplanations } from './payment-explanations.js';
-import { initializeAppSettings } from './app-settings.js';
+import {
+  initializeAppSettings,
+  migrateNonPersonalPreference,
+} from './app-settings.js';
 import {
   initializeReceipts,
   upgradeReceiptEvidence,
@@ -566,6 +569,18 @@ async function applyMigrations(db: Database): Promise<void> {
       await seedCategoryTree(tx);
       await fileOwnerNamedMerchants(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (37)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=38'))
+        .rows.length
+    ) {
+      // Browsing defaults hid payments by the account they sat on, which the
+      // rest of the application stopped doing at version 25: an account purpose
+      // is a suggestion, the payment's kind is the decision. The preference now
+      // hides non-personal payments themselves, and a second one hides payments
+      // that came to nothing — a purchase refunded in full, above all.
+      await migrateNonPersonalPreference(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (38)');
     }
   });
 }
