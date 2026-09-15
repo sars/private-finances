@@ -30,6 +30,18 @@ def main():
         re.compile(r"\b[0-9]{8,12}:[A-Za-z0-9_-]{30,}\b"),
     ]
     conflict_marker = re.compile(r"^(?:<{7}|={7}|>{7})(?: |$)", re.M)
+    # This repository is public. An address is the one thing in it that an
+    # attacker cannot work out for themselves: it names the machine holding the
+    # household's database. The addresses that were removed are deliberately not
+    # written here — putting them in a tracked file would republish exactly what
+    # was taken out — so these match the shape instead of the value.
+    ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    routable_exceptions = re.compile(
+        r"^(?:0\.0\.0\.0$|127\.|10\.|192\.168\.|169\.254\.|255\.255\.255\.255$"
+        r"|172\.(?:1[6-9]|2\d|3[01])\."
+        r"|192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)"  # RFC 5737 documentation ranges
+    )
+    tailnet_host = re.compile(r"\b[A-Za-z0-9][A-Za-z0-9-]*\.ts\.net\b")
     for name in names:
         path = ROOT / name
         if path.is_symlink():
@@ -48,6 +60,23 @@ def main():
             continue
         if any(pattern.search(content) for pattern in secret_patterns):
             errors.append(f"Possible secret in {name} (value suppressed)")
+        if name != "scripts/check_repository.py":
+            for candidate in ipv4.findall(content):
+                if any(int(octet) > 255 for octet in candidate.split(".")):
+                    continue  # a four-part version string, not an address
+                if routable_exceptions.match(candidate):
+                    continue
+                errors.append(
+                    f"Routable IP address in {name} (value suppressed). This "
+                    "repository is public: keep it in "
+                    "~/.config/private-finances/server-access.md instead."
+                )
+            if tailnet_host.search(content):
+                errors.append(
+                    f"Tailscale hostname in {name} (value suppressed). This "
+                    "repository is public: keep it in "
+                    "~/.config/private-finances/server-access.md instead."
+                )
         # A resolved merge leaves no markers. Catching them here costs milliseconds;
         # discovering them through a failed TypeScript build costs a whole build.
         if conflict_marker.search(content) and name != "scripts/check_repository.py":
