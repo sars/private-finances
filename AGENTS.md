@@ -1,5 +1,22 @@
 # Робота над Personal Finances
 
+## The rule: this repository is public
+
+Nothing private goes in. No server address, no Tailscale hostname, no token, key
+or password, and no description of the household's finances the owner would not
+post publicly. Paths and environment-variable names are fine; the values behind
+them are not. Anything this machine needs but Git must not have belongs in
+`~/.config/private-finances/` — see its README for the index.
+
+`scripts/check_repository.py` enforces the mechanical half on every change, in
+the CI workflow that runs even for documentation-only commits. It fails on a
+routable IP address, a `*.ts.net` hostname, a private key, a forge token or a bot
+token, and it reports the file without echoing the value. Loopback, private
+ranges and the RFC 5737 documentation ranges are allowed. The judgement half —
+how much of the household's money story a commit message tells — is yours.
+
+Assume anything committed is permanent. The history below explains why.
+
 ## This repository is public, and its history starts at one commit
 
 The repository was made public on 16 September 2026 so that GitHub Actions stops
