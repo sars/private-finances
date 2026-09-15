@@ -95,10 +95,14 @@ export default function Review() {
     url.includeRefunds !== undefined
       ? url.includeRefunds === '1'
       : !(identity?.reviewDefaults?.hideRefunds ?? true);
-  const includeBusiness =
-    url.includeBusiness !== undefined
-      ? url.includeBusiness === '1'
-      : !(identity?.reviewDefaults?.hideBusiness ?? true);
+  const includeNonPersonal =
+    url.includeNonPersonal !== undefined
+      ? url.includeNonPersonal === '1'
+      : !(identity?.reviewDefaults?.hideNonPersonal ?? true);
+  const includeZeroAmount =
+    url.includeZeroAmount !== undefined
+      ? url.includeZeroAmount === '1'
+      : !(identity?.reviewDefaults?.hideZeroAmount ?? true);
   const includeTransfers =
     url.includeTransfers !== undefined
       ? url.includeTransfers === '1'
@@ -112,8 +116,11 @@ export default function Review() {
     ...(url.includeRefunds !== undefined
       ? { includeRefunds: url.includeRefunds }
       : {}),
-    ...(url.includeBusiness !== undefined
-      ? { includeBusiness: url.includeBusiness }
+    ...(url.includeNonPersonal !== undefined
+      ? { includeNonPersonal: url.includeNonPersonal }
+      : {}),
+    ...(url.includeZeroAmount !== undefined
+      ? { includeZeroAmount: url.includeZeroAmount }
       : {}),
     ...(url.includeTransfers !== undefined
       ? { includeTransfers: url.includeTransfers }
@@ -401,13 +408,29 @@ export default function Review() {
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
-                checked={includeBusiness}
+                checked={includeNonPersonal}
                 disabled={busy}
                 onChange={(event) =>
-                  patch({ includeBusiness: event.target.checked ? '1' : '0' })
+                  patch({
+                    includeNonPersonal: event.target.checked ? '1' : '0',
+                  })
                 }
               />
-              Show business-account payments
+              Show non-personal payments
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={includeZeroAmount}
+                disabled={busy}
+                onChange={(event) => {
+                  patch({
+                    includeZeroAmount: event.target.checked ? '1' : '0',
+                  });
+                  setLimit(12);
+                }}
+              />
+              Show payments that came to nothing
             </label>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
@@ -437,9 +460,10 @@ export default function Review() {
               variant="ghost"
               onClick={() =>
                 patch({
-                  includeBusiness: undefined,
+                  includeNonPersonal: undefined,
                   includeTransfers: undefined,
                   includeRefunds: undefined,
+                  includeZeroAmount: undefined,
                 })
               }
             >
@@ -447,8 +471,8 @@ export default function Review() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Purchases whose money came back in full are hidden by default. Both
-            records remain in your history.
+            A purchase refunded in full came to nothing, so both it and its
+            refund credit are hidden by default. Both remain in your history.
           </p>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-2">

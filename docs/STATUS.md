@@ -807,7 +807,8 @@ rewrite was part of this release. The shared $10 budget remains healthy, with
 TanStack Router 1.170.35 + Query 5.102.8 now provide URL-backed navigation and
 private in-memory caching for Transactions/Receipts. Filters, currency and selected
 details participate in browser history. Rodion-only Settings manages shared default
-hiding of business-account payments, confirmed transfers and confirmed full refunds;
+hiding of non-personal payments, confirmed transfers, linked refund credits and
+payments that came to nothing;
 per-view overrides and direct links remain available. Investment exceptions remain.
 Existing React/Vite, shadcn/Tailwind/Recharts/Lucide and classification semantics
 are retained. Remaining legacy screen cache migration is documented separately.

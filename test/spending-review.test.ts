@@ -70,10 +70,23 @@ test('review browsing includes pending unclear outflows while reporting predicat
       ),
       new Set(['-1000', '-500']),
     );
+    // The account movement of exactly nothing is hidden by default and comes
+    // back when asked for.
     const history = await (
       await fetch(`http://127.0.0.1:${config.port}/api/review?all=1`)
     ).json();
-    assert.equal(history.transactions.length, 4);
+    assert.equal(history.transactions.length, 3);
+    const zeroes = await (
+      await fetch(
+        `http://127.0.0.1:${config.port}/api/review?all=1&includeZeroAmount=1`,
+      )
+    ).json();
+    assert.equal(zeroes.transactions.length, 4);
+    assert.ok(
+      zeroes.transactions.some(
+        (t: { amountMinor: string }) => t.amountMinor === '0',
+      ),
+    );
   } finally {
     await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
     await db.close();

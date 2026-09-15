@@ -57,21 +57,30 @@ test('a linked credit is hidden while its purchase stays listed; the toggle and 
             t.refund.reductions.every((item) => item.discrepancy === null),
         )
         .map((t) => t.id);
-    // The credit is counted through the purchase, so only it disappears; the
-    // purchase stays listed because it still needs a category.
+    // The credit is counted through the purchase, so it disappears as a refund.
+    // The purchase itself came to nothing once the money was back, so the
+    // zero-amount preference hides it too; asking for zeroes brings it back on
+    // its own, without the credit that is already counted through it.
     assert.deepEqual(await hidden('rodion'), [credit.id]);
     assert.equal((await hidden('katya')).length, 0);
     const listed = await ids('');
-    assert.equal(listed.length, 2);
-    assert.ok(listed.includes(debit.id));
+    assert.equal(listed.length, 1);
+    assert.ok(!listed.includes(debit.id));
     assert.ok(!listed.includes(credit.id));
-    assert.equal((await ids('&includeRefunds=1')).length, 3);
+    const withZeroes = await ids('&includeZeroAmount=1');
+    assert.equal(withZeroes.length, 2);
+    assert.ok(withZeroes.includes(debit.id));
+    assert.ok(!withZeroes.includes(credit.id));
+    assert.equal(
+      (await ids('&includeRefunds=1&includeZeroAmount=1')).length,
+      3,
+    );
     assert.ok((await ids('&id=' + debit.id)).includes(debit.id));
     assert.ok(
       !(await ids('&id=' + other.id + '&includeRefunds=1')).includes(other.id),
     );
     const before = await repo.list('rodion');
-    await ids('&includeRefunds=1');
+    await ids('&includeRefunds=1&includeZeroAmount=1');
     assert.deepEqual(await repo.list('rodion'), before);
     // A corrected amount disagrees with what the link was made from, so both
     // sides become visible again instead of the link being undone.
@@ -80,6 +89,7 @@ test('a linked credit is hidden while its purchase stays listed; the toggle and 
         credit.id,
       ]);
       assert.equal((await hidden('rodion')).length, 0);
+      // The purchase no longer nets to zero either, so nothing is hidden.
       assert.equal((await ids('')).length, 3);
       await db.query('UPDATE transactions SET amount_minor=100 WHERE id=$1', [
         credit.id,
