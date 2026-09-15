@@ -10,13 +10,24 @@ Actions, which is the whole reason for the change.
 The history was replaced with a single commit first, so that no earlier revision
 could be mined for what had since been removed from the working tree.
 
+**This is also a different repository from the one the project grew up in.**
+Squashing was not enough by itself: GitHub keeps a hidden `refs/pull/N/head` for
+every pull request ever opened, those refs survive branch deletion, and the owner
+cannot remove them. The original repository had 154 of them, still carrying the
+server addresses that had just been taken out of the working tree — anyone could
+have fetched `refs/pull/*` and recovered the lot. So the original was renamed to
+`private-finances-history` and kept private, and the single commit was pushed to a
+freshly created repository that has never had a pull request. Verified after the
+push: one commit, zero `refs/pull/*`.
+
 **Every branch created before 16 September 2026 is unmergeable.** It descends
 from commits that no longer exist, so a merge fails with "unrelated histories".
 Do not force it and do not merge across it. Take the diff of your work, re-create
-the branch on the current `main`, and apply it there. Nothing is lost: the
-complete previous history — 422 commits and 113 branches — is preserved in the
-private archive `git@github.com:sars/private-finances-archive.git`. Commit SHAs
-quoted in older documents resolve there, not here.
+the branch on the current `main`, and apply it there. Nothing is lost. The
+complete previous history lives in two private repositories:
+`private-finances-history` (the original, with every issue and pull-request
+discussion) and `private-finances-archive` (422 commits and 113 branches). Commit
+SHAs quoted in older documents resolve there, not here.
 
 **Write for an audience now.** Commit messages, status entries and design notes
 are public from this point on. They may describe what the software does; they
