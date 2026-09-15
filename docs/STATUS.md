@@ -9,14 +9,27 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**ba46b1b9f1fa6755d3bd04447a1e3aacf8de9701**, live since September 16, 2026 at
-schema version 37, deployed with `deploy/release.sh` over
-`4fed79a0dfe01857b4da5d5335eee6385a7fd760`. Both `private-finances.service` and
+**840540234b4e6d8bbd19544ba32d53fccb71e39f**, live since September 16, 2026 at
+schema version 38, deployed with `deploy/release.sh` over
+`22911d217b2c7a81c6372a1f3e3cfe35ec2499eb`. Both `private-finances.service` and
 `private-finances-telegram.service` are active and the ledger holds 4,085
 transactions. Its migration was rehearsed first on a restored copy of the real
-database, which reached schema 37 in 295 milliseconds with the transaction count
+database, which reached schema 38 in 28 milliseconds with the transaction count
 unchanged, 140 refund links still active, no expense without a category and
 nothing filed on a heading.
+
+This release changes what the household browsing defaults hide. The first
+preference hid a payment for the account it sat on, which the application stopped
+doing at schema 25, when account purpose became a suggestion and the payment's
+own kind became the decision; it now hides payments classified `non_personal`
+wherever they were paid from, so a personal payment on a business account stays
+visible. The saved choice carried across the rename — the server shows all four
+preferences on and no `hide_business` column left. The second preference is new
+and hides a payment whose amount in its own account currency, less everything
+that came back, is zero. On the server that is 273 non-personal payments and 79
+purchases refunded in full; both sets return from one checkbox in Review, and a
+reduction that disagrees with a later bank correction keeps its purchase listed
+because that discrepancy needs a person.
 
 Verified on the server afterwards: all seven merchants the owner named are
 filed — car insurance 24,909.68 ₴, car repairs 22,894 ₴, padel 6,050 ₴, building
