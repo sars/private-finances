@@ -21,6 +21,10 @@ import { TransactionTriage } from './transaction-triage.js';
 import { llmBudgetSummary } from './llm-budget.js';
 import type { CredentialHealth } from './credential-health.js';
 import { convertedSpending } from './analytics.js';
+import {
+  aggregateSpending,
+  parseAnalyticsOptions,
+} from './analytics-aggregation.js';
 import { currencyExponent } from './fx.js';
 import {
   Categories,
@@ -1215,6 +1219,19 @@ export function web(
       );
       if (route === '/api/transactions') {
         json(200, { transactions: rows });
+        return;
+      }
+      if (route === '/api/analytics') {
+        // The same rows and the same conversion as the list above, grouped;
+        // a drill link built from this grammar lists what made the figure.
+        const display = url.searchParams.get('display');
+        if (!display) throw new Error('invalid_display_currency');
+        const options = parseAnalyticsOptions(url.searchParams);
+        const reporting = await convertedSpending(repo, rows, display);
+        json(200, {
+          currency: reporting.currency,
+          ...aggregateSpending(rows, reporting.rows, options),
+        });
         return;
       }
       const summary = expenseSummary(rows);

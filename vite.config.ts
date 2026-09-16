@@ -43,27 +43,11 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./frontend/src', import.meta.url)) },
   },
-  build: {
-    outDir: '../dist/frontend',
-    emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        // Recharts and the packages only it uses form one chunk that loads on
-        // the screens that draw a chart, so the entry never carries it.
-        // scripts/check_frontend.py fails the build if chart code reaches the entry.
-        advancedChunks: {
-          // Only the matched packages; without this Rolldown also drags their
-          // dependencies (React itself) into the chunk and the entry then
-          // imports it eagerly.
-          includeDependenciesRecursively: false,
-          groups: [
-            {
-              name: 'charts',
-              test: /node_modules\/(recharts|victory-vendor|d3-[a-z-]+|react-smooth|recharts-scale|@reduxjs\/toolkit|redux|immer|reselect|es-toolkit|decimal\.js-light|internmap|fast-equals|eventemitter3)\//,
-            },
-          ],
-        },
-      },
-    },
-  },
+  // Recharts is imported only by components/charts/, and only through a lazy
+  // import, so it splits into its own chunk on its own. A manual chunk group
+  // was tried and dropped: Rolldown's CommonJS interop breaks when a group is
+  // cut across a shared dependency (react-is, use-sync-external-store) —
+  // "require_react_is is not a function" at runtime. scripts/check_frontend.py
+  // walks the entry's static imports and fails if chart code is reachable.
+  build: { outDir: '../dist/frontend', emptyOutDir: true },
 });

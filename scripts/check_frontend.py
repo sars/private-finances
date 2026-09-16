@@ -54,14 +54,31 @@ def bundle_rules() -> list[str]:
     errors = []
     if gz > ENTRY_BUDGET_GZIP:
         errors.append(f"entry chunk {entry.name} is {gz // 1024} KB gzip; budget {ENTRY_BUDGET_GZIP // 1024} KB")
-    if b"recharts" in raw:
-        errors.append(f"entry chunk {entry.name} contains chart code; charts must load lazily")
-    for line in raw.decode("utf-8", errors="ignore").splitlines()[:3]:
-        if "charts-" in line and "import" in line:
-            errors.append(f"entry chunk {entry.name} imports the charts chunk eagerly")
+    # Walk the static imports from the entry. Every chunk reached that way loads
+    # on first paint, so none of them may carry Recharts — not the entry, and
+    # not a shared chunk that happened to absorb it.
+    assets = entry.parent
+    static_import = re.compile(r"""from\s*["']\./([A-Za-z0-9_.-]+\.js)["']""")
+    seen, queue, first_paint = set(), [entry.name], 0
+    while queue:
+        name = queue.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        chunk = assets / name
+        if not chunk.is_file():
+            continue
+        content = chunk.read_bytes()
+        first_paint += len(gzip.compress(content))
+        if b"recharts-wrapper" in content:
+            errors.append(f"{name} carries Recharts and is reached from the entry's static imports")
             break
+        queue.extend(static_import.findall(content.decode("utf-8", errors="ignore")))
     if not errors:
-        print(f"check_frontend: entry {entry.name} {gz // 1024} KB gzip, charts lazy")
+        print(
+            f"check_frontend: entry {entry.name} {gz // 1024} KB gzip; "
+            f"{len(seen)} chunks / {first_paint // 1024} KB gzip on first paint, charts lazy"
+        )
     return errors
 
 

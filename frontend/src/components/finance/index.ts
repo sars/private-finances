@@ -12,5 +12,7 @@ export {
 } from './period-picker'; // preset ranges plus a custom one; Riga calendar days
 export { FilterBar, Field } from './filter-bar'; // a row of labelled controls
 export { BarList, type BarListRow } from './bar-list'; // ranked horizontal bars; the phone-friendly breakdown
+export { CategoryBar, type Segment } from './category-bar'; // one bar split into shares, legend with percentages
+export { TreeTable, type TreeRow } from './tree-table'; // rolled-up tree with totals, expand, drill links
 export { EmptyState } from './empty-state'; // nothing to show, and what to do about it
 export { PageHeader } from './page-header'; // title, one line, actions

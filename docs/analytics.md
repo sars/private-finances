@@ -2,8 +2,15 @@
 
 Design, September 14, 2026, for HIST-5. Implements the reading side of
 [ADR 0008](adr/0008-attributes-and-the-classification-pipeline.md); the tree
-and roll-up semantics are ADR 0006's. Status: designed, not built. The build
-steps are B1–B3 of [the work plan](classification-work-plan.md).
+and roll-up semantics are ADR 0006's. Status: built in Stage 3 of
+[the frontend plan](frontend-plan.md) on September 17, 2026 — `/api/analytics`
+(`src/analytics-aggregation.ts`) answers `bucket`, `series` (none, category,
+owner, kind), `depth` and `kinds` on top of the existing filter grammar and
+`owner`; the screen is `frontend/src/Analytics.tsx`. Not yet in the grammar:
+`account`, `tag`/`excludeTag`, `provisional` as a filter, and category node ids
+(categories are still path strings), so drill links go to Home's category and
+period filters rather than to Transactions. The build steps were B1–B3 of
+[the work plan](classification-work-plan.md).
 
 The owner considers this inseparable from classification: a good classification
 is only visible through a view that answers real questions, and the question

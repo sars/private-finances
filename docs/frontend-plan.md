@@ -148,7 +148,7 @@ Recharts leaves the entry chunk.
   twenty-two pick-lists across the screens now go through it, guarded by
   `check_frontend.py`. Entry chunk 125 KB gzip. The awaiting-review badge
   waits for a count the session does not yet carry (Stage 2).
-- Stage 2: built. The vocabulary — `Money`, `KpiCard` (amount, change
+- Stage 2: deployed as `25e513d` on September 17. The vocabulary — `Money`, `KpiCard` (amount, change
   against the period of equal length just before, the previous figure, a link
   when it drills), `PeriodPicker` (presets plus a custom range in a popover),
   `FilterBar`/`Field`, `BarList`, `EmptyState`, `PageHeader` — and Home
@@ -159,4 +159,18 @@ Recharts leaves the entry chunk.
   replaces the ad-hoc amber classes. Not yet: `CategoryBar` (nothing needs it
   before Analytics) and drill links from categories (the filter grammar comes
   with Stage 3).
-- Stages 3–5: not started.
+- Stage 3: built. `/api/analytics` aggregates the same converted rows the
+  list uses into day/week/month buckets and series by category (at a chosen
+  depth), person or kind, rolls the category tree up, and reports the share
+  each classification source decided; a test proves every bucket's series sum
+  to the total and that a bucket's own period query reproduces its figure.
+  The Analytics screen is its own file at last: period picker, bucket / split /
+  depth / investments-and-business / person controls, three KPI cards with the
+  previous-period delta, a "who decided the money" bar, the stacked chart (the
+  five largest series plus "Everything else" so buckets still stack to their
+  total), the largest branches as a bar list, and the rolled-up tree with
+  expand and drill links. `TreeTable` and `CategoryBar` join the vocabulary.
+  Drill links go to Home's category and period filters until Transactions
+  speaks the grammar (Stage 4). Not yet: account and tag filters, provisional
+  as a filter, node-id categories.
+- Stages 4–5: not started.
