@@ -1,7 +1,10 @@
 # Bank connections
 
 Enable Banking handles the banks listed in `src/connectors/banks.ts` — Wise,
-Revolut and Swedbank; Monobank uses its direct personal API. Adding another bank
+Revolut and Swedbank; Monobank uses its direct personal API. An account may hold
+several currencies, which a bank reports as the currency `XXX`; then only each
+payment knows what it was settled in, and the account is not checked against
+them. Adding another bank
 means a row in that table plus a `bank_consents` migration; nothing else is
 spelled out per bank.
 Adapters are read-only and require injected, fixed-host HTTP clients. Requests

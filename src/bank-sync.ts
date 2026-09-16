@@ -4,6 +4,7 @@ import { Repository, Conflict } from './repository.js';
 import { ConnectorError, type BankConnector } from './connectors/types.js';
 import { reidentifyTransfers } from './counterparty-identity.js';
 import { isBankSlug } from './connectors/banks.js';
+import { isMultiCurrency } from './connectors/enablebanking.js';
 
 /** Fetch outside transactions; commit a complete account window and its checkpoint together. */
 export async function syncBank(
@@ -61,13 +62,16 @@ export async function syncBank(
       seen.add(account.accountId);
       await registry.discover(account);
       const batch = await connector.transactions(account, from, to);
+      // An account holding several currencies reports none of its own, so only
+      // a single-currency account can have its payments checked against it.
+      const fixedCurrency = !isMultiCurrency(account.currency);
       if (
         batch.some(
           (t) =>
             t.owner !== account.owner ||
             t.source !== account.source ||
             t.accountId !== account.accountId ||
-            t.currency !== account.currency,
+            (fixedCurrency && t.currency !== account.currency),
         )
       )
         throw new ConnectorError('schema');

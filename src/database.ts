@@ -612,6 +612,16 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (40)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=41'))
+        .rows.length
+    ) {
+      // The first Swedbank account arrived holding several currencies, which
+      // the provider reports as XXX, and it registered as "Swedbank XXX ·
+      // CURRENT". Rename it to something the owner recognises.
+      await nameTheMultiCurrencyAccounts(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (41)');
+    }
   });
 }
 
@@ -624,6 +634,31 @@ async function applyMigrations(db: Database): Promise<void> {
  * only a label this application generated, the bare currency or the currency
  * followed by "account", is replaced.
  */
+/**
+ * An account that holds several currencies was registered as "Swedbank XXX ·
+ * CURRENT". XXX is the ISO code for "no currency" and means nothing to the
+ * owner, so the label is rewritten the way the connector writes it now. Only a
+ * name this application generated can contain " XXX"; a name the owner typed
+ * cannot match, and is left as they wrote it.
+ */
+export async function nameTheMultiCurrencyAccounts(
+  tx: Executor,
+): Promise<number> {
+  const renamed = await tx.query(
+    `UPDATE own_accounts SET
+       label = CASE
+         WHEN split_part(label, ' \u00b7 ', 2) = '' THEN split_part(label, ' ', 1) || ' multi-currency'
+         WHEN upper(split_part(label, ' \u00b7 ', 2)) = 'CURRENT' THEN split_part(label, ' ', 1) || ' current account'
+         ELSE split_part(label, ' ', 1) || ' ' || split_part(label, ' \u00b7 ', 2)
+       END,
+       revision = revision + 1
+     WHERE source = 'enablebanking'
+       AND label ~ '^[A-Za-z]+ XXX( \u00b7 .+)?$'
+     RETURNING label`,
+  );
+  return renamed.rows.length;
+}
+
 export async function nameTheBankOnAccounts(tx: Executor): Promise<number> {
   const renamed = await tx.query(
     `UPDATE own_accounts a SET label = initcap(w.bank) || ' ' || w.currency,
