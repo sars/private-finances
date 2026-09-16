@@ -22,7 +22,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Choice } from '@/components/finance';
+import {
+  Choice,
+  Field,
+  FilterBar,
+  PageHeader,
+  TransactionRow,
+} from '@/components/finance';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TransactionDetail } from '@/components/transaction/detail';
@@ -276,38 +283,30 @@ export default function Review() {
     );
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
-            Recent activity and payment details
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Transactions
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Browse payments, including pending card charges. Use Needs review to
-            resolve unclear spending.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            render={<a href={'/cash?display=' + displayCurrency} />}
-          >
-            Add cash expense
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={fetching || busy}
-            onClick={() => refresh()}
-          >
-            <RefreshCw className={`size-4 ${fetching ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Transactions"
+        description="Your payments, including pending card charges. Needs review lists the ones still waiting for a decision."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<a href={'/cash?display=' + displayCurrency} />}
+            >
+              Add cash expense
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={fetching || busy}
+              onClick={() => refresh()}
+            >
+              <RefreshCw className={fetching ? 'animate-spin' : ''} />
+              Refresh
+            </Button>
+          </>
+        }
+      />
       <div className="flex items-start gap-2.5 rounded-lg border bg-muted/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-4 shrink-0" />
         <p>
@@ -403,56 +402,48 @@ export default function Review() {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border p-4">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+            <Label className="gap-2 font-normal text-muted-foreground">
+              <Checkbox
                 checked={includeNonPersonal}
                 disabled={busy}
-                onChange={(event) =>
-                  patch({
-                    includeNonPersonal: event.target.checked ? '1' : '0',
-                  })
+                onCheckedChange={(checked) =>
+                  patch({ includeNonPersonal: checked ? '1' : '0' })
                 }
               />
               Show non-personal payments
-            </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+            </Label>
+            <Label className="gap-2 font-normal text-muted-foreground">
+              <Checkbox
                 checked={includeZeroAmount}
                 disabled={busy}
-                onChange={(event) => {
-                  patch({
-                    includeZeroAmount: event.target.checked ? '1' : '0',
-                  });
+                onCheckedChange={(checked) => {
+                  patch({ includeZeroAmount: checked ? '1' : '0' });
                   setLimit(12);
                 }}
               />
               Show payments that came to nothing
-            </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+            </Label>
+            <Label className="gap-2 font-normal text-muted-foreground">
+              <Checkbox
                 checked={includeTransfers}
                 disabled={busy}
-                onChange={(event) =>
-                  patch({ includeTransfers: event.target.checked ? '1' : '0' })
+                onCheckedChange={(checked) =>
+                  patch({ includeTransfers: checked ? '1' : '0' })
                 }
               />
               Show confirmed transfers
-            </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
+            </Label>
+            <Label className="gap-2 font-normal text-muted-foreground">
+              <Checkbox
                 checked={includeRefunds}
                 disabled={busy}
-                onChange={(event) => {
-                  setIncludeRefunds(event.target.checked);
+                onCheckedChange={(checked) => {
+                  setIncludeRefunds(Boolean(checked));
                   setLimit(12);
                 }}
               />
               Show linked refund credits
-            </label>
+            </Label>
             <Button
               size="sm"
               variant="ghost"
@@ -472,12 +463,11 @@ export default function Review() {
             A purchase refunded in full came to nothing, so both it and its
             refund credit are hidden by default. Both remain in your history.
           </p>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="grid gap-2">
-              <Label htmlFor="review-period">Period</Label>
+          <FilterBar>
+            <Field label="Period" htmlFor="review-period">
               <Choice
                 id="review-period"
-                className="w-full"
+                className="w-full sm:w-56"
                 value={windowFilter}
                 onChange={(value) => {
                   setWindowFilter(value);
@@ -495,11 +485,12 @@ export default function Review() {
                   { value: 'all', label: 'All history · includes 2025' },
                 ]}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="review-search">
-                Find a merchant or recipient
-              </Label>
+            </Field>
+            <Field
+              label="Find a merchant or recipient"
+              htmlFor="review-search"
+              className="sm:flex-1"
+            >
               <Input
                 id="review-search"
                 value={search}
@@ -509,9 +500,10 @@ export default function Review() {
                 }}
                 placeholder="Search descriptions"
               />
-            </div>
+            </Field>
             <div className="flex flex-wrap items-end gap-2">
               <Button
+                size="sm"
                 variant={priorityOnly ? 'secondary' : 'outline'}
                 onClick={() => {
                   setPriorityOnly(!priorityOnly);
@@ -522,6 +514,7 @@ export default function Review() {
                 Over 3,000 UAH / missing rate
               </Button>
               <Button
+                size="sm"
                 variant={exceptionalOnly ? 'secondary' : 'outline'}
                 onClick={() => {
                   setExceptionalOnly(!exceptionalOnly);
@@ -529,11 +522,11 @@ export default function Review() {
                 }}
                 aria-pressed={exceptionalOnly}
               >
-                <Repeat2 className="size-4" />
+                <Repeat2 />
                 Exceptional only
               </Button>
             </div>
-          </div>
+          </FilterBar>
           <p className="text-xs text-muted-foreground">
             Calendar periods use Europe/Riga. Prioritize large unclear payments;
             missing exchange rates stay in this priority view. Historical
@@ -545,8 +538,8 @@ export default function Review() {
               aria-label="Loading payments"
               className="space-y-3"
             >
-              {[0, 1, 2].map((n) => (
-                <Skeleton key={n} className="h-32 rounded-xl" />
+              {[0, 1, 2, 3].map((n) => (
+                <Skeleton key={n} className="h-16 rounded-lg" />
               ))}
             </div>
           ) : (
@@ -571,139 +564,128 @@ export default function Review() {
                     }
                   />
                 )}
-                <div className="space-y-3">
-                  {visible.slice(0, limit).map((t) => {
-                    const suggestions = data.suggestions[t.id];
-                    const estimate = data.historicalEstimates?.find(
-                      (e) =>
-                        e.transactionId === t.id && e.status === 'estimated',
-                    );
-                    const recognized = data.triage?.find(
-                      (item) =>
-                        item.transaction_id === t.id &&
-                        item.revision === t.revision &&
-                        item.state === 'ready',
-                    );
-                    return (
-                      <Card key={t.id} className="gap-0 py-0 shadow-none">
-                        <CardContent className="p-4 sm:p-5">
-                          <div className="flex items-start gap-3 sm:gap-4">
-                            <span className="hidden shrink-0 sm:block">
-                              <DirectionMark amountMinor={t.amountMinor} />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-start justify-between gap-x-5 gap-y-2">
-                                <div className="min-w-0 flex-1 basis-40">
-                                  <h2 className="text-sm font-semibold break-words [overflow-wrap:anywhere]">
-                                    {t.description ||
-                                      'Payment without a description'}
-                                  </h2>
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {t.bookedAt.slice(0, 10)} ·{' '}
-                                    {t.category ||
-                                      (BigInt(t.amountMinor) >= 0n
-                                        ? 'Money in · not spending'
-                                        : 'No category')}
-                                  </p>
-                                </div>
-                                <p className="max-w-full text-sm font-semibold break-all tabular-nums">
-                                  <DisplayAmount
-                                    transaction={t}
-                                    reporting={data?.reporting}
-                                    requested={displayCurrency}
-                                    className="text-sm font-semibold"
-                                  />
-                                </p>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <Badge
-                                  variant={
-                                    t.kind === 'unresolved'
-                                      ? 'secondary'
-                                      : 'outline'
-                                  }
-                                >
-                                  {BigInt(t.amountMinor) >= 0n &&
+                <Card className="gap-0 py-0 shadow-xs">
+                  <CardContent className="px-4 py-0 sm:px-5">
+                    {visible.slice(0, limit).map((t) => {
+                      const suggestions = data.suggestions[t.id];
+                      const estimate = data.historicalEstimates?.find(
+                        (e) =>
+                          e.transactionId === t.id && e.status === 'estimated',
+                      );
+                      const recognized = data.triage?.find(
+                        (item) =>
+                          item.transaction_id === t.id &&
+                          item.revision === t.revision &&
+                          item.state === 'ready',
+                      );
+                      return (
+                        <TransactionRow
+                          key={t.id}
+                          mark={<DirectionMark amountMinor={t.amountMinor} />}
+                          description={
+                            t.description || 'Payment without a description'
+                          }
+                          meta={
+                            <>
+                              {t.bookedAt.slice(0, 10)} ·{' '}
+                              {t.category ||
+                                (BigInt(t.amountMinor) >= 0n
+                                  ? 'Money in · not spending'
+                                  : 'No category')}
+                            </>
+                          }
+                          amount={
+                            <DisplayAmount
+                              transaction={t}
+                              reporting={data?.reporting}
+                              requested={displayCurrency}
+                              className="text-sm font-semibold"
+                            />
+                          }
+                          badges={
+                            <>
+                              <Badge
+                                variant={
                                   t.kind === 'unresolved'
-                                    ? 'Money in · not spending'
-                                    : kinds[t.kind]}
+                                    ? 'secondary'
+                                    : 'outline'
+                                }
+                              >
+                                {BigInt(t.amountMinor) >= 0n &&
+                                t.kind === 'unresolved'
+                                  ? 'Money in · not spending'
+                                  : kinds[t.kind]}
+                              </Badge>
+                              {t.spendingPattern?.pattern === 'exceptional' && (
+                                <Badge variant="outline">
+                                  <Repeat2 className="size-3" />
+                                  Exceptional
                                 </Badge>
-                                {t.spendingPattern?.pattern ===
-                                  'exceptional' && (
-                                  <Badge variant="outline">
-                                    <Repeat2 className="size-3" />
-                                    Exceptional
-                                  </Badge>
-                                )}
-                                {estimate && (
-                                  <Badge variant="outline">
-                                    Estimated: {estimate.category} ·{' '}
-                                    {estimate.method === 'mcc'
-                                      ? 'MCC'
-                                      : 'AI suggestion'}
-                                  </Badge>
-                                )}
-                                {data.priorities?.[t.id] === 'large' && (
-                                  <Badge variant="outline">
-                                    Over 3,000 UAH
-                                  </Badge>
-                                )}
-                                {data.priorities?.[t.id] === 'missing_fx' && (
-                                  <Badge variant="outline">
-                                    Missing UAH rate
-                                  </Badge>
-                                )}
-                                {t.status === 'pending' && (
-                                  <Badge variant="outline">
-                                    Bank processing
-                                  </Badge>
-                                )}
-                                {recognized?.decision && (
-                                  <Badge variant="secondary">
-                                    Suggested:{' '}
-                                    {recognized.decision.category ??
-                                      kinds[recognized.decision.kind]}
-                                  </Badge>
-                                )}
-                                {suggestions?.rules.length > 0 && (
-                                  <Badge variant="outline">
-                                    {suggestions.ambiguous
-                                      ? 'Conflicting suggestions'
-                                      : `${suggestions.rules.length} rule suggestion${suggestions.rules.length === 1 ? '' : 's'}`}
-                                  </Badge>
-                                )}
-                                {(data.tags[t.id] || []).map((tag) => (
-                                  <Badge
-                                    key={tag.id}
-                                    variant="secondary"
-                                    className="max-w-full break-words whitespace-normal"
-                                  >
-                                    <Tag className="size-3" />
-                                    {tag.name}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <div className="mt-3 flex items-center justify-between gap-3">
-                                <HistoryLink id={t.id} />
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedId(t.id);
-                                    setActionError('');
-                                  }}
+                              )}
+                              {estimate && (
+                                <Badge variant="outline">
+                                  Estimated: {estimate.category} ·{' '}
+                                  {estimate.method === 'mcc'
+                                    ? 'MCC'
+                                    : 'AI suggestion'}
+                                </Badge>
+                              )}
+                              {data.priorities?.[t.id] === 'large' && (
+                                <Badge variant="outline">Over 3,000 UAH</Badge>
+                              )}
+                              {data.priorities?.[t.id] === 'missing_fx' && (
+                                <Badge variant="outline">
+                                  Missing UAH rate
+                                </Badge>
+                              )}
+                              {t.status === 'pending' && (
+                                <Badge variant="outline">Bank processing</Badge>
+                              )}
+                              {recognized?.decision && (
+                                <Badge variant="secondary">
+                                  Suggested:{' '}
+                                  {recognized.decision.category ??
+                                    kinds[recognized.decision.kind]}
+                                </Badge>
+                              )}
+                              {suggestions?.rules.length > 0 && (
+                                <Badge variant="outline">
+                                  {suggestions.ambiguous
+                                    ? 'Conflicting suggestions'
+                                    : `${suggestions.rules.length} rule suggestion${suggestions.rules.length === 1 ? '' : 's'}`}
+                                </Badge>
+                              )}
+                              {(data.tags[t.id] || []).map((tag) => (
+                                <Badge
+                                  key={tag.id}
+                                  variant="secondary"
+                                  className="max-w-full break-words whitespace-normal"
                                 >
-                                  {BigInt(t.amountMinor) >= 0n
-                                    ? 'View details'
-                                    : 'Review payment'}
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+                                  <Tag className="size-3" />
+                                  {tag.name}
+                                </Badge>
+                              ))}
+                            </>
+                          }
+                          history={<HistoryLink id={t.id} />}
+                          action={
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedId(t.id);
+                                setActionError('');
+                              }}
+                            >
+                              {BigInt(t.amountMinor) >= 0n
+                                ? 'View details'
+                                : 'Review payment'}
+                            </Button>
+                          }
+                        />
+                      );
+                    })}
+                  </CardContent>
+                </Card>
                 {visible.length > limit && (
                   <Button
                     variant="outline"

@@ -159,7 +159,7 @@ Recharts leaves the entry chunk.
   replaces the ad-hoc amber classes. Not yet: `CategoryBar` (nothing needs it
   before Analytics) and drill links from categories (the filter grammar comes
   with Stage 3).
-- Stage 3: built. `/api/analytics` aggregates the same converted rows the
+- Stage 3: deployed as `69d91c2` on September 17. `/api/analytics` aggregates the same converted rows the
   list uses into day/week/month buckets and series by category (at a chosen
   depth), person or kind, rolls the category tree up, and reports the share
   each classification source decided; a test proves every bucket's series sum
@@ -173,4 +173,15 @@ Recharts leaves the entry chunk.
   Drill links go to Home's category and period filters until Transactions
   speaks the grammar (Stage 4). Not yet: account and tag filters, provisional
   as a filter, node-id categories.
-- Stages 4–5: not started.
+- Stage 4: built, narrower than planned and for stated reasons. The payment
+  list is one dense `TransactionRow` per payment inside one card instead of a
+  card each — the badges, history link and action stay, the height halves —
+  and the filters sit on `FilterBar`/`Field` with Base UI checkboxes. No data
+  grid library: Dice UI's registry has no Base UI table, and ReUI's grid brings
+  TanStack Table v9 whose API changed in August; the list has never needed
+  sorting or columns, so the dependency is deferred until it does. No drawer:
+  the payment detail is a full page on purpose (explanation-first review), so
+  the planned sheet/drawer would have undone a product decision. Review's move
+  to Base UI happened in Stage 1 and held. Not yet: Transactions accepting the
+  analytics grammar (period, category), so drill links still go to Home.
+- Stage 5: not started.
