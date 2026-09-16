@@ -582,7 +582,47 @@ async function applyMigrations(db: Database): Promise<void> {
       await migrateNonPersonalPreference(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (38)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=39'))
+        .rows.length
+    ) {
+      // The owner could not find their own rent payment: it leaves Revolut, and
+      // the account was called "USD account" while their Wise dollar account was
+      // called "USD". Nothing on screen named the bank. New imports now say
+      // "Revolut USD"; this renames the accounts already registered, and only
+      // those still carrying a name the application generated.
+      await nameTheBankOnAccounts(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (39)');
+    }
   });
+}
+
+/**
+ * Put the bank's name on foreign accounts that never had one.
+ *
+ * The bank is not stored on the account; it is the third part of the connection
+ * recorded against every import window, so it is read back from there. An
+ * account whose label the owner has edited is left exactly as they wrote it —
+ * only a label this application generated, the bare currency or the currency
+ * followed by "account", is replaced.
+ */
+export async function nameTheBankOnAccounts(tx: Executor): Promise<number> {
+  const renamed = await tx.query(
+    `UPDATE own_accounts a SET label = initcap(w.bank) || ' ' || w.currency,
+                               revision = a.revision + 1
+     FROM (SELECT DISTINCT account_id, split_part(connection,':',3) AS bank, currency
+           FROM bank_import_windows
+           WHERE connection LIKE 'enablebanking:%:%') w
+     WHERE w.account_id = a.account_id
+       AND a.source = 'enablebanking'
+       AND w.bank IN ('wise','revolut')
+       -- Only a name this application generated: the bare currency, or the
+       -- currency followed by "account". Anything the owner wrote themselves
+       -- fails this and is left exactly as they wrote it.
+       AND a.label ~* ('^' || w.currency || '( account)?$')
+     RETURNING a.label`,
+  );
+  return renamed.rows.length;
 }
 
 // Snapshot of a freshly migrated throwaway database, built once per process.
