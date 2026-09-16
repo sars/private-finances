@@ -81,7 +81,13 @@ type Reporting = {
     'confirmed' | 'unresolved' | 'pending',
     { converted: number; missing: number }
   >;
-  rows: { id: string; convertedAmountMinor: string | null; counted: string }[];
+  rows: {
+    id: string;
+    convertedAmountMinor: string | null;
+    /** What the payment cost after any refund against it. */
+    netAmountMinor: string | null;
+    counted: string;
+  }[];
 };
 type Point = { name: string; value: number; minor: string };
 const exponents: Record<string, number> = {
@@ -296,10 +302,15 @@ export default function Overview({
       }
     : null;
   const confirmed = useMemo(() => {
+    // The amount after refunds, which is what the headline total and the month
+    // table already report. Taking the amount before them made a charge that
+    // was reversed — a released hold, a cancelled booking — count as spending
+    // alongside the charge that replaced it, so the chart above the total
+    // disagreed with the total.
     const converted = new Map(
       reporting?.rows
         .filter((r) => r.counted === 'confirmed')
-        .map((r) => [r.id, r.convertedAmountMinor]) ?? [],
+        .map((r) => [r.id, r.netAmountMinor ?? r.convertedAmountMinor]) ?? [],
     );
     return rows.flatMap((r) => {
       const amount = converted.get(r.id);

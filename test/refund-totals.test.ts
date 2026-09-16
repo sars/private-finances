@@ -194,3 +194,42 @@ test('a refunded purchase still has to be categorised', async () => {
     await db.close();
   }
 });
+
+test('a screen that adds up the counted rows arrives at the headline total', async () => {
+  // The overview chart, the category breakdown and the headline total are three
+  // renderings of one number. They agree only if a screen adds the amount after
+  // refunds; adding the amount before them counts a charge that was reversed
+  // alongside whatever replaced it, and the chart then contradicts the total
+  // printed directly beneath it.
+  const { db, repo, charge, reversal } = await household();
+  try {
+    await new Refunds(db).link({
+      debitId: charge.id,
+      creditId: reversal.id,
+      expectedDebitRevision: 1,
+      expectedCreditRevision: 0,
+      owner: 'rodion',
+      reason: 'Owner confirms the subscription was refunded',
+    });
+    const uah = await convertedSpending(repo, await repo.list('rodion'), 'UAH');
+    const counted = uah.rows.filter((row) => row.counted === 'confirmed');
+    const sum = (pick: (row: (typeof counted)[number]) => string | null) =>
+      counted
+        .reduce((total, row) => total - BigInt(pick(row) ?? '0'), 0n)
+        .toString();
+
+    assert.equal(sum((row) => row.netAmountMinor), uah.confirmedMinor);
+    assert.equal(
+      sum((row) => row.netAmountMinor),
+      uah.monthly
+        .reduce((total, month) => total + BigInt(month.confirmedMinor), 0n)
+        .toString(),
+    );
+    // And the reason the distinction matters: before refunds this is the whole
+    // 936.39, which is 93,639 more than the household actually spent.
+    assert.equal(sum((row) => row.convertedAmountMinor), '93639');
+    assert.equal(uah.confirmedMinor, '754');
+  } finally {
+    await db.close();
+  }
+});
