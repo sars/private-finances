@@ -151,9 +151,9 @@ an "everything else" key.
 `Analytics.tsx` becomes its own screen instead of an `Overview` alias, on the
 existing stack (TanStack Query for the endpoint, Recharts, shadcn). The shared
 components it needs — the period picker, the stacked chart wrapper, the tree
-table, the drill link and the coverage strip — are specified in
-[the frontend design system](frontend-design-system.md), which sequences them
-before this screen so they are built once rather than inline here. Layout, top
+table, the drill link and the coverage strip — are Stage 2 and 3 of
+[the frontend plan](frontend-plan.md), which sequences them before this screen
+so they are built once rather than inline here. Layout, top
 to bottom: period presets and the bucket control; a toggles row (investments
 hidden / included / separate; exceptional included / excluded / only;
 provisional shown hatched, with a count); the chart, stacked by the chosen

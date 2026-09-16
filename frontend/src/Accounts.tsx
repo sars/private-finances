@@ -1,4 +1,5 @@
 import { invalidateFinancialData, observeSession } from './lib/query';
+import { money } from './lib/format';
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import {
   ArrowLeftRight,
@@ -89,30 +90,6 @@ const purposes = {
   investment: { name: 'Investment', icon: TrendingUp },
   unreviewed: { name: 'Purpose to review', icon: CircleAlert },
 };
-function accountMoney(value: string, currency: string) {
-  const exponents: Record<string, number> = {
-    UAH: 2,
-    EUR: 2,
-    USD: 2,
-    GBP: 2,
-    PLN: 2,
-    CHF: 2,
-    CZK: 2,
-    SEK: 2,
-    NOK: 2,
-    DKK: 2,
-    JPY: 0,
-    KWD: 3,
-    BHD: 3,
-  };
-  const number = BigInt(value),
-    exponent = exponents[currency];
-  const absolute = (number < 0n ? -number : number).toString();
-  if (exponent === undefined)
-    return `${number < 0n ? '−' : ''}${absolute} minor units ${currency}`;
-  const digits = absolute.padStart(exponent + 1, '0');
-  return `${number < 0n ? '−' : ''}${(exponent ? digits.slice(0, -exponent) : digits).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${exponent ? '.' + digits.slice(-exponent) : ''} ${currency}`;
-}
 const reasonText: Record<string, string> = {
   known_account: 'The counterparty identifier matches a registered account.',
   cross_owner_account:
@@ -789,7 +766,7 @@ export default function Accounts() {
                             key={amount.currency}
                             className="font-medium tabular-nums"
                           >
-                            {accountMoney(
+                            {money(
                               amount.personalExpenseMinor,
                               amount.currency,
                             )}

@@ -146,3 +146,5 @@ auth/consent, permanent, uncertain. Повтори bounded із backoff; auth fa
 Не відкривайте GitHub у браузері для дій, доступних CLI. Читайте потрібні фрагменти,
 а не цілі великі документи повторно. Скриншоти — лише коли важлива візуальна перевірка.
 Не запускайте агентів для дрібних послідовних задач. Use concise English for communication and new documentation.
+Frontend work follows the `frontend-screen` skill (`.claude/skills/`) and `frontend/DESIGN.md`;
+`scripts/check_frontend.py` in `pnpm check` is the gate.

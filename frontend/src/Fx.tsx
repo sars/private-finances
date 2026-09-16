@@ -1,4 +1,5 @@
 import { useUrlField, useSearchPatch } from './lib/navigation';
+import { money } from './lib/format';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -53,32 +54,6 @@ type Totals = {
   }>;
 };
 const pageSize = 50;
-function money(value: string, currency: string) {
-  const exponents: Record<string, number> = {
-    UAH: 2,
-    EUR: 2,
-    USD: 2,
-    GBP: 2,
-    PLN: 2,
-    CHF: 2,
-    CZK: 2,
-    SEK: 2,
-    NOK: 2,
-    DKK: 2,
-    JPY: 0,
-    KWD: 3,
-    BHD: 3,
-  };
-  const amount = BigInt(value),
-    negative = amount < 0n;
-  const absolute = (negative ? -amount : amount).toString();
-  const exponent = exponents[currency];
-  if (exponent === undefined)
-    return `${negative ? '−' : ''}${absolute} minor units ${currency}`;
-  const digits = absolute.padStart(exponent + 1, '0');
-  const whole = exponent ? digits.slice(0, -exponent) : digits;
-  return `${negative ? '−' : ''}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${exponent ? '.' + digits.slice(-exponent) : ''} ${currency}`;
-}
 const methods = {
   identity: 'Original amount',
   actual_bank: 'Actual bank',

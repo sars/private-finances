@@ -16,7 +16,8 @@
     "test:progress": "tsc && node --test --test-concurrency=2 --test-reporter=spec dist/test/*.test.js",
     "format": "prettier --write src test frontend vite.config.ts package.json tsconfig.json components.json",
     "format:check": "prettier --check src test frontend vite.config.ts package.json tsconfig.json components.json",
-    "check": "python3 scripts/check_repository.py && pnpm format:check && pnpm test && pnpm build:frontend",
+    "check": "python3 scripts/check_repository.py && pnpm format:check && pnpm test && pnpm build:frontend && python3 scripts/check_frontend.py",
+    "shots": "node scripts/shots.ts",
     "demo": "pnpm build && node dist/src/main.js",
     "start": "node dist/src/main.js",
     "sync": "node dist/src/sync-cli.js"
@@ -43,6 +44,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
+    "playwright": "1.63.0",
     "prettier": "3.9.6",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",

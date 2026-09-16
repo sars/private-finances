@@ -1,4 +1,5 @@
 import { useUrlField } from './lib/navigation';
+import { money } from './lib/format';
 import { useSession, invalidateFinancialData } from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -25,35 +26,6 @@ import type { ReportSnapshot } from '../../src/reports';
 type Scope = 'all' | 'rodion' | 'katya';
 const scopeName = (scope: string) =>
   scope === 'all' ? 'Together' : scope === 'rodion' ? 'Rodion' : 'Katya';
-const exponents: Record<string, number> = {
-  UAH: 2,
-  EUR: 2,
-  USD: 2,
-  GBP: 2,
-  PLN: 2,
-  CHF: 2,
-  CZK: 2,
-  SEK: 2,
-  NOK: 2,
-  DKK: 2,
-  JPY: 0,
-  KWD: 3,
-  BHD: 3,
-};
-function money(minor: string, currency: string) {
-  const value = BigInt(minor),
-    negative = value < 0n,
-    raw = (negative ? -value : value).toString();
-  const exponent = exponents[currency];
-  if (exponent === undefined)
-    return `${negative ? '−' : ''}${raw} minor units ${currency}`;
-  const padded = raw.padStart(exponent + 1, '0');
-  const whole = (exponent ? padded.slice(0, -exponent) : padded).replace(
-    /\B(?=(\d{3})+(?!\d))/g,
-    ',',
-  );
-  return `${negative ? '−' : ''}${whole}${exponent ? '.' + padded.slice(-exponent) : ''} ${currency}`;
-}
 function periodLabel(snapshot: ReportSnapshot) {
   const period = snapshot.report.period;
   const format = new Intl.DateTimeFormat('en-GB', {
