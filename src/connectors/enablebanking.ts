@@ -54,6 +54,52 @@ function identity(owner: Owner, hash: string): string {
 }
 
 /** Read-only existing-session adapter. Requester must enforce the fixed provider host and GET-only requests. */
+/** The bank as the owner knows it, never the aggregator that fetched it. */
+const BANK_NAME: Record<'wise' | 'revolut', string> = {
+  wise: 'Wise',
+  revolut: 'Revolut',
+};
+
+/**
+ * What an account is called on screen.
+ *
+ * The owner could not find their own rent payment. It leaves Revolut, and the
+ * app called the account "USD account"; their Wise dollar account was called
+ * "USD". Five foreign accounts read EUR, EUR account, GBP, USD and USD account,
+ * with nothing anywhere saying which bank — and two pairs separated only by the
+ * word "account".
+ *
+ * The provider's own name for the account is the cause: Revolut sends nothing
+ * useful and Wise sends the bare currency. The bank is known here and was
+ * simply not used. It is used now, and it leads, because the bank is what the
+ * owner recognises first.
+ *
+ * Anything the provider says beyond the currency is kept after it, so a second
+ * account in the same currency at the same bank stays distinguishable. A
+ * provider label that only repeats the currency, or is the fallback we would
+ * have generated ourselves, adds nothing and is dropped.
+ */
+export function accountLabel(
+  bank: 'wise' | 'revolut',
+  currency: string,
+  details: Record<string, unknown> = {},
+): string {
+  const provider = [details.details, details.product]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .map((value) => text(value))[0];
+  const base = `${BANK_NAME[bank]} ${currency}`;
+  if (!provider) return base;
+  const noise = new Set([
+    currency.toLowerCase(),
+    `${currency.toLowerCase()} account`,
+    'account',
+    'current account',
+    BANK_NAME[bank].toLowerCase(),
+  ]);
+  const extra = provider.trim();
+  return noise.has(extra.toLowerCase()) ? base : `${base} · ${extra}`;
+}
+
 export class EnableBankingConnector implements BankConnector {
   readonly source = 'enablebanking' as const;
   readonly owner: Owner;
@@ -137,12 +183,7 @@ export class EnableBankingConnector implements BankConnector {
         identificationHash: hash,
         currency,
         ...(typeof iban === 'string' ? { iban: iban.trim() } : {}),
-        label:
-          details.details == null
-            ? details.product == null
-              ? `${currency} account`
-              : text(details.product)
-            : text(details.details),
+        label: accountLabel(this.bank, currency, details),
       });
     }
     return result;
