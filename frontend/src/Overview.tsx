@@ -8,7 +8,7 @@ import {
 import { periodRange } from './lib/spending-period';
 import { useDisplayCurrency } from './lib/display-currency';
 import LlmBudget from './LlmBudget';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowRight,
@@ -22,14 +22,24 @@ import {
   SlidersHorizontal,
   Wallet,
 } from 'lucide-react';
-import { lazy, Suspense } from 'react';
 import { money, toNumber } from './lib/format';
 import { Button } from '@/components/ui/button';
-const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Choice } from '@/components/finance';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  BarList,
+  Choice,
+  EmptyState,
+  Field,
+  FilterBar,
+  KpiCard,
+  Money,
+  PageHeader,
+  PeriodPicker,
+  previousPeriod,
+} from '@/components/finance';
+import { useIsMobile } from '@/hooks/use-mobile';
+const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 
 type Transaction = {
   id: string;
@@ -78,20 +88,66 @@ type Reporting = {
   }[];
 };
 type Point = { name: string; value: number; minor: string };
+type Totals = Pick<
+  Reporting,
+  'confirmedMinor' | 'unresolvedMinor' | 'pendingMinor'
+>;
+
+async function fetchOverview(
+  query: string,
+  display: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(`/api/overview?${query}&display=${display}`, {
+    signal,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok)
+    throw new Error(
+      response.status === 401
+        ? 'Your session needs attention. Reload the page to sign in again.'
+        : 'We couldn’t load your overview. Your saved transactions are unchanged.',
+    );
+  const data = await response.json();
+  if (!Array.isArray(data.transactions) || !Array.isArray(data.byCurrency))
+    throw new Error(
+      'The overview returned an unexpected response. Please try again.',
+    );
+  const reporting: Reporting = data.reporting;
+  if (!Array.isArray(reporting?.rows) || reporting.currency !== display)
+    throw new Error('The conversion response was incomplete. Please retry.');
+  return {
+    rows: data.transactions as Transaction[],
+    reporting,
+    currencies: (data.byCurrency as { currency: string }[]).map(
+      (r) => r.currency,
+    ),
+  };
+}
+
 function Loading() {
   return (
     <div role="status" aria-label="Loading overview" className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
         {[0, 1, 2].map((n) => (
-          <Skeleton key={n} className="h-32 rounded-xl" />
+          <Skeleton key={n} className="h-32 rounded-lg" />
         ))}
       </div>
-      <Skeleton className="h-72 rounded-xl" />
-      <Skeleton className="h-64 rounded-xl" />
+      <Skeleton className="h-72 rounded-lg" />
+      <Skeleton className="h-64 rounded-lg" />
       <span className="sr-only">Loading your transactions</span>
     </div>
   );
 }
+
+const rigaDay = (iso: string) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Riga',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso));
 
 export default function Overview({
   analytics = false,
@@ -100,10 +156,12 @@ export default function Overview({
 }) {
   const patch = useSearchPatch();
   const actor = useSession().data?.actor;
+  const isMobile = useIsMobile();
   const [owner, setOwner] = useUrlField('owner', 'all');
   const defaultRange = periodRange(analytics ? 'year' : 'month');
-  const [from, setFrom] = useUrlField('from', defaultRange[0]);
-  const [to, setTo] = useUrlField('to', defaultRange[1]);
+  const [from] = useUrlField('from', defaultRange[0]!);
+  const [to] = useUrlField('to', defaultRange[1]!);
+  const period = { from, to };
   const [currency, setCurrency] = useUrlField('currency', 'all');
   const [category, setCategory] = useUrlField('category', '');
   const [pattern, setPattern] = useUrlField('pattern', 'all');
@@ -115,23 +173,38 @@ export default function Overview({
   const [knownCurrencies, setKnownCurrencies] = useState<string[]>([]);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [reporting, setReporting] = useState<Reporting | null>(null);
+  const [previous, setPrevious] = useState<Totals | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [visibleCount, setVisibleCount] = useState(8);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const dateError = Boolean(from && to && from > to);
-  const query = useMemo(() => {
+  const filterParams = useMemo(() => {
     const params = new URLSearchParams();
     if (owner !== 'all') params.set('owner', owner);
     if (currency !== 'all') params.set('currency', currency);
     if (category) params.set('category', category);
     if (pattern !== 'all') params.set('pattern', pattern);
     if (scope !== 'all') params.set('scope', scope);
+    return params;
+  }, [owner, currency, category, pattern, scope]);
+  const query = useMemo(() => {
+    const params = new URLSearchParams(filterParams);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     return params.toString();
-  }, [owner, currency, category, from, to, pattern, scope]);
+  }, [filterParams, from, to]);
+  // The same filters over the stretch of equal length just before this one,
+  // which is what the KPI deltas compare against.
+  const before = previousPeriod(period);
+  const previousQuery = useMemo(() => {
+    if (!before) return null;
+    const params = new URLSearchParams(filterParams);
+    params.set('from', before.from);
+    params.set('to', before.to);
+    return params.toString();
+  }, [filterParams, before?.from, before?.to]);
   useEffect(() => {
     if (dateError) return;
     const controller = new AbortController();
@@ -140,53 +213,26 @@ export default function Overview({
     setError('');
     async function load() {
       try {
-        const response = await fetch(
-          `/api/overview?${query}&display=${focusCurrency}`,
-          {
-            signal: controller.signal,
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json' },
-          },
+        const [current, earlier] = await Promise.all([
+          fetchOverview(query, focusCurrency, controller.signal),
+          previousQuery
+            ? fetchOverview(previousQuery, focusCurrency, controller.signal)
+                .then((r) => r.reporting as Totals)
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        if (controller.signal.aborted) return;
+        setRows(current.rows);
+        setReporting(current.reporting);
+        setPrevious(earlier);
+        setKnownCurrencies((known) =>
+          [...new Set([...known, ...current.currencies])].sort(),
         );
-        if (!response.ok)
-          throw new Error(
-            response.status === 401
-              ? 'Your session needs attention. Reload the page to sign in again.'
-              : 'We couldn’t load your overview. Your saved transactions are unchanged.',
-          );
-        const data = await response.json();
-        if (
-          !Array.isArray(data.transactions) ||
-          !Array.isArray(data.byCurrency)
-        )
-          throw new Error(
-            'The overview returned an unexpected response. Please try again.',
-          );
-        if (controller.signal.aborted) return;
-        const conversion = data.reporting;
-        if (
-          !Array.isArray(conversion.rows) ||
-          conversion.currency !== focusCurrency
-        )
-          throw new Error(
-            'The conversion response was incomplete. Please retry.',
-          );
-        if (controller.signal.aborted) return;
-        setRows(data.transactions);
-        setReporting(conversion);
-        setKnownCurrencies((previous) =>
+        setKnownCategories((known) =>
           [
             ...new Set([
-              ...previous,
-              ...data.byCurrency.map((r: { currency: string }) => r.currency),
-            ]),
-          ].sort(),
-        );
-        setKnownCategories((previous) =>
-          [
-            ...new Set([
-              ...previous,
-              ...data.transactions.flatMap((r: Transaction) => {
+              ...known,
+              ...current.rows.flatMap((r) => {
                 if (!r.category) return [];
                 const parts = r.category.split(' / ');
                 return parts.map((_, index) =>
@@ -207,7 +253,7 @@ export default function Overview({
     }
     void load();
     return () => controller.abort();
-  }, [query, refresh, dateError, focusCurrency]);
+  }, [query, previousQuery, refresh, dateError, focusCurrency]);
   const activeCurrency = reporting?.currency ?? focusCurrency;
   const eligibleOutflow = (r: Transaction) =>
     BigInt(r.amountMinor) < 0n && !r.spendingPolicy?.excluded;
@@ -230,15 +276,6 @@ export default function Overview({
   const othersUnresolved = actor
     ? reviewable.filter((r) => r.owner !== actor).length
     : 0;
-  const focused = reporting
-    ? {
-        personalExpenseMinor: reporting.confirmedMinor,
-        unresolvedOutflowMinor: reporting.unresolvedMinor,
-        unresolvedCount: unresolved,
-        pendingOutflowMinor: reporting.pendingMinor,
-        pendingCount: pending,
-      }
-    : null;
   const confirmed = useMemo(() => {
     // The amount after refunds, which is what the headline total and the month
     // table already report. Taking the amount before them made a charge that
@@ -263,12 +300,7 @@ export default function Overview({
     );
     const groups = new Map<string, bigint>();
     for (const row of ordered) {
-      const day = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Riga',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date(row.bookedAt));
+      const day = rigaDay(row.bookedAt);
       let key = granularity === 'month' ? day.slice(0, 7) : day;
       if (granularity === 'week') {
         const date = new Date(day + 'T12:00:00Z');
@@ -283,7 +315,7 @@ export default function Overview({
         name,
         minor: minor.toString(),
         value: toNumber(minor.toString(), activeCurrency),
-      })),
+      })) as Point[],
     };
   }, [confirmed, activeCurrency, granularity]);
   const categories = useMemo(() => {
@@ -296,12 +328,8 @@ export default function Overview({
       .sort((a, b) =>
         a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : a[0].localeCompare(b[0]),
       )
-      .map(([name, minor]) => ({
-        name,
-        minor: minor.toString(),
-        value: toNumber(minor.toString(), activeCurrency),
-      }));
-  }, [confirmed, activeCurrency]);
+      .map(([name, minor]) => ({ name, minor: minor.toString() }));
+  }, [confirmed]);
   const recent = [...rows]
     .sort((a, b) => b.bookedAt.localeCompare(a.bookedAt))
     .slice(0, visibleCount);
@@ -309,8 +337,6 @@ export default function Overview({
     owner !== 'all' ||
     currency !== 'all' ||
     category ||
-    from ||
-    to ||
     pattern !== 'all' ||
     scope !== 'all';
   function reset() {
@@ -320,111 +346,59 @@ export default function Overview({
       category: '',
       pattern: 'all',
       scope: 'all',
-      from: defaultRange[0],
-      to: defaultRange[1],
     });
   }
-  const metricCards = focused
-    ? [
-        {
-          title: 'Classified spending',
-          amount: focused.personalExpenseMinor,
-          note: `${confirmed.length} confirmed outflows`,
-          icon: Wallet,
-          color: 'text-primary',
-        },
-        {
-          title: 'Awaiting review',
-          amount: focused.unresolvedOutflowMinor,
-          note: `${focused.unresolvedCount} unclassified outflows`,
-          icon: CircleAlert,
-          color: 'text-amber-600 dark:text-amber-400',
-        },
-        {
-          title: 'Pending payments',
-          amount: focused.pendingOutflowMinor,
-          note: `${focused.pendingCount} payments not yet booked`,
-          icon: Clock3,
-          color: 'text-muted-foreground',
-        },
-      ]
-    : [];
+  const ownerName =
+    owner === 'all' ? 'Together' : owner === 'rodion' ? 'Rodion' : 'Katya';
+  const intervalName =
+    granularity === 'month'
+      ? 'monthly'
+      : granularity === 'week'
+        ? 'weekly'
+        : 'daily';
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {analytics ? 'Spending analytics' : 'Your spending, this period'}
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {analytics
-              ? 'Explore categories, habits and exceptional purchases.'
-              : 'A focused view of household spending and your next review.'}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setRefresh((n) => n + 1)}
-          disabled={loading || dateError}
-        >
-          <RefreshCw
-            className={`mr-2 size-3.5 ${loading ? 'animate-spin' : ''}`}
-          />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title={analytics ? 'Spending analytics' : 'Home'}
+        description={
+          analytics
+            ? 'Explore categories, habits and exceptional purchases.'
+            : 'Household spending for the period, and what still needs a decision.'
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRefresh((n) => n + 1)}
+            disabled={loading || dateError}
+          >
+            <RefreshCw className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
-        <div className="flex flex-wrap gap-1" aria-label="Reporting period">
-          {[
-            ['month', 'This month'],
-            ['previous', 'Last month'],
-            ['year', '2026 so far'],
-            ['archive', '2025 archive'],
-          ].map(([key, label]) => {
-            const range = periodRange(key);
-            return (
-              <Button
-                key={key}
-                size="sm"
-                variant={
-                  from === range[0] && to === range[1] ? 'secondary' : 'ghost'
-                }
-                aria-pressed={from === range[0] && to === range[1]}
-                onClick={() => {
-                  patch({ from: range[0], to: range[1] });
-                }}
-              >
-                {label}
-              </Button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PeriodPicker
+          value={period}
+          onChange={(next) => patch({ from: next.from, to: next.to })}
+        />
         <Button
-          variant="ghost"
+          variant={filtered ? 'secondary' : 'ghost'}
           size="sm"
           aria-expanded={filtersExpanded}
           aria-controls="overview-filters"
           onClick={() => setFiltersExpanded(!filtersExpanded)}
         >
-          <SlidersHorizontal className="mr-2 size-3.5" />
-          Filters & dates
+          <SlidersHorizontal />
+          Filters
         </Button>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <p>
           {from || 'Beginning of history'} – {to || 'Today'} · Europe/Riga ·{' '}
-          {owner === 'all'
-            ? 'Together'
-            : owner === 'rodion'
-              ? 'Rodion'
-              : 'Katya'}{' '}
-          · {focusCurrency}
+          {ownerName} · {focusCurrency}
         </p>
         <a
           className="font-medium text-primary"
@@ -437,162 +411,96 @@ export default function Overview({
           {analytics ? 'Back to home' : 'Explore spending analytics'} →
         </a>
       </div>
-      <div
-        id="overview-filters"
-        className={`${filtersExpanded ? 'flex' : 'hidden'} flex-wrap items-end gap-3 rounded-xl border bg-card p-4`}
-      >
-        <div className="hidden self-center text-muted-foreground lg:block">
-          <SlidersHorizontal className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-            htmlFor="overview-owner"
-          >
-            Account owner
-          </label>
-          <Choice
-            id="overview-owner"
-            className="w-full sm:w-40"
-            value={owner}
-            onChange={setOwner}
-            options={[
-              { value: 'all', label: 'Together' },
-              { value: 'rodion', label: 'Rodion' },
-              { value: 'katya', label: 'Katya' },
-            ]}
-          />
-        </div>
-        <div className="min-w-32 flex-1 sm:flex-none">
-          <label
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-            htmlFor="overview-currency"
-          >
-            Original currency
-          </label>
-          <Choice
-            id="overview-currency"
-            className="w-full sm:w-40"
-            value={currency}
-            onChange={setCurrency}
-            options={[
-              { value: 'all', label: 'All currencies' },
-              ...[
-                ...new Set([
-                  ...knownCurrencies,
-                  ...(currency !== 'all' ? [currency] : []),
-                ]),
-              ]
-                .sort()
-                .map((c) => ({ value: c, label: c })),
-            ]}
-          />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-            htmlFor="overview-category"
-          >
-            Category
-          </label>
-          <Choice
-            id="overview-category"
-            className="w-full sm:w-44"
-            value={category ? `category:${category}` : 'all'}
-            onChange={(value) =>
-              setCategory(value === 'all' ? '' : value.slice(9))
-            }
-            options={[
-              { value: 'all', label: 'All categories' },
-              ...[
-                ...new Set([
-                  ...knownCategories,
-                  ...(category ? [category] : []),
-                ]),
-              ]
-                .sort()
-                .map((name) => ({ value: `category:${name}`, label: name })),
-            ]}
-          />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            htmlFor="overview-pattern"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            Spending pattern
-          </label>
-          <Choice
-            id="overview-pattern"
-            className="w-full sm:w-44"
-            value={pattern}
-            onChange={setPattern}
-            options={[
-              { value: 'all', label: 'All patterns' },
-              { value: 'routine', label: 'Routine' },
-              { value: 'exceptional', label: 'Exceptional' },
-              { value: 'unreviewed', label: 'Not reviewed' },
-            ]}
-          />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            htmlFor="overview-scope"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            Money movements
-          </label>
-          <Choice
-            id="overview-scope"
-            className="w-full sm:w-44"
-            value={scope}
-            onChange={setScope}
-            options={[
-              { value: 'all', label: 'All movements' },
-              { value: 'spending', label: 'Personal expenses' },
-              { value: 'excluded', label: 'Excluded from spending' },
-              { value: 'unresolved', label: 'Unresolved' },
-            ]}
-          />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-            htmlFor="overview-from"
-          >
-            From <span className="font-normal">(Europe/Riga)</span>
-          </label>
-          <Input
-            id="overview-from"
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFrom(e.target.value)}
-            className="w-full sm:w-40"
-          />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-            htmlFor="overview-to"
-          >
-            Through <span className="font-normal">(Europe/Riga)</span>
-          </label>
-          <Input
-            id="overview-to"
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setTo(e.target.value)}
-            className="w-full sm:w-40"
-          />
-        </div>
-        {filtered && (
-          <Button size="sm" variant="ghost" onClick={reset}>
-            Reset
-          </Button>
-        )}
-      </div>
+      {filtersExpanded && (
+        <FilterBar id="overview-filters">
+          <Field label="Account owner" htmlFor="overview-owner">
+            <Choice
+              id="overview-owner"
+              className="w-full sm:w-40"
+              value={owner}
+              onChange={setOwner}
+              options={[
+                { value: 'all', label: 'Together' },
+                { value: 'rodion', label: 'Rodion' },
+                { value: 'katya', label: 'Katya' },
+              ]}
+            />
+          </Field>
+          <Field label="Original currency" htmlFor="overview-currency">
+            <Choice
+              id="overview-currency"
+              className="w-full sm:w-40"
+              value={currency}
+              onChange={setCurrency}
+              options={[
+                { value: 'all', label: 'All currencies' },
+                ...[
+                  ...new Set([
+                    ...knownCurrencies,
+                    ...(currency !== 'all' ? [currency] : []),
+                  ]),
+                ]
+                  .sort()
+                  .map((c) => ({ value: c, label: c })),
+              ]}
+            />
+          </Field>
+          <Field label="Category" htmlFor="overview-category">
+            <Choice
+              id="overview-category"
+              className="w-full sm:w-44"
+              value={category ? `category:${category}` : 'all'}
+              onChange={(value) =>
+                setCategory(value === 'all' ? '' : value.slice(9))
+              }
+              options={[
+                { value: 'all', label: 'All categories' },
+                ...[
+                  ...new Set([
+                    ...knownCategories,
+                    ...(category ? [category] : []),
+                  ]),
+                ]
+                  .sort()
+                  .map((name) => ({ value: `category:${name}`, label: name })),
+              ]}
+            />
+          </Field>
+          <Field label="Spending pattern" htmlFor="overview-pattern">
+            <Choice
+              id="overview-pattern"
+              className="w-full sm:w-44"
+              value={pattern}
+              onChange={setPattern}
+              options={[
+                { value: 'all', label: 'All patterns' },
+                { value: 'routine', label: 'Routine' },
+                { value: 'exceptional', label: 'Exceptional' },
+                { value: 'unreviewed', label: 'Not reviewed' },
+              ]}
+            />
+          </Field>
+          <Field label="Money movements" htmlFor="overview-scope">
+            <Choice
+              id="overview-scope"
+              className="w-full sm:w-44"
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: 'all', label: 'All movements' },
+                { value: 'spending', label: 'Personal expenses' },
+                { value: 'excluded', label: 'Excluded from spending' },
+                { value: 'unresolved', label: 'Unresolved' },
+              ]}
+            />
+          </Field>
+          {filtered && (
+            <Button size="sm" variant="ghost" onClick={reset}>
+              Reset
+            </Button>
+          )}
+        </FilterBar>
+      )}
       {dateError ? (
         <p role="alert" className="text-sm text-destructive">
           Choose an end date on or after the start date.
@@ -600,52 +508,55 @@ export default function Overview({
       ) : loading && !reporting ? (
         <Loading />
       ) : error ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <CircleAlert className="size-8 text-muted-foreground" />
-            <h2 className="font-semibold">Overview unavailable</h2>
-            <p role="alert" className="max-w-md text-sm text-muted-foreground">
-              {error}
-            </p>
-            <Button variant="outline" onClick={() => setRefresh((n) => n + 1)}>
-              Try again
-            </Button>
-          </CardContent>
+        <Card className="shadow-xs">
+          <EmptyState
+            icon={CircleAlert}
+            title="Overview unavailable"
+            text={error}
+            action={
+              <Button
+                variant="outline"
+                onClick={() => setRefresh((n) => n + 1)}
+              >
+                Try again
+              </Button>
+            }
+          />
         </Card>
       ) : !rows.length ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="rounded-full bg-muted p-4">
-              <Inbox className="size-6 text-muted-foreground" />
-            </div>
-            <h2 className="text-lg font-semibold">
-              {filtered
+        <Card className="shadow-xs">
+          <EmptyState
+            icon={Inbox}
+            title={
+              filtered
                 ? 'No transactions match these filters'
-                : 'Your overview starts with your first import'}
-            </h2>
-            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              {filtered
+                : 'Your overview starts with your first import'
+            }
+            text={
+              filtered
                 ? 'Try a wider date range or another account owner. An empty view does not mean there was no spending.'
-                : 'Connect your accounts to see recorded spending here. Bank imports and unclassified payments will stay visible separately.'}
-            </p>
-            {filtered ? (
-              <Button variant="outline" onClick={reset}>
-                Clear filters
-              </Button>
-            ) : (
-              <Button render={<a href="/connections" />}>
-                View bank connections
-                <ArrowRight className="ml-2 size-4" />
-              </Button>
-            )}
-          </CardContent>
+                : 'Connect your accounts to see recorded spending here. Bank imports and unclassified payments will stay visible separately.'
+            }
+            action={
+              filtered ? (
+                <Button variant="outline" onClick={reset}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button render={<a href="/connections" />}>
+                  View bank connections
+                  <ArrowRight />
+                </Button>
+              )
+            }
+          />
         </Card>
       ) : (
         <>
           {(unresolved > 0 || pending > 0) && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
               <div className="flex items-start gap-3">
-                <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                 <div>
                   <p className="text-sm font-medium">
                     There’s more to the picture
@@ -674,16 +585,13 @@ export default function Overview({
                 render={<a href="/review?all=0&window=all" />}
               >
                 Review transactions
-                <ArrowRight className="ml-2 size-3.5" />
+                <ArrowRight />
               </Button>
             </div>
           )}
           {reporting &&
             Object.values(reporting.coverage).some((c) => c.missing > 0) && (
-              <p
-                role="status"
-                className="text-sm text-amber-700 dark:text-amber-300"
-              >
+              <p role="status" className="text-sm text-warning">
                 Partial conversion: {reporting.coverage.confirmed.missing}{' '}
                 confirmed expenses, {reporting.coverage.unresolved.missing}{' '}
                 unclassified outflows and {reporting.coverage.pending.missing}{' '}
@@ -698,7 +606,7 @@ export default function Overview({
             )}
           {analytics && reporting?.historicalEstimates && (
             <section
-              className="rounded-xl border bg-card p-4"
+              className="rounded-lg border bg-card p-4"
               aria-label="Historical estimates"
             >
               <label className="flex cursor-pointer items-center gap-3 text-sm font-medium">
@@ -748,7 +656,7 @@ export default function Overview({
                     </p>
                   </div>
                   {reporting.historicalEstimates.missing > 0 && (
-                    <p className="text-xs text-amber-700 dark:text-amber-300 sm:col-span-2">
+                    <p className="text-xs text-warning sm:col-span-2">
                       {reporting.historicalEstimates.missing} payments have no
                       conversion rate and are omitted from these amounts.
                     </p>
@@ -767,49 +675,52 @@ export default function Overview({
               )}
             </section>
           )}
-          <section aria-label="Spending summary" className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          {reporting && (
+            <section aria-label="Spending summary" className="space-y-3">
               <p className="text-xs text-muted-foreground">
                 All selected accounts converted to {activeCurrency} · daily
                 rates
+                {before ? ` · compared with ${before.from} – ${before.to}` : ''}
               </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {metricCards.map(({ title, amount, note, icon: Icon, color }) => (
-                <Card key={title} className="gap-0 py-0 shadow-none">
-                  <CardContent className="p-4 sm:p-5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {title}
-                      </span>
-                      <Icon className={`size-4 ${color}`} />
-                    </div>
-                    <p className="mt-3 break-all text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
-                      {money(amount, activeCurrency)}
-                    </p>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {note}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <KpiCard
+                  label="Classified spending"
+                  minor={reporting.confirmedMinor}
+                  previousMinor={previous?.confirmedMinor ?? null}
+                  currency={activeCurrency}
+                  note={`${confirmed.length} confirmed outflows`}
+                  icon={Wallet}
+                  href={`/review?all=1&display=${focusCurrency}`}
+                />
+                <KpiCard
+                  label="Awaiting review"
+                  minor={reporting.unresolvedMinor}
+                  previousMinor={previous?.unresolvedMinor ?? null}
+                  currency={activeCurrency}
+                  note={`${unresolved} unclassified outflows`}
+                  icon={CircleAlert}
+                  href={`/review?all=0&window=all&display=${focusCurrency}`}
+                />
+                <KpiCard
+                  label="Pending payments"
+                  minor={reporting.pendingMinor}
+                  previousMinor={previous?.pendingMinor ?? null}
+                  currency={activeCurrency}
+                  note={`${pending} payments not yet booked`}
+                  icon={Clock3}
+                />
+              </div>
+            </section>
+          )}
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <Card className="min-w-0 shadow-none">
+            <Card className="min-w-0 shadow-xs">
               <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
                 <div>
-                  <CardTitle className="text-base">
+                  <CardTitle className="text-sm font-medium">
                     Spending over time
                   </CardTitle>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    All selected account currencies ·{' '}
-                    {granularity === 'month'
-                      ? 'monthly'
-                      : granularity === 'week'
-                        ? 'weekly'
-                        : 'daily'}{' '}
-                    · Europe/Riga
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {intervalName} · Europe/Riga
                   </p>
                 </div>
                 <Choice
@@ -828,9 +739,9 @@ export default function Overview({
               <CardContent>
                 {chart.points.length ? (
                   <div
-                    className="mt-4 h-60 w-full"
+                    className="mt-2 h-48 w-full sm:h-60"
                     role="img"
-                    aria-label={`Recorded ${granularity === 'month' ? 'monthly' : granularity === 'week' ? 'weekly' : 'daily'} spending in ${activeCurrency}. Total ${money(focused!.personalExpenseMinor, activeCurrency)}.`}
+                    aria-label={`Recorded ${intervalName} spending in ${activeCurrency}. Total ${money(reporting!.confirmedMinor, activeCurrency)}.`}
                   >
                     <Suspense
                       fallback={
@@ -846,26 +757,26 @@ export default function Overview({
                         }
                         formatIndex={(v) => (chart.monthly ? v : v.slice(5))}
                         formatHeading={(v) => v}
+                        showYAxis={!isMobile}
+                        minTickGap={isMobile ? 48 : 28}
                       />
                     </Suspense>
                   </div>
                 ) : (
-                  <div className="flex h-60 flex-col items-center justify-center gap-2 text-center">
-                    <CheckCheck className="size-6 text-muted-foreground" />
-                    <p className="text-sm font-medium">
-                      No confirmed personal spending yet
-                    </p>
-                    <p className="max-w-xs text-xs text-muted-foreground">
-                      Reviewed personal expenses in {activeCurrency} will appear
-                      here.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={CheckCheck}
+                    title="No confirmed personal spending yet"
+                    text={`Reviewed personal expenses in ${activeCurrency} will appear here.`}
+                    className="h-48 sm:h-60"
+                  />
                 )}
               </CardContent>
             </Card>
-            <Card className="min-w-0 shadow-none">
+            <Card className="min-w-0 shadow-xs">
               <CardHeader>
-                <CardTitle className="text-base">Where it went</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Where it went
+                </CardTitle>
                 <p className="text-xs text-muted-foreground">
                   Confirmed categories · {activeCurrency}
                 </p>
@@ -873,70 +784,44 @@ export default function Overview({
               <CardContent>
                 {categories.length ? (
                   <div className="space-y-4">
-                    {categories.slice(0, analytics ? 15 : 5).map((c, i) => (
-                      <div key={c.name}>
-                        <div className="mb-2 flex items-start justify-between gap-3 text-xs">
-                          <span
-                            className="min-w-0 truncate font-medium"
-                            title={c.name}
-                          >
-                            {c.name}
-                          </span>
-                          <span className="min-w-0 max-w-[55%] break-all text-right tabular-nums text-muted-foreground">
-                            {money(c.minor, activeCurrency)}
-                          </span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Number((BigInt(c.minor) * 10000n) / BigInt(categories[0].minor)) / 100}%`,
-                              background: 'var(--primary)',
-                              opacity: Math.max(0.45, 1 - i * 0.06),
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    {categories.length > 5 && (
-                      <p className="pt-1 text-xs text-muted-foreground">
-                        Showing the{' '}
-                        {analytics ? Math.min(15, categories.length) : 5}{' '}
-                        largest of {categories.length} categories.
+                    <BarList
+                      rows={categories.slice(0, analytics ? 15 : 6)}
+                      currency={activeCurrency}
+                    />
+                    {categories.length > (analytics ? 15 : 6) && (
+                      <p className="text-xs text-muted-foreground">
+                        The {analytics ? 15 : 6} largest of {categories.length}{' '}
+                        categories.
                       </p>
                     )}
                     <a
                       href="/categories"
-                      className="inline-flex items-center gap-1.5 pt-1 text-xs font-medium text-primary"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary"
                     >
                       Manage categories
                       <ArrowRight className="size-3.5" />
                     </a>
                   </div>
                 ) : (
-                  <div className="flex h-48 flex-col items-center justify-center gap-2 text-center">
-                    <Wallet className="size-6 text-muted-foreground" />
-                    <p className="text-sm font-medium">
-                      Categories will appear here
-                    </p>
-                    <p className="max-w-xs text-xs text-muted-foreground">
-                      Classify a personal expense to start seeing its place in
-                      your spending.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={Wallet}
+                    title="Categories will appear here"
+                    text="Classify a personal expense to start seeing its place in your spending."
+                    className="h-48"
+                  />
                 )}
               </CardContent>
             </Card>
           </div>
           {analytics && (
             <div className="grid gap-5 md:grid-cols-2">
-              <SpendingBreakdown
+              <Breakdown
                 title="By person"
                 rows={confirmed}
                 currency={activeCurrency}
                 group={(r) => (r.owner === 'rodion' ? 'Rodion' : 'Katya')}
               />
-              <SpendingBreakdown
+              <Breakdown
                 title="Everyday or exceptional"
                 rows={confirmed}
                 currency={activeCurrency}
@@ -953,7 +838,7 @@ export default function Overview({
           {!analytics && (
             <div className="grid gap-3 sm:grid-cols-2">
               <a
-                className="rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40"
+                className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
                 href="/review?all=0&window=previous_month"
               >
                 <p className="text-sm font-medium">
@@ -964,7 +849,7 @@ export default function Overview({
                 </p>
               </a>
               <a
-                className="rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40"
+                className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
                 href="/review?all=0&window=historical"
               >
                 <p className="text-sm font-medium">
@@ -976,11 +861,13 @@ export default function Overview({
               </a>
             </div>
           )}
-          <Card className="overflow-hidden shadow-none">
+          <Card className="overflow-hidden shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Recent activity</CardTitle>
-                <p className="mt-1.5 text-xs text-muted-foreground">
+                <CardTitle className="text-sm font-medium">
+                  Recent activity
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
                   {rows.length} recorded{' '}
                   {rows.length === 1 ? 'transaction' : 'transactions'}
                   {currency === 'all' ? ' · all currencies' : ` · ${currency}`}
@@ -992,13 +879,17 @@ export default function Overview({
                 render={<a href="/review?all=1" />}
               >
                 All transactions
-                <ArrowRight className="ml-1.5 size-3.5" />
+                <ArrowRight />
               </Button>
             </CardHeader>
             <CardContent className="px-0 pb-0">
               <div className="divide-y">
                 {recent.map((row) => {
                   const negative = BigInt(row.amountMinor) < 0n;
+                  const attention =
+                    negative &&
+                    !row.spendingPolicy?.excluded &&
+                    (row.kind === 'unresolved' || row.status === 'pending');
                   const status = row.spendingPolicy?.excluded
                     ? row.status === 'pending'
                       ? 'Pending · excluded by account rule'
@@ -1015,9 +906,9 @@ export default function Overview({
                   return (
                     <div
                       key={row.id}
-                      className="group flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/40 sm:px-6"
+                      className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:px-6"
                     >
-                      <div className="hidden size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground sm:flex">
+                      <div className="hidden size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground sm:flex">
                         {negative ? (
                           <ArrowUpRight className="size-4" />
                         ) : (
@@ -1031,15 +922,8 @@ export default function Overview({
                         >
                           {row.description || 'No description provided'}
                         </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                          <span>
-                            {new Intl.DateTimeFormat('en-CA', {
-                              timeZone: 'Europe/Riga',
-                              year: 'numeric',
-                              month: '2-digit',
-                              day: '2-digit',
-                            }).format(new Date(row.bookedAt))}
-                          </span>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                          <span>{rigaDay(row.bookedAt)}</span>
                           <span aria-hidden="true">·</span>
                           <span className="capitalize">{row.owner}</span>
                           {row.spendingPattern?.pattern === 'exceptional' && (
@@ -1054,12 +938,14 @@ export default function Overview({
                             ·
                           </span>
                           <span
-                            className={`hidden truncate sm:inline ${BigInt(row.amountMinor) < 0n && !row.spendingPolicy?.excluded && (row.kind === 'unresolved' || row.status === 'pending') ? 'text-amber-600 dark:text-amber-400' : ''}`}
+                            className={`hidden truncate sm:inline ${attention ? 'text-warning' : ''}`}
                           >
                             {status}
                           </span>
                         </div>
-                        <p className="mt-1 truncate text-xs text-muted-foreground sm:hidden">
+                        <p
+                          className={`mt-0.5 truncate text-xs sm:hidden ${attention ? 'text-warning' : 'text-muted-foreground'}`}
+                        >
                           {status}
                         </p>
                         {row.spendingPolicy?.excluded && (
@@ -1080,13 +966,15 @@ export default function Overview({
                         )}
                       </div>
                       <div className="min-w-0 max-w-[55%] text-right">
-                        <p className="break-all text-xs font-semibold tabular-nums sm:text-sm">
-                          {!negative && BigInt(row.amountMinor) > 0n ? '+' : ''}
-                          {money(row.amountMinor, row.currency)}
-                        </p>
+                        <Money
+                          minor={row.amountMinor}
+                          currency={row.currency}
+                          signed
+                          className="block break-all text-sm font-semibold"
+                        />
                         <a
                           href={`/review?all=1&id=${row.id}`}
-                          className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
                         >
                           <History className="size-3" />
                           <span>History</span>
@@ -1124,7 +1012,7 @@ export default function Overview({
   );
 }
 
-function SpendingBreakdown({
+function Breakdown({
   title,
   rows,
   currency,
@@ -1140,37 +1028,20 @@ function SpendingBreakdown({
     const key = group(row);
     totals.set(key, (totals.get(key) ?? 0n) - BigInt(row.amountMinor));
   }
-  const total = [...totals.values()].reduce((a, b) => a + b, 0n);
+  const list = [...totals]
+    .sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : 0))
+    .map(([name, minor]) => ({ name, minor: minor.toString() }));
   return (
-    <Card className="shadow-none">
+    <Card className="shadow-xs">
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <p className="text-xs text-muted-foreground">
           Confirmed spending in the selected period
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {totals.size ? (
-          [...totals]
-            .sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : 0))
-            .map(([label, minor]) => (
-              <div key={label}>
-                <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-                  <span>{label}</span>
-                  <span className="tabular-nums">
-                    {money(minor.toString(), currency)}
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary/70"
-                    style={{
-                      width: `${total > 0n ? Number((minor * 10000n) / total) / 100 : 0}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))
+      <CardContent>
+        {list.length ? (
+          <BarList rows={list} currency={currency} />
         ) : (
           <p className="text-sm text-muted-foreground">
             No confirmed spending in this period.
@@ -1214,7 +1085,7 @@ function HistoricalEstimateTables({
         />
       </div>
       {groups.missing > 0 && (
-        <p className="text-xs text-amber-700 dark:text-amber-300">
+        <p className="text-xs text-warning">
           {groups.missing} tentative payments are missing a display-currency
           rate.
         </p>
