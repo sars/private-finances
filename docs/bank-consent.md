@@ -15,6 +15,14 @@ browser redirect. The Bank connections page offers the banks listed in
 `src/connectors/banks.ts` — Wise, Revolut and Swedbank — and asks for the
 appropriate country code, then links to the provider's approval page.
 
+An approval lasts days rather than months, and when it lapses the imports stop
+without any other sign. The Telegram loop therefore checks every authorised
+approval on each pass and sends a notice five, two and one day before it ends,
+and again on the day itself — worded to say which bank, whose approval, and that
+nothing is importing until it is renewed. Renewing an approval retires any
+notice that has not yet been sent. See `enqueueBankConsents` in
+`src/credential-health.ts`.
+
 The server signs AIS requests, stores only a hash of the 15-minute state token,
 checks the authenticated callback owner, and claims each state once before
 exchanging the code. The initial access request is bounded to ten days; the bank

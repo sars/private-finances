@@ -137,6 +137,84 @@ export async function initializeCredentialHealth(db: Executor): Promise<void> {
     created_at timestamptz NOT NULL DEFAULT now(), lease_until timestamptz, message_id bigint,
     UNIQUE(credential,expiry_key,warning_days,chat_id)
   )`);
+  // A bank approval expires too, and when it does the imports simply stop. The
+  // table was written for one credential and two-to-five days' notice; it now
+  // carries bank approvals as well, and a notice on the day itself, because an
+  // approval that has already lapsed is the case worth saying out loud.
+  await db.query(
+    'ALTER TABLE credential_reminders DROP CONSTRAINT IF EXISTS credential_reminders_credential_check',
+  );
+  await db.query(
+    `ALTER TABLE credential_reminders ADD CONSTRAINT credential_reminders_credential_check
+     CHECK(credential IN ('openai_api_key','bank_consent'))`,
+  );
+  await db.query(
+    'ALTER TABLE credential_reminders DROP CONSTRAINT IF EXISTS credential_reminders_warning_days_check',
+  );
+  await db.query(
+    `ALTER TABLE credential_reminders ADD CONSTRAINT credential_reminders_warning_days_check
+     CHECK(warning_days IN (5,2,1,0))`,
+  );
+}
+
+export type BankConsent = {
+  owner: string;
+  bank: string;
+  country: string;
+  expiresAt: string;
+};
+export type BankConsentNotice = BankConsent & {
+  daysRemaining: number;
+  warningDays: 5 | 2 | 1 | 0 | null;
+  expired: boolean;
+};
+
+/**
+ * How much notice a bank approval deserves.
+ *
+ * The provider grants these for days rather than months — ten for Enable
+ * Banking — so the ladder starts at five days and ends at the day the approval
+ * lapses. Zero is not a missed warning: it is the one that matters, because
+ * from then on nothing imports and nothing else says so.
+ */
+export function bankConsentNotice(
+  consent: BankConsent,
+  now = new Date(),
+  timeZone = 'Europe/Riga',
+): BankConsentNotice {
+  if (!Number.isFinite(now.getTime()))
+    throw new Error('invalid_credential_health_time');
+  if (!Number.isFinite(Date.parse(consent.expiresAt)))
+    throw new Error('invalid_consent_expiry');
+  const expiryDay = calendarDay(new Date(consent.expiresAt), timeZone);
+  const daysRemaining =
+    (Date.parse(expiryDay) - Date.parse(calendarDay(now, timeZone))) / DAY;
+  const expired = Date.parse(consent.expiresAt) <= now.getTime();
+  const warningDays = expired
+    ? 0
+    : daysRemaining <= 0
+      ? 0
+      : daysRemaining <= 1
+        ? 1
+        : daysRemaining <= 2
+          ? 2
+          : daysRemaining <= 5
+            ? 5
+            : null;
+  return { ...consent, daysRemaining, warningDays, expired };
+}
+
+function consentText(notice: BankConsentNotice): string {
+  const when = new Date(notice.expiresAt)
+    .toISOString()
+    .slice(0, 16)
+    .replace('T', ' ');
+  const bank = `${notice.bank} (${notice.country}), ${notice.owner}`;
+  return notice.expired
+    ? `⚠️ ${bank}: the bank approval expired on ${when} UTC. Nothing is importing from this bank until you approve it again on the Bank connections page.`
+    : notice.warningDays === 0
+      ? `⚠️ ${bank}: the bank approval expires today, ${when} UTC. Approve it again on the Bank connections page or the imports stop.`
+      : `${bank}: the bank approval expires in ${notice.warningDays} day(s), on ${when} UTC. Approve it again on the Bank connections page to keep the imports running.`;
 }
 
 /** Call only with the application's already verified Telegram group binding. */
@@ -185,6 +263,61 @@ export class CredentialReminders {
       }
     });
     return health;
+  }
+  /**
+   * Queue a notice for every bank approval nearing its end, or already past it.
+   *
+   * The key carries the owner and the bank as well as the expiry, so renewing
+   * an approval retires the unsent notices for the old one and a second bank
+   * never silently replaces the first.
+   */
+  async enqueueBankConsents(now = new Date()): Promise<BankConsentNotice[]> {
+    const { rows } = await this.db.query(
+      `SELECT owner, bank, country, expires_at FROM bank_consents
+       WHERE status = 'authorized' ORDER BY owner, bank`,
+    );
+    const notices: BankConsentNotice[] = [];
+    for (const row of rows) {
+      const notice = bankConsentNotice(
+        {
+          owner: String(row.owner),
+          bank: String(row.bank),
+          country: String(row.country),
+          expiresAt: new Date(String(row.expires_at)).toISOString(),
+        },
+        now,
+      );
+      notices.push(notice);
+      const scope = `${notice.owner}:${notice.bank}`;
+      const expiryKey = `${scope}:at:${notice.expiresAt}`;
+      await this.db.transaction(async (tx) => {
+        await tx.query('SELECT pg_advisory_xact_lock(7482401)');
+        // A renewed approval, or a nearer threshold, retires what was queued
+        // for this bank and has not been sent.
+        await tx.query(
+          `UPDATE credential_reminders SET state='cancelled'
+           WHERE credential='bank_consent' AND chat_id=$1 AND state='queued'
+             AND expiry_key LIKE $2
+             AND (expiry_key IS DISTINCT FROM $3::text
+                  OR warning_days IS DISTINCT FROM $4::integer)`,
+          [this.chatId, `${scope}:%`, expiryKey, notice.warningDays],
+        );
+        if (notice.warningDays === null) return;
+        await tx.query(
+          `INSERT INTO credential_reminders(id,credential,expiry_key,warning_days,chat_id,message,state)
+           VALUES($1,'bank_consent',$2,$3,$4,$5,'queued')
+           ON CONFLICT(credential,expiry_key,warning_days,chat_id) DO NOTHING`,
+          [
+            randomUUID(),
+            expiryKey,
+            notice.warningDays,
+            this.chatId,
+            consentText(notice),
+          ],
+        );
+      });
+    }
+    return notices;
   }
   async dispatchOne(): Promise<'idle' | 'sent' | 'uncertain'> {
     const item = await this.db.transaction(async (tx) => {
