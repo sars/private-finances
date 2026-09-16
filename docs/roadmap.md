@@ -60,6 +60,13 @@ separate backend refactoring, frontend caching, categorization, historical analy
 receipt items, financial edge cases/settings and operations work. It includes
 completion criteria and distinguishes deferred features from delivered ones.
 
+Frontend systematization is researched and planned in
+[the frontend design system](frontend-design-system.md): keep the current stack,
+add the missing shadcn chart, sidebar, command and table layers, and put a
+`components/finance/` vocabulary between the primitives and the screens. Its
+stages are sequenced so the analytics screen designed in [analytics](analytics.md)
+is built on that layer rather than beside it. Nothing of it is built yet.
+
 Backend refactoring is an explicit remaining increment, not satisfied by the
 already delivered review query batching. Start with measurements and a concrete
 module-boundary proposal; preserve financial behavior through atomic changes.
