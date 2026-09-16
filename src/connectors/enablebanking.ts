@@ -74,6 +74,12 @@ function identity(owner: Owner, hash: string): string {
  * account in the same currency at the same bank stays distinguishable. A
  * provider label that only repeats the currency, or is the fallback we would
  * have generated ourselves, adds nothing and is dropped.
+ *
+ * An account that holds several currencies has no single currency to lead with.
+ * Swedbank reports such an account as XXX, the ISO code for "no currency", and
+ * "Swedbank XXX" means nothing to the owner — so the provider's own word for it
+ * leads instead, and failing that it is simply the bank's multi-currency
+ * account.
  */
 export function accountLabel(
   bank: BankSlug,
@@ -83,6 +89,12 @@ export function accountLabel(
   const provider = [details.details, details.product]
     .filter((value) => typeof value === 'string' && value.trim())
     .map((value) => text(value))[0];
+  if (isMultiCurrency(currency)) {
+    const named = provider?.trim();
+    return named && named.toLowerCase() !== bankName(bank).toLowerCase()
+      ? `${bankName(bank)} ${named.toLowerCase() === 'current' ? 'current account' : named}`
+      : `${bankName(bank)} multi-currency`;
+  }
   const base = `${bankName(bank)} ${currency}`;
   if (!provider) return base;
   const noise = new Set([
@@ -94,6 +106,14 @@ export function accountLabel(
   ]);
   const extra = provider.trim();
   return noise.has(extra.toLowerCase()) ? base : `${base} · ${extra}`;
+}
+
+/**
+ * XXX is the ISO 4217 code for "no currency". A bank uses it for an account
+ * that holds several, and then only each payment knows what it was settled in.
+ */
+export function isMultiCurrency(currency: string): boolean {
+  return currency === 'XXX';
 }
 
 export class EnableBankingConnector implements BankConnector {
@@ -232,7 +252,13 @@ export class EnableBankingConnector implements BankConnector {
         const sourceId = text(row.entry_reference);
         const amount = record(row.transaction_amount);
         const currency = text(amount.currency, 3);
-        if (currency !== account.currency) throw new ConnectorError('schema');
+        // An account that holds one currency must not report payments in
+        // another; an account that holds several has no currency to check
+        // against, and the payment's own is the only one there is.
+        if (!/^[A-Z]{3}$/.test(currency) || isMultiCurrency(currency))
+          throw new ConnectorError('schema');
+        if (!isMultiCurrency(account.currency) && currency !== account.currency)
+          throw new ConnectorError('schema');
         const minor = BigInt(decimalToMinor(text(amount.amount, 64), currency));
         if (
           minor < 0n ||
