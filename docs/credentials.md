@@ -30,7 +30,7 @@ These steps and the production activation options are described in the official
 In restricted production mode, link every intended bank account in the control
 panel. Linking makes those accounts eligible; it does **not** authorize the app's
 bank session. Each owner must then sign into our dashboard as themselves and approve
-Wise and Revolut separately through **Bank connections**. One person's consent does
+each bank separately through **Bank connections**. One person's consent does
 not cover the other person's accounts. This distinction is explicit in the
 [linked-account instructions](https://enablebanking.com/docs/api/linked-accounts).
 
@@ -46,7 +46,7 @@ Server configuration:
 | Kate key path | `ENABLEBANKING_KATYA_PRIVATE_KEY_FILE` points to that PEM |
 | Secret directory for imports | `CREDENTIALS_DIRECTORY=/etc/private-finances/credentials` |
 | Consent sessions | `ENABLEBANKING_SESSION_DIRECTORY=/var/lib/private-finances-consent` |
-| Per-owner, per-bank session file | `enablebanking-<owner>-<wise\|revolut>-session` within that directory |
+| Per-owner, per-bank session file | `enablebanking-<owner>-<wise\|revolut\|swedbank>-session` within that directory |
 
 Owner-specific settings `ENABLEBANKING_<RODION|KATYA>_APPLICATION_ID` and
 `ENABLEBANKING_<RODION|KATYA>_PRIVATE_KEY_FILE` must be configured as a complete

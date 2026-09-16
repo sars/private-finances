@@ -4,7 +4,7 @@
 
 | Власник | Джерело | Інтеграція |
 | --- | --- | --- |
-| Rodion | Wise, Revolut | Enable Banking |
+| Rodion | Wise, Revolut, Swedbank | Enable Banking |
 | Katya | Wise | Enable Banking |
 | Rodion | Monobank | Прямий Monobank personal API, окремий token |
 | Katya | Monobank | Прямий Monobank personal API, окремий token |

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { lstat, readFile, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BANK_SLUGS } from './connectors/banks.js';
 
 /** PF-002: bounded reconciliation, never a historical completeness watermark. */
 export function dailyReplayWindow(now: Date): { from: string; to: string } {
@@ -13,10 +14,9 @@ export function dailyReplayWindow(now: Date): { from: string; to: string } {
 }
 
 export function parseInstance(instance: string): [string, string, string?] {
-  const match =
-    /^(monobank|enablebanking)-(rodion|katya)(?:-(wise|revolut))?$/.exec(
-      instance,
-    );
+  const match = new RegExp(
+    `^(monobank|enablebanking)-(rodion|katya)(?:-(${BANK_SLUGS.join('|')}))?$`,
+  ).exec(instance);
   if (!match || (match[1] === 'enablebanking') !== Boolean(match[3]))
     throw new Error('invalid_schedule_instance');
   return [match[1]!, match[2]!, match[3]];

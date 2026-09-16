@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Repository, Conflict } from './repository.js';
 import { ConnectorError, type BankConnector } from './connectors/types.js';
 import { reidentifyTransfers } from './counterparty-identity.js';
+import { isBankSlug } from './connectors/banks.js';
 
 /** Fetch outside transactions; commit a complete account window and its checkpoint together. */
 export async function syncBank(
@@ -18,11 +19,7 @@ export async function syncBank(
     to.getTime() > Date.now()
   )
     throw new Error('invalid_sync_window');
-  if (
-    connector.source === 'enablebanking' &&
-    connector.bank !== 'wise' &&
-    connector.bank !== 'revolut'
-  )
+  if (connector.source === 'enablebanking' && !isBankSlug(connector.bank))
     throw new ConnectorError('schema');
   const key = `${connector.source}:${connector.owner}${connector.source === 'enablebanking' ? `:${connector.bank}` : ''}`;
   const token = randomUUID();
