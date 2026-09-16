@@ -493,6 +493,10 @@ export function web(
             rows: converted.rows.map((r) => ({
               id: r.id,
               convertedAmountMinor: r.convertedAmountMinor,
+              // What the payment finally cost. The review screen leads with
+              // this and falls back to the account's own currency without it,
+              // which showed a refunded purchase in the wrong currency.
+              netAmountMinor: r.netAmountMinor,
               method: r.method,
               provenance: r.provenance,
               missingReason: r.missingReason,

@@ -95,6 +95,20 @@ test('a linked credit is hidden while its purchase stays listed; the toggle and 
         credit.id,
       ]);
     }
+    // The review screen leads with what the payment finally cost, so the
+    // payload has to carry it. Without it the screen silently fell back to the
+    // account's own currency and showed a refunded purchase in the wrong one.
+    const reviewed = await (
+      await fetch(
+        `${base}/api/review?all=1&window=all&includeZeroAmount=1&display=EUR`,
+      )
+    ).json();
+    const reported = reviewed.reporting.rows.find(
+      (r: { id: string }) => r.id === debit.id,
+    );
+    assert.equal(reported.convertedAmountMinor, '-100');
+    assert.equal(reported.netAmountMinor, '0');
+
     await refunds.unlink(link.id, 1, 'rodion', 'Undo synthetic refund');
     assert.equal((await hidden('rodion')).length, 0);
     assert.equal((await ids('')).length, 3);

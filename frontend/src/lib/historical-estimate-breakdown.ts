@@ -16,6 +16,8 @@ type LedgerRow = {
 type ConversionRow = {
   id: string;
   convertedAmountMinor: string | null;
+  /** What the payment finally cost, after money that came back. */
+  netAmountMinor?: string | null;
   counted: string;
 };
 export type EstimateGroup = { label: string; minor: string; count: number };
@@ -57,16 +59,17 @@ export function historicalEstimateBreakdown(
         transaction.revision !== estimate.transactionRevision)
     )
       continue;
-    if (!conversion || conversion.convertedAmountMinor === null) {
+    // The same figure the server reports for these estimates: what the payment
+    // finally cost. Totalling what the bank first took would count a refunded
+    // payment in full here while the headline above it did not.
+    const amount =
+      conversion?.netAmountMinor ?? conversion?.convertedAmountMinor ?? null;
+    if (!conversion || amount === null) {
       missing++;
       continue;
     }
-    if (
-      conversion.counted !== 'unresolved' ||
-      BigInt(conversion.convertedAmountMinor) > 0n
-    )
-      continue;
-    const minor = -BigInt(conversion.convertedAmountMinor);
+    if (conversion.counted !== 'unresolved' || BigInt(amount) > 0n) continue;
+    const minor = -BigInt(amount);
     const month = calendar.format(new Date(transaction.bookedAt)).slice(0, 7);
     for (const [map, key] of [
       [categories, estimate.category],
