@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice } from '@/components/finance';
+import { Choice, PageHeader } from '@/components/finance';
 import type { ReportSnapshot } from '../../src/reports';
 
 type Scope = 'all' | 'rodion' | 'katya';
@@ -108,33 +108,26 @@ export default function Reports() {
   }
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Reports
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Weekly and monthly snapshots, with every revision kept.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={loading || saving}
-          onClick={() =>
-            scope ? setRefresh((n) => n + 1) : void session.refetch()
-          }
-        >
-          <RefreshCw className="mr-2 size-3.5" />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Weekly and monthly snapshots, with every revision kept."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || saving}
+            onClick={() =>
+              scope ? setRefresh((n) => n + 1) : void session.refetch()
+            }
+          >
+            <RefreshCw className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      />
       <form
         onSubmit={create}
-        className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4"
+        className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4"
       >
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
@@ -223,8 +216,8 @@ export default function Reports() {
       )}
       {loading ? (
         <div role="status" aria-label="Loading reports" className="space-y-4">
-          <Skeleton className="h-52 rounded-xl" />
-          <Skeleton className="h-52 rounded-xl" />
+          <Skeleton className="h-52 rounded-lg" />
+          <Skeleton className="h-52 rounded-lg" />
         </div>
       ) : !reports.length && !error ? (
         <Card>
@@ -241,7 +234,7 @@ export default function Reports() {
         !error && (
           <div className="space-y-5">
             {reports.map((snapshot) => (
-              <Card key={snapshot.id} className="shadow-none">
+              <Card key={snapshot.id} className="shadow-xs">
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <CardTitle className="text-base">

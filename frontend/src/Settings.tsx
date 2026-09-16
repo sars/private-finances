@@ -38,7 +38,7 @@ export default function Settings() {
   if (!allowed)
     return (
       <div className="space-y-3">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
         <p>
           Household settings are managed by Rodion. You can manage your own bank
           approval from Bank connections.
@@ -87,8 +87,10 @@ export default function Settings() {
   }
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Household settings</h1>
+      <header className="space-y-1">
+        <h1 className="text-lg font-semibold tracking-tight">
+          Household settings
+        </h1>
         <p className="text-sm text-muted-foreground">
           Default visibility for both family members. These settings never
           delete bank records or change spending calculations.

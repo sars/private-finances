@@ -68,7 +68,7 @@ export function ReceiptEvidence({ id, actor }: { id: string; actor: Owner }) {
   return (
     <section
       aria-label="Receipt evidence"
-      className="space-y-3 rounded-xl border p-4 sm:p-5"
+      className="space-y-3 rounded-lg border p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-base font-semibold">

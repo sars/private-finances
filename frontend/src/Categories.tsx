@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Choice } from '@/components/finance';
+import { Choice, PageHeader } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Node = {
@@ -290,31 +290,21 @@ export default function Categories() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Categories & rules
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Organize your spending and make repeat decisions easier, with you in
-            control.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={loading || !!busy}
-          onClick={() => void load()}
-        >
-          <RefreshCw
-            className={`mr-2 size-3.5 ${loading ? 'animate-spin' : ''}`}
-          />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Categories & rules"
+        description="Organise your spending and make repeat decisions easier, with you in control."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || !!busy}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      />
       {notice && (
         <div
           role="status"
@@ -347,10 +337,10 @@ export default function Categories() {
           className="space-y-4"
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <Skeleton className="h-60 rounded-xl" />
-            <Skeleton className="h-60 rounded-xl" />
+            <Skeleton className="h-60 rounded-lg" />
+            <Skeleton className="h-60 rounded-lg" />
           </div>
-          <Skeleton className="h-56 rounded-xl" />
+          <Skeleton className="h-56 rounded-lg" />
           <span className="sr-only">Loading your categories and rules</span>
         </div>
       ) : (
@@ -386,7 +376,7 @@ export default function Categories() {
                   },
                 ] as const
               ).map(({ type, title, subtitle, list, icon: Icon }) => (
-                <Card key={type} className="min-w-0 shadow-none">
+                <Card key={type} className="min-w-0 shadow-xs">
                   <CardHeader className="flex flex-row items-start justify-between gap-3">
                     <div>
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -461,7 +451,7 @@ export default function Categories() {
                 </Card>
               ))}
             </div>
-            <Card className="shadow-none">
+            <Card className="shadow-xs">
               <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base">
