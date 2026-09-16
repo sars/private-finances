@@ -334,6 +334,9 @@ async function main(): Promise<void> {
         process.env.OPENAI_API_KEY_EXPIRES_ON ??
           process.env.OPENAI_API_KEY_EXPIRES_AT,
       );
+      // A bank approval lasts days, not months, and when it lapses the imports
+      // stop without a word anywhere else.
+      await credentialReminders.enqueueBankConsents();
       await credentialReminders.dispatchOne();
       if (
         process.env.TELEGRAM_AUTO_QUESTIONS === 'true' ||
