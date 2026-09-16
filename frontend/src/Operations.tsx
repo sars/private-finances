@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/finance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -138,30 +139,21 @@ export default function Operations() {
   }, [refresh]);
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            System health
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Bank imports, access expiry and the status of your workspace.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={loading}
-          onClick={() => setRefresh((n) => n + 1)}
-        >
-          <RefreshCw
-            className={`mr-2 size-3.5 ${loading ? 'animate-spin' : ''}`}
-          />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="System health"
+        description="Bank imports, access expiry and the status of your workspace."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading}
+            onClick={() => setRefresh((n) => n + 1)}
+          >
+            <RefreshCw className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      />
       <LlmBudget refresh={refresh} />
       {loading ? (
         <div
@@ -170,10 +162,10 @@ export default function Operations() {
           className="space-y-4"
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <Skeleton className="h-32 rounded-xl" />
-            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-lg" />
+            <Skeleton className="h-32 rounded-lg" />
           </div>
-          <Skeleton className="h-60 rounded-xl" />
+          <Skeleton className="h-60 rounded-lg" />
         </div>
       ) : error ? (
         <Card>
@@ -195,7 +187,7 @@ export default function Operations() {
               Checked {date(checkedAt)}. Refresh to check for changes.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Card className="gap-3 shadow-none">
+              <Card className="gap-3 shadow-xs">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Database className="size-4 text-primary" />
@@ -213,7 +205,7 @@ export default function Operations() {
                   </p>
                 </CardContent>
               </Card>
-              <Card className="gap-3 shadow-none">
+              <Card className="gap-3 shadow-xs">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Activity className="size-4 text-primary" />
@@ -241,7 +233,7 @@ export default function Operations() {
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {Object.entries(health.workflows ?? {}).map(([key, flow]) => (
-                  <Card key={key} className="gap-0 py-0 shadow-none">
+                  <Card key={key} className="gap-0 py-0 shadow-xs">
                     <CardContent className="space-y-3 p-4">
                       <h3 className="text-sm font-medium">
                         {workflowLabels[key] ?? key}
@@ -322,7 +314,7 @@ export default function Operations() {
                     return (
                       <Card
                         key={connection.connection}
-                        className="gap-3 shadow-none"
+                        className="gap-3 shadow-xs"
                       >
                         <CardHeader>
                           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -375,7 +367,7 @@ export default function Operations() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed p-8 text-center">
+                <div className="rounded-lg border border-dashed p-8 text-center">
                   <Activity className="mx-auto mb-3 size-7 text-muted-foreground" />
                   <p className="text-sm font-medium">
                     No bank import has run yet
@@ -395,10 +387,7 @@ export default function Operations() {
               <h2 className="text-base font-semibold">Credential expiry</h2>
               {health.credentials.length ? (
                 health.credentials.map((credential) => (
-                  <Card
-                    key={credential.credential}
-                    className="gap-3 shadow-none"
-                  >
+                  <Card key={credential.credential} className="gap-3 shadow-xs">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-sm">
                         <KeyRound className="size-4 text-primary" />
@@ -438,7 +427,7 @@ export default function Operations() {
                 </p>
               )}
             </section>
-            <details className="rounded-xl border bg-card p-4">
+            <details className="rounded-lg border bg-card p-4">
               <summary className="cursor-pointer text-sm font-medium">
                 Technical diagnostics
               </summary>

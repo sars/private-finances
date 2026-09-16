@@ -72,7 +72,7 @@ export function BankRecord({
       <section
         aria-label={cash ? 'Payment record' : 'Bank record'}
         role="alert"
-        className="space-y-2 rounded-xl border p-4 text-sm text-muted-foreground"
+        className="space-y-2 rounded-lg border p-4 text-sm text-muted-foreground"
       >
         <p>The payment record could not be loaded.</p>
         <Button
@@ -88,7 +88,7 @@ export function BankRecord({
     return (
       <section
         aria-label={cash ? 'Payment record' : 'Bank record'}
-        className="rounded-xl border p-4"
+        className="rounded-lg border p-4"
       >
         <p role="status" className="text-sm text-muted-foreground">
           Loading the payment record…
@@ -110,7 +110,7 @@ export function BankRecord({
   return (
     <section
       aria-label={cash ? 'Payment record' : 'Bank record'}
-      className="space-y-4 rounded-xl border p-4 sm:p-5"
+      className="space-y-4 rounded-lg border p-4 sm:p-5"
     >
       <h2 className="flex items-center gap-2 text-base font-semibold">
         <Landmark className="size-4" />

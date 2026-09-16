@@ -135,7 +135,7 @@ export function TransactionDetail({
         </p>
       )}
 
-      <header className="space-y-4 rounded-xl border p-4 sm:p-5">
+      <header className="space-y-4 rounded-lg border p-4 sm:p-5">
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">
             Payment review
@@ -215,7 +215,7 @@ export function TransactionDetail({
         <div className="min-w-0 space-y-5">
           <section
             aria-label="Your explanations"
-            className="space-y-3 rounded-xl border p-4 sm:p-5"
+            className="space-y-3 rounded-lg border p-4 sm:p-5"
           >
             <h2 className="flex items-center gap-2 text-base font-semibold">
               <MessageCircle className="size-4" />
@@ -246,7 +246,7 @@ export function TransactionDetail({
             label="Everything that happened to this payment"
           />
         </div>
-        <div className="min-w-0 rounded-xl border p-4 sm:p-5">
+        <div className="min-w-0 rounded-lg border p-4 sm:p-5">
           <DecisionCard
             key={`${t.id}:${t.revision}`}
             transaction={t}

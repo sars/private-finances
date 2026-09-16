@@ -83,7 +83,10 @@ marked `no-cache`.
 
 ## Spacing review convention
 
-Use the existing shadcn components and Tailwind spacing scale consistently. Stacked
+Every screen opens with `PageHeader` from `components/finance` — one `text-lg`
+title line, one sentence, actions on the right — and cards sit on the design
+scale (`rounded-lg`, `shadow-xs`); `frontend/DESIGN.md` is the reference. Use
+the existing shadcn components and Tailwind spacing scale consistently. Stacked
 labels and controls normally use gap-2 (8px); related filter groups use gap-4 (16px).
 Allow controls and descriptive text to wrap on narrow screens, without compressing
 labels against inputs. For changed layouts, inspect both phone and desktop widths,

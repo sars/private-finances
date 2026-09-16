@@ -164,10 +164,7 @@ export default function Receipts() {
     <div className="mx-auto max-w-5xl space-y-5 pb-8">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[.14em] text-muted-foreground">
-            Payment context
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-lg font-semibold tracking-tight">
             {transactionId ? 'Payment receipts' : 'Receipts'}
           </h1>
           {transactionId && (
@@ -178,7 +175,7 @@ export default function Receipts() {
               View all receipts
             </a>
           )}
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Either of you can send receipts to the family Telegram chat. We
             check both people’s payments about every minute, including ones the
             bank has not finalized yet. If the bank later reports the finished

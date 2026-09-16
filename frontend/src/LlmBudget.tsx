@@ -112,7 +112,7 @@ export default function LlmBudget({
       </a>
     );
   return (
-    <Card id="ai-budget" className="gap-4 shadow-none scroll-mt-6">
+    <Card id="ai-budget" className="gap-4 shadow-xs scroll-mt-6">
       <CardHeader className="flex-row flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle className="flex items-center gap-2 text-base">

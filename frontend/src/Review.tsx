@@ -57,7 +57,7 @@ function Empty({
   const Icon =
     icon === 'inbox' ? Inbox : icon === 'message' ? MessageCircle : Sparkles;
   return (
-    <div className="rounded-xl border border-dashed px-6 py-12 text-center">
+    <div className="rounded-lg border border-dashed px-6 py-12 text-center">
       <Icon className="mx-auto mb-3 size-7 text-muted-foreground" />
       <h2 className="text-sm font-medium">{title}</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
@@ -266,7 +266,7 @@ export default function Review() {
       />
     ) : (
       <section className="space-y-3 rounded-lg border p-5">
-        <h1 className="text-xl font-semibold">Payment review</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Payment review</h1>
         <p>
           {detail.isPending
             ? 'Loading payment…'
@@ -745,7 +745,7 @@ export default function Review() {
           ) : data?.proposals.length ? (
             <>
               {data.proposals.slice(0, historyLimit).map((p) => (
-                <Card key={p.id} className="py-0 shadow-none">
+                <Card key={p.id} className="py-0 shadow-xs">
                   <CardContent className="p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <Badge variant="outline">

@@ -184,4 +184,13 @@ Recharts leaves the entry chunk.
   the planned sheet/drawer would have undone a product decision. Review's move
   to Base UI happened in Stage 1 and held. Not yet: Transactions accepting the
   analytics grammar (period, category), so drill links still go to Home.
-- Stage 5: not started.
+- Stage 5: first pass built. Every remaining screen — Categories, Accounts,
+  Currency conversion, Bank connections, Reports, System health, Cash,
+  Decision history, Receipts, Settings — opens with the same `PageHeader`
+  (one `text-lg` title line, one sentence, actions right) instead of its own
+  eyebrow-and-3xl heading, and cards sit on the design scale (`rounded-lg`,
+  `shadow-xs`) throughout. Their bodies are unchanged: filter rows on
+  Currency and Reports still spell out their labels rather than using
+  `Field`, Categories and Accounts keep their own forms, and the estimate
+  tables on Analytics remain raw `<table>`s. That is the remaining Stage 5
+  work, screen by screen, each a small pull request.

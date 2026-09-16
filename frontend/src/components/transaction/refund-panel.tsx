@@ -294,7 +294,7 @@ export function RefundPanel({
   return (
     <details
       open={needsAction}
-      className="group rounded-xl border"
+      className="group rounded-lg border"
       aria-label="Refunds"
     >
       <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-base font-semibold">

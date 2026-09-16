@@ -2,6 +2,7 @@ import { useRouterState } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, History as HistoryIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/finance';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -78,17 +79,10 @@ export default function History() {
         <ArrowLeft className="size-4" />
         Back to overview
       </Button>
-      <div>
-        <p className="mb-1 text-xs font-medium uppercase tracking-[.14em] text-muted-foreground">
-          Transaction record
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Decision history
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          See what changed, who changed it, and why. Old decisions stay visible.
-        </p>
-      </div>
+      <PageHeader
+        title="Decision history"
+        description="What changed, who changed it, and why. Old decisions stay visible."
+      />
       {loading ? (
         <Skeleton className="h-64" />
       ) : error ? (
@@ -109,7 +103,7 @@ export default function History() {
         <ol className="space-y-4">
           {entries.map((entry, i) => (
             <li key={`${entry.created_at}-${i}`}>
-              <Card className="gap-0 py-0 shadow-none">
+              <Card className="gap-0 py-0 shadow-xs">
                 <CardContent className="p-5">
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">

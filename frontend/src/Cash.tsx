@@ -3,7 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Choice } from '@/components/finance';
+import { Choice, PageHeader } from '@/components/finance';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useSession, invalidateFinancialData } from './lib/query';
 import { rigaCalendarDate, validCashAmount } from './lib/cash-entry';
@@ -86,18 +86,13 @@ export default function Cash() {
       >
         ← Transactions
       </Button>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Add cash expense
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Record a purchase paid in cash. We’ll save your explanation and
-          suggest a category for you to confirm.
-        </p>
-      </div>
+      <PageHeader
+        title="Add cash expense"
+        description="Record a purchase paid in cash. Your explanation is saved and a category suggested for you to confirm."
+      />
       <form
         onSubmit={save}
-        className="space-y-5 rounded-xl border bg-card p-4 sm:p-6"
+        className="space-y-5 rounded-lg border bg-card p-4 sm:p-6"
       >
         <fieldset disabled={busy} className="space-y-5">
           <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-4">

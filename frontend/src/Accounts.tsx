@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Choice } from '@/components/finance';
+import { Choice, PageHeader } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Owner = 'rodion' | 'katya';
@@ -296,42 +296,31 @@ export default function Accounts() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Accounts & exclusions
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Choose which accounts belong in personal spending. Business and
-            investment account rules exclude their past and future payments from
-            personal totals.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading || saving}
-            onClick={() => void load()}
-          >
-            <RefreshCw
-              className={`mr-2 size-3.5 ${loading ? 'animate-spin' : ''}`}
-            />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            disabled={!identity || saving}
-            onClick={() => showForm()}
-          >
-            <Plus className="mr-1.5 size-4" />
-            Add account
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Accounts & exclusions"
+        description="Which accounts belong in personal spending. Business and investment account rules keep their past and future payments out of personal totals."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading || saving}
+              onClick={() => void load()}
+            >
+              <RefreshCw className={loading ? 'animate-spin' : ''} />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              disabled={!identity || saving}
+              onClick={() => showForm()}
+            >
+              <Plus />
+              Add account
+            </Button>
+          </>
+        }
+      />
       {notice && (
         <div
           role="status"
@@ -364,7 +353,7 @@ export default function Accounts() {
           className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
         >
           {[0, 1, 2].map((n) => (
-            <Skeleton key={n} className="h-48 rounded-xl" />
+            <Skeleton key={n} className="h-48 rounded-lg" />
           ))}
           <span className="sr-only">Loading your accounts</span>
         </div>
@@ -382,7 +371,7 @@ export default function Accounts() {
               </span>
             </div>
             {missingPurpose > 0 && (
-              <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+              <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 <div>
                   <p className="text-sm font-medium">
@@ -406,7 +395,7 @@ export default function Accounts() {
                   return (
                     <Card
                       key={`${account.source}:${account.accountId}`}
-                      className="flex min-w-0 flex-col shadow-none"
+                      className="flex min-w-0 flex-col shadow-xs"
                     >
                       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-3">
                         <div className="flex min-w-0 items-center gap-3">
@@ -524,7 +513,7 @@ export default function Accounts() {
                 })}
               </div>
             ) : (
-              <Card className="shadow-none">
+              <Card className="shadow-xs">
                 <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
                   <div className="rounded-full bg-muted p-4">
                     <Landmark className="size-6 text-muted-foreground" />
@@ -543,7 +532,7 @@ export default function Accounts() {
                 </CardContent>
               </Card>
             )}
-            <Card className="shadow-none">
+            <Card className="shadow-xs">
               <CardHeader className="flex flex-row items-start justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">

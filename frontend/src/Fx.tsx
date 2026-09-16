@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice } from '@/components/finance';
+import { Choice, PageHeader } from '@/components/finance';
 
 type ConversionRow = {
   id: string;
@@ -241,32 +241,22 @@ export default function Fx() {
   }
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Currency conversion
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            View the same transactions in another currency, with missing rates
-            clearly marked.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={loading || dateError || currencyError}
-          onClick={() => setRefresh((n) => n + 1)}
-        >
-          <RefreshCw
-            className={`mr-2 size-3.5 ${loading ? 'animate-spin' : ''}`}
-          />
-          Refresh
-        </Button>
-      </div>
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4">
+      <PageHeader
+        title="Currency conversion"
+        description="The same transactions in another currency, with missing rates clearly marked."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || dateError || currencyError}
+            onClick={() => setRefresh((n) => n + 1)}
+          >
+            <RefreshCw className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      />
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
             htmlFor="fx-owner"
@@ -434,10 +424,10 @@ export default function Fx() {
         >
           <div className="grid gap-4 sm:grid-cols-3">
             {[0, 1, 2].map((key) => (
-              <Skeleton key={key} className="h-32 rounded-xl" />
+              <Skeleton key={key} className="h-32 rounded-lg" />
             ))}
           </div>
-          <Skeleton className="h-60 rounded-xl" />
+          <Skeleton className="h-60 rounded-lg" />
         </div>
       ) : error ? (
         <Card>
@@ -455,7 +445,7 @@ export default function Fx() {
           <>
             <div
               role="status"
-              className={`flex items-start gap-3 rounded-xl border p-4 text-sm ${totals.missing ? 'border-amber-500/30 bg-amber-500/5' : 'bg-muted/30'}`}
+              className={`flex items-start gap-3 rounded-lg border p-4 text-sm ${totals.missing ? 'border-amber-500/30 bg-amber-500/5' : 'bg-muted/30'}`}
             >
               {totals.missing ? (
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
@@ -503,7 +493,7 @@ export default function Fx() {
                 ).length;
                 const missing = rows.length - covered;
                 return (
-                  <Card key={key} className="gap-3 shadow-none">
+                  <Card key={key} className="gap-3 shadow-xs">
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                         {label}
@@ -532,7 +522,7 @@ export default function Fx() {
               })}
             </div>
             {totals.monthly && totals.monthly.length > 0 && (
-              <Card className="shadow-none">
+              <Card className="shadow-xs">
                 <CardHeader className="gap-2">
                   <CardTitle className="text-base">
                     Monthly personal spending
@@ -630,7 +620,7 @@ export default function Fx() {
                 </CardContent>
               </Card>
             )}
-            <Card className="shadow-none">
+            <Card className="shadow-xs">
               <CardHeader className="gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <CardTitle className="text-base">Transactions</CardTitle>

@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice } from '@/components/finance';
+import { Choice, PageHeader } from '@/components/finance';
 
 type Connection = {
   bank: string;
@@ -139,28 +139,21 @@ export default function Connections() {
   }
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            Household finances
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Bank connections
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Manage approval for your own accounts and check their access status.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={loading || starting}
-          onClick={() => setRefresh((n) => n + 1)}
-        >
-          <RefreshCw className="mr-2 size-3.5" />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Bank connections"
+        description="Approval for your own accounts, and whether each one still has access."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || starting}
+            onClick={() => setRefresh((n) => n + 1)}
+          >
+            <RefreshCw className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
+        }
+      />
       {error && (
         <div
           role="alert"
@@ -187,13 +180,13 @@ export default function Connections() {
           aria-label="Loading bank connections"
           className="grid gap-4 md:grid-cols-2"
         >
-          <Skeleton className="h-60 rounded-xl" />
-          <Skeleton className="h-60 rounded-xl" />
+          <Skeleton className="h-60 rounded-lg" />
+          <Skeleton className="h-60 rounded-lg" />
         </div>
       ) : (
         session && (
           <>
-            <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
+            <div className="flex items-start gap-3 rounded-lg border bg-card p-4">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
               <div>
                 <p className="text-sm font-medium">
@@ -207,7 +200,7 @@ export default function Connections() {
               </div>
             </div>
             <div className="grid items-start gap-5 lg:grid-cols-2">
-              <Card className="shadow-none">
+              <Card className="shadow-xs">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Landmark className="size-4 text-primary" />
@@ -293,7 +286,7 @@ export default function Connections() {
                   )}
                 </CardContent>
               </Card>
-              <Card className="shadow-none">
+              <Card className="shadow-xs">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Landmark className="size-4 text-primary" />
@@ -339,7 +332,7 @@ export default function Connections() {
                     return (
                       <Card
                         key={`${connection.bank}:${connection.country}`}
-                        className="gap-3 shadow-none"
+                        className="gap-3 shadow-xs"
                       >
                         <CardHeader>
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -378,7 +371,7 @@ export default function Connections() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed p-8 text-center">
+                <div className="rounded-lg border border-dashed p-8 text-center">
                   <ShieldCheck className="mx-auto mb-3 size-7 text-muted-foreground" />
                   <p className="text-sm font-medium">
                     No bank approval recorded for you yet
