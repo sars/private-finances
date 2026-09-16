@@ -15,6 +15,9 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react';
+import { AccountBadge } from '@/components/account-badge';
+import { accountIdentity } from '@/lib/account-identity';
+import { currencyFromLabel, owners, tileFor } from '@/lib/account-visuals';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -439,15 +442,39 @@ export default function Accounts() {
                     >
                       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-3">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                            <Landmark className="size-5 text-muted-foreground" />
-                          </div>
+                          <AccountBadge
+                            source={account.source}
+                            label={account.label}
+                            owner={account.owner}
+                            currency={
+                              currencyFromLabel(account.label) ??
+                              (account.impact?.byCurrency.length === 1
+                                ? account.impact.byCurrency[0].currency
+                                : null)
+                            }
+                            size="lg"
+                          />
                           <div className="min-w-0">
                             <CardTitle className="break-words text-base leading-snug">
                               {account.label}
                             </CardTitle>
-                            <p className="mt-1 truncate text-xs capitalize text-muted-foreground">
-                              {account.source}
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                              {accountIdentity(
+                                account.source,
+                                '',
+                                account.label,
+                              ).bank
+                                ? tileFor(
+                                    accountIdentity(
+                                      account.source,
+                                      '',
+                                      account.label,
+                                    ).bank,
+                                    'standard',
+                                  ).name
+                                : 'Bank account'}
+                              {' · '}
+                              {owners[account.owner].name}
                             </p>
                           </div>
                         </div>

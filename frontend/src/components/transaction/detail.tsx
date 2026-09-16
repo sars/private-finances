@@ -164,6 +164,7 @@ export function TransactionDetail({
             source={t.source}
             currency={t.currency}
             label={t.spendingPolicy?.accountLabel}
+            owner={t.owner}
           />
           {t.status === 'pending' && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
