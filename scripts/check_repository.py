@@ -56,6 +56,10 @@ def main():
         try:
             content = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
+            # The one binary policy: self-hosted font subsets, so the app needs
+            # no third-party request for its typeface and works offline.
+            if name.startswith("frontend/public/fonts/") and path.suffix == ".woff2":
+                continue
             errors.append(f"Binary file requires an explicit review policy: {name}")
             continue
         if any(pattern.search(content) for pattern in secret_patterns):

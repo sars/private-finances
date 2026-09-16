@@ -22,16 +22,10 @@ import {
   SlidersHorizontal,
   Wallet,
 } from 'lucide-react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { lazy, Suspense } from 'react';
+import { money, toNumber } from './lib/format';
 import { Button } from '@/components/ui/button';
+const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -90,56 +84,6 @@ type Reporting = {
   }[];
 };
 type Point = { name: string; value: number; minor: string };
-const exponents: Record<string, number> = {
-  UAH: 2,
-  EUR: 2,
-  USD: 2,
-  GBP: 2,
-  PLN: 2,
-  CHF: 2,
-  CZK: 2,
-  SEK: 2,
-  NOK: 2,
-  DKK: 2,
-  JPY: 0,
-  KWD: 3,
-  BHD: 3,
-};
-function money(minor: string, currency: string) {
-  const n = BigInt(minor),
-    absolute = (n < 0n ? -n : n).toString();
-  const exponent = exponents[currency];
-  if (exponent === undefined)
-    return `${n < 0n ? '−' : ''}${absolute} minor units ${currency}`;
-  const digits = absolute.padStart(exponent + 1, '0');
-  const whole = (exponent ? digits.slice(0, -exponent) : digits).replace(
-    /\B(?=(\d{3})+(?!\d))/g,
-    ',',
-  );
-  return `${n < 0n ? '−' : ''}${whole}${exponent ? `.${digits.slice(-exponent)}` : ''} ${currency}`;
-}
-function plotValue(minor: string, currency: string) {
-  return Number(minor) / 10 ** (exponents[currency] ?? 0);
-}
-function chartTooltip(currency: string) {
-  return ({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload?: ReadonlyArray<{ payload?: Point }>;
-  }) => {
-    const point = payload?.[0]?.payload;
-    return active && point ? (
-      <div className="max-w-[min(20rem,80vw)] break-all rounded-lg border bg-popover px-3 py-2 text-xs shadow-sm">
-        <p className="mb-1 text-muted-foreground">{point.name}</p>
-        <p className="font-semibold tabular-nums">
-          {money(point.minor, currency)}
-        </p>
-      </div>
-    ) : null;
-  };
-}
 function Loading() {
   return (
     <div role="status" aria-label="Loading overview" className="space-y-5">
@@ -344,7 +288,7 @@ export default function Overview({
       points: [...groups].map(([name, minor]) => ({
         name,
         minor: minor.toString(),
-        value: plotValue(minor.toString(), activeCurrency),
+        value: toNumber(minor.toString(), activeCurrency),
       })),
     };
   }, [confirmed, activeCurrency, granularity]);
@@ -361,7 +305,7 @@ export default function Overview({
       .map(([name, minor]) => ({
         name,
         minor: minor.toString(),
-        value: plotValue(minor.toString(), activeCurrency),
+        value: toNumber(minor.toString(), activeCurrency),
       }));
   }, [confirmed, activeCurrency]);
   const recent = [...rows]
@@ -901,57 +845,22 @@ export default function Overview({
                     role="img"
                     aria-label={`Recorded ${granularity === 'month' ? 'monthly' : granularity === 'week' ? 'weekly' : 'daily'} spending in ${activeCurrency}. Total ${money(focused!.personalExpenseMinor, activeCurrency)}.`}
                   >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
+                    <Suspense
+                      fallback={
+                        <div className="h-full w-full animate-pulse rounded-md bg-muted" />
+                      }
+                    >
+                      <BarSeries
                         data={chart.points}
-                        margin={{ top: 8, right: 8, left: -18, bottom: 0 }}
-                        accessibilityLayer
-                      >
-                        <CartesianGrid
-                          vertical={false}
-                          stroke="var(--border)"
-                          strokeDasharray="3 4"
-                        />
-                        <XAxis
-                          dataKey="name"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{
-                            fontSize: 10,
-                            fill: 'var(--muted-foreground)',
-                          }}
-                          minTickGap={28}
-                          tickFormatter={(v) =>
-                            chart.monthly ? String(v) : String(v).slice(5)
-                          }
-                          dy={8}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{
-                            fontSize: 10,
-                            fill: 'var(--muted-foreground)',
-                          }}
-                          tickFormatter={(v) =>
-                            new Intl.NumberFormat('en', {
-                              notation: 'compact',
-                              maximumFractionDigits: 1,
-                            }).format(Number(v))
-                          }
-                        />
-                        <Tooltip
-                          content={chartTooltip(activeCurrency)}
-                          cursor={{ fill: 'var(--muted)', opacity: 0.5 }}
-                        />
-                        <Bar
-                          dataKey="value"
-                          fill="var(--primary)"
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={28}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
+                        index="name"
+                        series={[{ key: 'value', label: 'Spent' }]}
+                        formatValue={(_, __, point) =>
+                          money(String(point.minor), activeCurrency)
+                        }
+                        formatIndex={(v) => (chart.monthly ? v : v.slice(5))}
+                        formatHeading={(v) => v}
+                      />
+                    </Suspense>
                   </div>
                 ) : (
                   <div className="flex h-60 flex-col items-center justify-center gap-2 text-center">

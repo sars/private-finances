@@ -31,6 +31,24 @@ security tool then raises an allow/block prompt on every `git` call — includin
 the `git ls-files` inside `scripts/check_repository.py`, so every `pnpm check`
 triggers one. Last still finds `pnpm` there, because nothing else provides it.
 
+## Looking at a screen
+
+Frontend rules live in `frontend/DESIGN.md`; the procedure for building a
+screen is the `frontend-screen` skill under `.claude/skills/`. To see a change
+rather than reason about it, run the demo in one shell and render routes in
+another:
+
+```sh
+pnpm demo
+pnpm shots /review /analytics        # .shots/*.png at 390 and 1280 px
+SHOTS_DARK=1 pnpm shots              # add dark mode when tokens changed
+```
+
+`scripts/shots.ts` uses Playwright, a development dependency only; the browser
+it drives is installed once with `pnpm exec playwright install chromium` and is
+not needed on the server. `.shots/` is ignored by Git because the images show
+whatever data the server holds.
+
 ## Keeping macOS out of the build output
 
 Several agents work at once, each in its own worktree with its own

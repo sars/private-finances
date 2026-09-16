@@ -24,4 +24,8 @@ __pycache__/
 .worktrees/
 # Local Claude Code client configuration, including permission rules.
 # Machine-specific and security relevant; never share it through Git.
-.claude/
+# Project skills are the one exception: procedure, not configuration.
+.claude/*
+!.claude/skills/
+# Screenshots from scripts/shots.ts: regenerable, and they show financial data.
+.shots/

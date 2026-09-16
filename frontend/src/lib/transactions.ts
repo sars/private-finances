@@ -173,34 +173,8 @@ export const kinds: Record<Kind, string> = {
   investment: 'Investment',
   non_personal: 'Non-personal',
 };
-const exponents: Record<string, number> = {
-  UAH: 2,
-  EUR: 2,
-  USD: 2,
-  GBP: 2,
-  PLN: 2,
-  CHF: 2,
-  CZK: 2,
-  SEK: 2,
-  NOK: 2,
-  DKK: 2,
-  JPY: 0,
-  KWD: 3,
-  BHD: 3,
-};
-export function money(minor: string, currency: string) {
-  const value = BigInt(minor),
-    absolute = (value < 0n ? -value : value).toString();
-  const exponent = exponents[currency];
-  if (exponent === undefined)
-    return `${value < 0n ? '−' : ''}${absolute} minor units ${currency}`;
-  const digits = absolute.padStart(exponent + 1, '0');
-  const whole = (exponent ? digits.slice(0, -exponent) : digits).replace(
-    /\B(?=(\d{3})+(?!\d))/g,
-    ',',
-  );
-  return `${value < 0n ? '−' : ''}${whole}${exponent ? `.${digits.slice(-exponent)}` : ''} ${currency}`;
-}
+// Node runs this file directly in tests, so the extension is explicit.
+export { money } from './format.ts';
 export function path(nodes: Node[], id: string) {
   const parts: string[] = [],
     seen = new Set<string>();

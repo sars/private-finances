@@ -60,12 +60,10 @@ separate backend refactoring, frontend caching, categorization, historical analy
 receipt items, financial edge cases/settings and operations work. It includes
 completion criteria and distinguishes deferred features from delivered ones.
 
-Frontend systematization is researched and planned in
-[the frontend design system](frontend-design-system.md): keep the current stack,
-add the missing shadcn chart, sidebar, command and table layers, and put a
-`components/finance/` vocabulary between the primitives and the screens. Its
-stages are sequenced so the analytics screen designed in [analytics](analytics.md)
-is built on that layer rather than beside it. Nothing of it is built yet.
+The frontend is being rebuilt to one vocabulary in Tremor's design on the
+current stack, in six stages recorded in [the frontend plan](frontend-plan.md);
+the analytics screen designed in [analytics](analytics.md) is Stage 3 of it.
+Stage status is kept at the end of that document.
 
 Backend refactoring is an explicit remaining increment, not satisfied by the
 already delivered review query batching. Start with measurements and a concrete

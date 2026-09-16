@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { ArrowUpRight, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
+import { lazy, Suspense } from 'react';
+import { usd } from '@/lib/format';
+const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 
 type Budget = {
   month: string;
@@ -29,14 +31,6 @@ type Budget = {
   }>;
   trackingStartedAt: string;
 };
-// Cost accounting stays integer on the server. These numbers only format charts/labels.
-const usd = (value: string) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: Number(value) > 0 && Number(value) < 0.01 ? 4 : 2,
-  }).format(Number(value));
 export default function LlmBudget({
   compact = false,
   refresh = 0,
@@ -185,44 +179,26 @@ export default function LlmBudget({
             className="h-36"
             aria-label="Daily tracked AI cost and reservations in USD"
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
+            <Suspense
+              fallback={
+                <div className="h-full w-full animate-pulse rounded-md bg-muted" />
+              }
+            >
+              <BarSeries
                 data={data.daily.map((day) => ({
                   day: day.date.slice(-2),
                   tracked: Number(day.spentUsd),
                   reserved: Number(day.heldUsd),
                 }))}
-                margin={{ left: 0, right: 0, top: 8, bottom: 0 }}
-              >
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                />
-                <Tooltip
-                  formatter={(value) => usd(String(value))}
-                  contentStyle={{
-                    background: 'var(--card)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
-                <Bar
-                  dataKey="tracked"
-                  name="Tracked"
-                  stackId="cost"
-                  fill="var(--primary)"
-                />
-                <Bar
-                  dataKey="reserved"
-                  name="Reserved"
-                  stackId="cost"
-                  fill="var(--muted-foreground)"
-                />
-              </BarChart>
-            </ResponsiveContainer>
+                index="day"
+                series={[
+                  { key: 'tracked', label: 'Tracked' },
+                  { key: 'reserved', label: 'Reserved' },
+                ]}
+                formatValue={(value) => usd(String(value))}
+                showYAxis={false}
+              />
+            </Suspense>
           </div>
         )}
         <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
