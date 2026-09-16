@@ -57,7 +57,7 @@ export default function BarSeries({
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={data}
-        margin={{ top: 8, right: 4, left: showYAxis ? -16 : 0, bottom: 0 }}
+        margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
         accessibilityLayer
       >
         <CartesianGrid
@@ -78,7 +78,7 @@ export default function BarSeries({
           <YAxis
             axisLine={false}
             tickLine={false}
-            width={44}
+            width={52}
             tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }}
             tickFormatter={(value) => compact(Number(value))}
           />

@@ -35,6 +35,15 @@ try {
         deviceScaleFactor: 1,
       });
       const page = await context.newPage();
+      // A screen that crashes renders the error boundary, which looks fine in
+      // a screenshot; the exception itself is what tells you why.
+      page.on('pageerror', (error) =>
+        console.error(`page error on ${page.url()}: ${error.message}`),
+      );
+      page.on('console', (message) => {
+        if (message.type() === 'error')
+          console.error(`console error on ${page.url()}: ${message.text()}`);
+      });
       await page.goto(base + '/', { waitUntil: 'networkidle' });
       // A demo server starts empty; import the synthetic examples once.
       const importButton = page.getByRole('button', {
