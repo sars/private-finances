@@ -29,14 +29,8 @@ import {
   Combobox,
   MultiCombobox,
   type ComboboxOption,
-} from '@/components/ui/combobox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+} from '@/components/combobox';
+import { Choice } from '@/components/finance';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 export type CategoryNode = {
@@ -519,25 +513,20 @@ export function DecisionCard({
         <fieldset disabled={disabled} className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor={`${id}-kind`}>Payment type</Label>
-            <Select
+            <Choice
+              id={`${id}-kind`}
+              className="w-full"
               value={kind}
-              onValueChange={(value) => {
+              onChange={(value) => {
                 edited.current = true;
                 setKind(value as Kind);
               }}
+              options={Object.entries(kinds).map(([value, label]) => ({
+                value,
+                label,
+              }))}
               disabled={disabled}
-            >
-              <SelectTrigger id={`${id}-kind`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(kinds).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor={`${id}-category`}>
@@ -608,13 +597,12 @@ export function DecisionCard({
               </p>
               <ToggleGroup
                 aria-labelledby={`${id}-pattern-label`}
-                type="single"
                 variant="outline"
                 className="w-full"
-                value={pattern === 'unreviewed' ? '' : pattern}
-                onValueChange={(value) => {
+                value={pattern === 'unreviewed' ? [] : [pattern]}
+                onValueChange={(values) => {
                   edited.current = true;
-                  setPattern((value || 'unreviewed') as SpendingPattern);
+                  setPattern((values[0] || 'unreviewed') as SpendingPattern);
                 }}
               >
                 <ToggleGroupItem value="routine" className="flex-1">

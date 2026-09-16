@@ -299,11 +299,13 @@ export default function Operations() {
             <section className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-base font-semibold">Bank imports</h2>
-                <Button variant="ghost" size="sm" asChild>
-                  <a href="/connections">
-                    Manage approvals
-                    <ArrowUpRight className="ml-2 size-3.5" />
-                  </a>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<a href="/connections" />}
+                >
+                  Manage approvals
+                  <ArrowUpRight className="ml-2 size-3.5" />
                 </Button>
               </div>
               {health.bankConnections.length ? (

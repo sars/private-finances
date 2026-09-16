@@ -131,14 +131,16 @@ export function BankRecord({
           {s.mcc && (
             <Fact icon={Store} label="Merchant category">
               <HoverCard>
-                <HoverCardTrigger asChild>
-                  <button
-                    type="button"
-                    className="text-left underline decoration-dotted underline-offset-4"
-                  >
-                    {s.mcc.meaning}{' '}
-                    <span className="text-muted-foreground">{s.mcc.code}</span>
-                  </button>
+                <HoverCardTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="text-left underline decoration-dotted underline-offset-4"
+                    />
+                  }
+                >
+                  {s.mcc.meaning}{' '}
+                  <span className="text-muted-foreground">{s.mcc.code}</span>
                 </HoverCardTrigger>
                 <HoverCardContent className="text-xs leading-relaxed">
                   {s.mcc.note}

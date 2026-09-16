@@ -125,27 +125,28 @@ export function Combobox({
   };
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          id={id}
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          aria-invalid={invalid || undefined}
-          disabled={disabled}
-          className={cn(
-            'h-auto min-h-9 w-full justify-between gap-2 py-2 font-normal',
-            !value && 'text-muted-foreground',
-            className,
-          )}
-        >
-          <span className="min-w-0 flex-1 text-left break-words whitespace-normal">
-            {current?.display ?? current?.label ?? value ?? ''}
-            {!value && placeholder}
-          </span>
-          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-        </Button>
+      <PopoverTrigger
+        render={
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-invalid={invalid || undefined}
+            disabled={disabled}
+            className={cn(
+              'h-auto min-h-9 w-full justify-between gap-2 py-2 font-normal',
+              !value && 'text-muted-foreground',
+              className,
+            )}
+          />
+        }
+      >
+        <span className="min-w-0 flex-1 text-left break-words whitespace-normal">
+          {current?.display ?? current?.label ?? value ?? ''}
+          {!value && placeholder}
+        </span>
+        <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -230,19 +231,20 @@ export function MultiCombobox({
         </div>
       )}
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            id={id}
-            type="button"
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            disabled={disabled}
-            className="w-full justify-between gap-2 font-normal text-muted-foreground"
-          >
-            {placeholder}
-            <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-          </Button>
+        <PopoverTrigger
+          render={
+            <Button
+              id={id}
+              type="button"
+              variant="outline"
+              role="combobox"
+              disabled={disabled}
+              className="w-full justify-between gap-2 font-normal text-muted-foreground"
+            />
+          }
+        >
+          {placeholder}
+          <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
         </PopoverTrigger>
         <PopoverContent
           align="start"

@@ -56,9 +56,13 @@ def main():
         try:
             content = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            # The one binary policy: self-hosted font subsets, so the app needs
-            # no third-party request for its typeface and works offline.
+            # The binary policy: self-hosted font subsets, so the app needs no
+            # third-party request for its typeface and works offline, and the
+            # app icon at the sizes a home-screen manifest needs, rendered from
+            # frontend/public/icon.svg by scripts/icons.ts.
             if name.startswith("frontend/public/fonts/") and path.suffix == ".woff2":
+                continue
+            if re.fullmatch(r"frontend/public/icon-\d+\.png", name):
                 continue
             errors.append(f"Binary file requires an explicit review policy: {name}")
             continue

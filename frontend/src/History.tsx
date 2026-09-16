@@ -74,11 +74,9 @@ export default function History() {
   }, [refresh, id]);
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-8">
-      <Button asChild variant="ghost" className="-ml-3">
-        <a href="/">
-          <ArrowLeft className="size-4" />
-          Back to overview
-        </a>
+      <Button variant="ghost" className="-ml-3" render={<a href="/" />}>
+        <ArrowLeft className="size-4" />
+        Back to overview
       </Button>
       <div>
         <p className="mb-1 text-xs font-medium uppercase tracking-[.14em] text-muted-foreground">

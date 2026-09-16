@@ -14,6 +14,7 @@ SRC = ROOT / "frontend" / "src"
 TOKENS = SRC / "index.css"
 FORMAT = SRC / "lib" / "format.ts"
 CHARTS = SRC / "components" / "charts"
+FINANCE = SRC / "components" / "finance"
 ENTRY_BUDGET_GZIP = 150 * 1024
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}(?![0-9a-zA-Z])|#[0-9a-fA-F]{3}(?![0-9a-zA-Z_-])")
@@ -34,6 +35,8 @@ def source_rules() -> list[str]:
             errors.append(f"{rel}: Intl.NumberFormat belongs in lib/format.ts")
         if RECHARTS_IMPORT.search(text) and CHARTS not in path.parents:
             errors.append(f"{rel}: recharts may only be imported inside components/charts/")
+        if "components/ui/select'" in text and FINANCE not in path.parents:
+            errors.append(f"{rel}: pick from a list with Choice (components/finance), not a raw Select")
     return errors
 
 

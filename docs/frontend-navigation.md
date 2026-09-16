@@ -59,6 +59,28 @@ label/control gap and the page has no horizontal overflow. Desktop dark-theme
 layout, in-place currency updates, Settings save, and Receipts/Transactions
 navigation with browser Back were checked. The production release and full restore are verified in STATUS.
 
+## The shell
+
+Stage 1 of [the frontend plan](frontend-plan.md). The screens are listed once,
+in `components/shell/navigation.ts`, grouped Money / Setup / System, and three
+surfaces read that list: the shadcn sidebar (off-canvas on the phone, a sheet
+opened by the header button or the tab bar's "More"), a bottom tab bar under
+768 px carrying Home, Analytics, Transactions and Receipts, and a ⌘K / Ctrl-K
+command menu that jumps to a screen by name and loads only when first opened.
+Every internal navigation — anchors, tabs, the command menu — goes through one
+`goTo` in `main.tsx`, which carries the display currency along as before.
+Settings appears only for an administrator. Primitives are shadcn's Base UI
+flavour (`components.json` style `base-nova`); `asChild` became `render`, and a
+Select reports `null` when cleared, which every handler now tolerates.
+
+The app installs to a phone's home screen: `vite-plugin-pwa` writes the
+manifest and a service worker that precaches only the built shell, fonts and
+icons. Nothing under `/api` is cached and navigations always go to the server,
+so financial data never rests in browser storage and a new release is picked up
+on the next load. The server serves the root files this needs — fonts, icons,
+`manifest.webmanifest`, `sw.js` — from an explicit allow-list, with the worker
+marked `no-cache`.
+
 ## Spacing review convention
 
 Use the existing shadcn components and Tailwind spacing scale consistently. Stacked

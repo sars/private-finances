@@ -97,6 +97,8 @@ const assetTypes: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
+  // The installable app's manifest; the service worker itself is plain .js.
+  '.webmanifest': 'application/manifest+json',
 };
 async function frontendFile(
   directory: string,
@@ -272,14 +274,23 @@ export function web(
         json(200, { settings: await readAppSettings(repo.db) });
         return;
       }
+      // Besides the hashed bundle under /assets/, the built frontend has a few
+      // files at its root: the self-hosted font subsets, the app icon, and the
+      // installable app's manifest and service worker. Named explicitly so the
+      // root never becomes a general file server.
+      const rootFile =
+        /^\/(?:fonts\/[A-Za-z0-9_-]+\.woff2|icon(?:-\d+)?\.(?:svg|png)|manifest\.webmanifest|sw\.js|registerSW\.js|workbox-[A-Za-z0-9_-]+\.js)$/.test(
+          route,
+        );
       if (
         req.method === 'GET' &&
         config.frontendDirectory &&
         (frontendRoutes.has(route) ||
           /^\/transactions\/[0-9a-f-]{36}\/history$/.test(route) ||
-          route.startsWith('/assets/'))
+          route.startsWith('/assets/') ||
+          rootFile)
       ) {
-        const asset = route.startsWith('/assets/');
+        const asset = route.startsWith('/assets/') || rootFile;
         const path = asset ? decodeURIComponent(route.slice(1)) : 'index.html';
         const type = asset
           ? assetTypes[extname(path)]
@@ -299,6 +310,12 @@ export function web(
             'Cache-Control',
             'private, max-age=31536000, immutable',
           );
+        // The worker must be re-fetched to learn about a new release; fonts
+        // and icons rarely change and may sit in the browser for a day.
+        if (path === 'sw.js' || path === 'registerSW.js')
+          res.setHeader('Cache-Control', 'no-cache');
+        else if (rootFile)
+          res.setHeader('Cache-Control', 'private, max-age=86400');
         res.writeHead(200, { 'Content-Type': type! });
         res.end(content);
         return;

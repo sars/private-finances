@@ -12,13 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 
 type Connection = {
   bank: string;
@@ -239,23 +233,16 @@ export default function Connections() {
                           >
                             Bank
                           </label>
-                          <Select
+                          <Choice
+                            id="connection-bank"
+                            className="w-full"
                             value={bank}
-                            onValueChange={setBank}
+                            onChange={setBank}
+                            options={['Wise', 'Revolut', 'Swedbank'].map(
+                              (name) => ({ value: name, label: name }),
+                            )}
                             disabled={starting}
-                          >
-                            <SelectTrigger
-                              id="connection-bank"
-                              className="w-full"
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Wise">Wise</SelectItem>
-                              <SelectItem value="Revolut">Revolut</SelectItem>
-                              <SelectItem value="Swedbank">Swedbank</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          />
                         </div>
                         <div>
                           <label
@@ -329,11 +316,13 @@ export default function Connections() {
                     scope does not confirm that every account or date has been
                     imported.
                   </p>
-                  <Button asChild variant="outline" size="sm">
-                    <a href="/ops">
-                      Check import health
-                      <ArrowUpRight className="ml-2 size-3.5" />
-                    </a>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<a href="/ops" />}
+                  >
+                    Check import health
+                    <ArrowUpRight className="ml-2 size-3.5" />
                   </Button>
                 </CardContent>
               </Card>

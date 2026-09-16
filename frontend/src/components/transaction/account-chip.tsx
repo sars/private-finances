@@ -27,24 +27,26 @@ export function AccountChip({
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger asChild>
+        <TooltipTrigger
+          render={
+            <span
+              className={cn(
+                'inline-flex items-center gap-2 rounded-full border py-1 pr-3 pl-1 text-sm',
+                className,
+              )}
+            />
+          }
+        >
           <span
+            aria-hidden="true"
             className={cn(
-              'inline-flex items-center gap-2 rounded-full border py-1 pr-3 pl-1 text-sm',
-              className,
+              'flex size-6 items-center justify-center rounded-full',
+              accountToneClasses[identity.tone],
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                'flex size-6 items-center justify-center rounded-full',
-                accountToneClasses[identity.tone],
-              )}
-            >
-              <Icon className="size-3.5" />
-            </span>
-            <span className="font-medium">{identity.name}</span>
+            <Icon className="size-3.5" />
           </span>
+          <span className="font-medium">{identity.name}</span>
         </TooltipTrigger>
         <TooltipContent>{identity.detail || identity.name}</TooltipContent>
       </Tooltip>

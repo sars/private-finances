@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { ChevronDown, LoaderCircle, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { Combobox, type ComboboxOption } from '@/components/combobox';
 import { money, type Submit, type Transaction } from '@/lib/transactions';
 import { HistoryLink } from './pieces';
 

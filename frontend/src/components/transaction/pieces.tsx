@@ -40,20 +40,20 @@ export function DirectionMark({ amountMinor }: { amountMinor: string }) {
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            className={
-              'flex size-7 items-center justify-center rounded-full ' +
-              (incoming
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                : 'bg-muted text-muted-foreground')
-            }
-          >
-            <Icon className="size-4" aria-hidden="true" />
-            <span className="sr-only">
-              {incoming ? 'Money in' : 'Money out'}
-            </span>
-          </span>
+        <TooltipTrigger
+          render={
+            <span
+              className={
+                'flex size-7 items-center justify-center rounded-full ' +
+                (incoming
+                  ? 'bg-positive/10 text-positive'
+                  : 'bg-muted text-muted-foreground')
+              }
+            />
+          }
+        >
+          <Icon className="size-4" aria-hidden="true" />
+          <span className="sr-only">{incoming ? 'Money in' : 'Money out'}</span>
         </TooltipTrigger>
         <TooltipContent>{incoming ? 'Money in' : 'Money out'}</TooltipContent>
       </Tooltip>

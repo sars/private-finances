@@ -7,13 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 const currencies = ['UAH', 'EUR', 'USD', 'GBP'];
 const Context = createContext({
   currency: 'UAH',
@@ -52,21 +46,14 @@ export function CurrencyControl() {
       <span className="hidden text-xs text-muted-foreground sm:inline">
         Display currency
       </span>
-      <Select value={currency} onValueChange={setCurrency}>
-        <SelectTrigger
-          aria-label="Display currency"
-          className="h-9 w-20 text-xs"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {currencies.map((code) => (
-            <SelectItem key={code} value={code}>
-              {code}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Choice
+        aria-label="Display currency"
+        size="sm"
+        className="w-20"
+        value={currency}
+        onChange={setCurrency}
+        options={currencies.map((code) => ({ value: code, label: code }))}
+      />
     </div>
   );
 }
