@@ -9,17 +9,32 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**b50918e354a05b080ae0f2dd8b384485c186c6cc**, live since September 16, 2026 at
-schema version 41, and the head of `origin/main`. Observed on the server rather
-than reconstructed: both `private-finances.service` and
-`private-finances-telegram.service` are active, eight timers are running, Node is
-24.15.0, and the ledger holds 4,139 transactions with 140 active refund links and
-no expense left without a category. The three releases between schema 38 and 41
-were deployed without this section being rewritten; it is corrected here from the
-running host, and the paragraph below still describes release 840540 rather than
-the two after it.
+**deab213944955ecbdccd7b10dc88de1113489c7d**, live since September 16, 2026 at
+schema version 44, deployed with `deploy/release.sh` over
+`b50918e354a05b080ae0f2dd8b384485c186c6cc`. Its migration was rehearsed first on
+a restored copy of the real database, which reached schema 44 in 388
+milliseconds with the transaction count unchanged, 140 refund links still
+active, no expense without a category and nothing filed on a heading. After the
+switch both `private-finances.service` and `private-finances-telegram.service`
+are active, and the Telegram worker was watched past its first poll because a
+schema change once killed it there.
 
-This release changes what the household browsing defaults hide. The first
+Verified on the server afterwards: the Rimi shop and the H&M purchase the owner
+found waiting on them are decided again and no longer provisional, by the model
+and by an owner-confirmed rule respectively; two TEMPUSS FOTO payments moved to
+Entertainment / Hobbies; twenty-four Wolt, Bolt Food and Glovo payments sit in
+Food / Restaurants / Delivery while the two Glovo payments a person decided were
+left alone; and the root catch-all fell from 237 personal expenses to 220. The
+ledger still holds 4,139 transactions, no expense lacks a category and nothing
+is filed on a heading. Read the entry below for what changed and why.
+
+Note for whoever writes here next: this section had described release 840540 at
+schema 38 while the server was running b50918e at schema 41, so three releases
+had shipped without it being rewritten. `scripts/deploy-status.sh` compares the
+deployed release with `origin/main` rather than reconstructing it by hand.
+
+The three paragraphs that follow describe earlier releases in this line. The
+first changes what the household browsing defaults hide. Its first
 preference hid a payment for the account it sat on, which the application stopped
 doing at schema 25, when account purpose became a suggestion and the payment's
 own kind became the decision; it now hides payments classified `non_personal`
