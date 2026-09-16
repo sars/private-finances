@@ -173,7 +173,8 @@ Recharts leaves the entry chunk.
   Drill links go to Home's category and period filters until Transactions
   speaks the grammar (Stage 4). Not yet: account and tag filters, provisional
   as a filter, node-id categories.
-- Stage 4: built, narrower than planned and for stated reasons. The payment
+- Stage 4: deployed as `2655695` on September 17, narrower than planned and
+  for stated reasons. The payment
   list is one dense `TransactionRow` per payment inside one card instead of a
   card each — the badges, history link and action stay, the height halves —
   and the filters sit on `FilterBar`/`Field` with Base UI checkboxes. No data
