@@ -29,13 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Owner = 'rodion' | 'katya';
@@ -592,11 +586,13 @@ export default function Accounts() {
                             </a>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" asChild>
-                          <a href="/review">
-                            Review classification
-                            <ArrowRight className="ml-1.5 size-3.5" />
-                          </a>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          render={<a href="/review" />}
+                        >
+                          Review classification
+                          <ArrowRight className="ml-1.5 size-3.5" />
                         </Button>
                       </div>
                     ))}
@@ -708,28 +704,33 @@ export default function Accounts() {
                 <Label htmlFor={`${prefix}-purpose`}>
                   Account spending rule
                 </Label>
-                <Select
+                <Choice
+                  id={`${prefix}-purpose`}
+                  className="w-full"
                   value={draft.purpose}
-                  onValueChange={(purpose) =>
-                    setDraft((d) => ({ ...d, purpose }))
+                  onChange={(purpose) =>
+                    setDraft((d) => ({
+                      ...d,
+                      purpose: purpose as typeof d.purpose,
+                    }))
                   }
+                  options={[
+                    {
+                      value: 'personal',
+                      label: 'Personal — no account exclusion',
+                    },
+                    {
+                      value: 'business',
+                      label: 'Business — exclude from personal spending',
+                    },
+                    {
+                      value: 'investment',
+                      label: 'Investment — exclude from personal spending',
+                    },
+                  ]}
+                  placeholder="Choose a spending rule"
                   disabled={saving}
-                >
-                  <SelectTrigger id={`${prefix}-purpose`} className="w-full">
-                    <SelectValue placeholder="Choose a spending rule" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="personal">
-                      Personal — no account exclusion
-                    </SelectItem>
-                    <SelectItem value="business">
-                      Business — exclude from personal spending
-                    </SelectItem>
-                    <SelectItem value="investment">
-                      Investment — exclude from personal spending
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
               {draft.purpose && (
                 <div

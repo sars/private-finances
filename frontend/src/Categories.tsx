@@ -32,13 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Node = {
@@ -623,30 +617,24 @@ export default function Categories() {
                 {nodeDraft.type === 'category' && (
                   <div className="space-y-1.5">
                     <Label htmlFor={`${prefix}-parent`}>Parent</Label>
-                    <Select
+                    <Choice
+                      id={`${prefix}-parent`}
+                      className="w-full"
                       disabled={!!busy}
                       value={nodeDraft.parentId || 'none'}
-                      onValueChange={(value) =>
+                      onChange={(value) =>
                         setNodeDraft((d) => ({
                           ...d,
                           parentId: value === 'none' ? '' : value,
                         }))
                       }
-                    >
-                      <SelectTrigger id={`${prefix}-parent`} className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {categories
+                      options={[
+                        { value: 'none', label: 'None' },
+                        ...categories
                           .filter((n) => n.depth < MAX_DEPTH)
-                          .map((n) => (
-                            <SelectItem key={n.id} value={n.id}>
-                              {n.path}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
+                          .map((n) => ({ value: n.id, label: n.path })),
+                      ]}
+                    />
                   </div>
                 )}
                 <p className="text-xs leading-relaxed text-muted-foreground">
@@ -679,10 +667,12 @@ export default function Categories() {
               <fieldset disabled={!!busy} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor={`${prefix}-matcher`}>Match on</Label>
-                  <Select
+                  <Choice
+                    id={`${prefix}-matcher`}
+                    className="w-full"
                     disabled={!!busy}
                     value={ruleDraft.matcherField}
-                    onValueChange={(value) =>
+                    onChange={(value) =>
                       setRuleDraft((d) => ({
                         ...d,
                         matcherField: value as
@@ -691,22 +681,18 @@ export default function Categories() {
                           | 'description_contains',
                       }))
                     }
-                  >
-                    <SelectTrigger id={`${prefix}-matcher`} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="description">
-                        Exact description
-                      </SelectItem>
-                      <SelectItem value="description_contains">
-                        Descriptions containing this text
-                      </SelectItem>
-                      <SelectItem value="counterparty">
-                        Exact counterparty identifier
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: 'description', label: 'Exact description' },
+                      {
+                        value: 'description_contains',
+                        label: 'Descriptions containing this text',
+                      },
+                      {
+                        value: 'counterparty',
+                        label: 'Exact counterparty identifier',
+                      },
+                    ]}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor={`${prefix}-description`}>
@@ -741,24 +727,23 @@ export default function Categories() {
                   <Label htmlFor={`${prefix}-kind`}>
                     Suggested classification
                   </Label>
-                  <Select
+                  <Choice
+                    id={`${prefix}-kind`}
+                    className="w-full"
                     disabled={!!busy}
                     value={ruleDraft.kind}
-                    onValueChange={(kind) =>
-                      setRuleDraft((d) => ({ ...d, kind, categoryId: '' }))
+                    onChange={(kind) =>
+                      setRuleDraft((d) => ({
+                        ...d,
+                        kind: kind as typeof d.kind,
+                        categoryId: '',
+                      }))
                     }
-                  >
-                    <SelectTrigger id={`${prefix}-kind`} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(kinds).map(([value, name]) => (
-                        <SelectItem key={value} value={value}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={Object.entries(kinds).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor={`${prefix}-category`}>
@@ -767,28 +752,25 @@ export default function Categories() {
                       ? ' (required)'
                       : ' (optional)'}
                   </Label>
-                  <Select
+                  <Choice
+                    id={`${prefix}-category`}
+                    className="w-full"
                     disabled={!!busy}
                     value={ruleDraft.categoryId || 'none'}
-                    onValueChange={(value) =>
+                    onChange={(value) =>
                       setRuleDraft((d) => ({
                         ...d,
                         categoryId: value === 'none' ? '' : value,
                       }))
                     }
-                  >
-                    <SelectTrigger id={`${prefix}-category`} className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {categories.map((n) => (
-                        <SelectItem key={n.id} value={n.id}>
-                          {nodePath(nodes, n.id)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: 'none', label: 'None' },
+                      ...categories.map((n) => ({
+                        value: n.id,
+                        label: nodePath(nodes, n.id),
+                      })),
+                    ]}
+                  />
                   {!categories.length && (
                     <p className="text-xs text-muted-foreground">
                       Add a category before creating a personal-expense rule.

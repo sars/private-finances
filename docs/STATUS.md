@@ -9,8 +9,17 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**deab213944955ecbdccd7b10dc88de1113489c7d**, live since September 16, 2026 at
+**ca7ca14ad7254a83dfa9eeb2f7a990ea4d0037b5**, live since September 17, 2026 at
 schema version 44, deployed with `deploy/release.sh` over
+`deab213944955ecbdccd7b10dc88de1113489c7d`. It carries no migration: it is
+Stage 0 of [the frontend plan](frontend-plan.md) — Tremor's palette and
+self-hosted Inter, Recharts moved into a chunk that loads only on chart screens,
+one money formatter in place of five, and `scripts/check_frontend.py` as part of
+`pnpm check`. After the switch both services are active and the ledger holds
+4,139 transactions.
+
+The release before it, **deab213944955ecbdccd7b10dc88de1113489c7d**, went live on
+September 16, 2026 at schema version 44 over
 `b50918e354a05b080ae0f2dd8b384485c186c6cc`. Its migration was rehearsed first on
 a restored copy of the real database, which reached schema 44 in 388
 milliseconds with the transaction count unchanged, 140 refund links still

@@ -17,13 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 
 type ConversionRow = {
   id: string;
@@ -280,16 +274,17 @@ export default function Fx() {
           >
             Account owner
           </label>
-          <Select value={owner} onValueChange={setOwner}>
-            <SelectTrigger id="fx-owner" className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Together</SelectItem>
-              <SelectItem value="rodion">Rodion</SelectItem>
-              <SelectItem value="katya">Katya</SelectItem>
-            </SelectContent>
-          </Select>
+          <Choice
+            id="fx-owner"
+            className="w-full sm:w-40"
+            value={owner}
+            onChange={setOwner}
+            options={[
+              { value: 'all', label: 'Together' },
+              { value: 'rodion', label: 'Rodion' },
+              { value: 'katya', label: 'Katya' },
+            ]}
+          />
         </div>
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
@@ -341,17 +336,18 @@ export default function Fx() {
               >
                 Spending pattern
               </label>
-              <Select value={pattern} onValueChange={setPattern}>
-                <SelectTrigger id="fx-pattern" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All patterns</SelectItem>
-                  <SelectItem value="routine">Routine</SelectItem>
-                  <SelectItem value="exceptional">Exceptional</SelectItem>
-                  <SelectItem value="unreviewed">Unreviewed</SelectItem>
-                </SelectContent>
-              </Select>
+              <Choice
+                id="fx-pattern"
+                className="w-full"
+                value={pattern}
+                onChange={setPattern}
+                options={[
+                  { value: 'all', label: 'All patterns' },
+                  { value: 'routine', label: 'Routine' },
+                  { value: 'exceptional', label: 'Exceptional' },
+                  { value: 'unreviewed', label: 'Unreviewed' },
+                ]}
+              />
             </div>
             <div>
               <label
@@ -360,19 +356,21 @@ export default function Fx() {
               >
                 Payment group
               </label>
-              <Select value={scope} onValueChange={setScope}>
-                <SelectTrigger id="fx-scope" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All payment types</SelectItem>
-                  <SelectItem value="spending">Personal spending</SelectItem>
-                  <SelectItem value="unresolved">Unresolved</SelectItem>
-                  <SelectItem value="excluded">
-                    Transfers, investments & non-personal
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Choice
+                id="fx-scope"
+                className="w-full"
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { value: 'all', label: 'All payment types' },
+                  { value: 'spending', label: 'Personal spending' },
+                  { value: 'unresolved', label: 'Unresolved' },
+                  {
+                    value: 'excluded',
+                    label: 'Transfers, investments & non-personal',
+                  },
+                ]}
+              />
             </div>
             <div>
               <label

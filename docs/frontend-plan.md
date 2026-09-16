@@ -131,11 +131,21 @@ Recharts leaves the entry chunk.
 
 ## Status
 
-- Stage 0: built. Tremor tokens and self-hosted Inter; Recharts in a lazy
+- Stage 0: deployed as `ca7ca14` on September 17. Tremor tokens and self-hosted Inter; Recharts in a lazy
   `charts` chunk (Rolldown needed `includeDependenciesRecursively: false`, or
   it dragged React into the chunk and the entry imported it eagerly); the entry
   is 103 KB gzip and carries no chart code, checked by `check_frontend.py` on
   every `pnpm check`; one `money` in `lib/format.ts` replacing five copies;
   `BarSeries` as the only Recharts consumer; `DESIGN.md`, `shots.ts` and the
   `frontend-screen` skill in place. Screens themselves are unchanged.
-- Stages 1–5: not started.
+- Stage 1: built. Primitives on Base UI (`base-nova`); the sidebar with
+  Money / Setup / System groups, the phone tab bar, the ⌘K command menu
+  (lazy), sonner, and the installable app with a shell-only service worker.
+  The server now serves fonts, icons, manifest and worker from an explicit
+  allow-list — Stage 0's Inter had in fact been falling back to the system
+  font because `/fonts/` was never served. `Choice` is the first word of the
+  vocabulary: Base UI's Select shows raw values unless handed labels, and the
+  twenty-two pick-lists across the screens now go through it, guarded by
+  `check_frontend.py`. Entry chunk 125 KB gzip. The awaiting-review badge
+  waits for a count the session does not yet carry (Stage 2).
+- Stages 2–5: not started.

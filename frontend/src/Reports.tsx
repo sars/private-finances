@@ -14,13 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 import type { ReportSnapshot } from '../../src/reports';
 
 type Scope = 'all' | 'rodion' | 'katya';
@@ -149,25 +143,21 @@ export default function Reports() {
           >
             Account owner
           </label>
-          <Select
+          <Choice
+            id="report-owner"
+            className="w-full sm:w-40"
             value={scope}
-            onValueChange={(value) => {
+            onChange={(value) => {
               setScope(value as Scope);
               setNotice('');
             }}
+            options={(['all', 'rodion', 'katya'] as const).map((owner) => ({
+              value: owner,
+              label: scopeName(owner),
+            }))}
+            placeholder="Loading owner…"
             disabled={saving || !csrf}
-          >
-            <SelectTrigger id="report-owner" className="w-full sm:w-40">
-              <SelectValue placeholder="Loading owner…" />
-            </SelectTrigger>
-            <SelectContent>
-              {(['all', 'rodion', 'katya'] as const).map((owner) => (
-                <SelectItem key={owner} value={owner}>
-                  {scopeName(owner)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
         <div className="min-w-44 flex-1 sm:flex-none">
           <label
@@ -176,15 +166,17 @@ export default function Reports() {
           >
             Create or refresh
           </label>
-          <Select value={period} onValueChange={setPeriod} disabled={saving}>
-            <SelectTrigger id="report-period" className="w-full sm:w-52">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="week">Previous calendar week</SelectItem>
-              <SelectItem value="month">Previous calendar month</SelectItem>
-            </SelectContent>
-          </Select>
+          <Choice
+            id="report-period"
+            className="w-full sm:w-52"
+            value={period}
+            onChange={(v) => setPeriod(v as typeof period)}
+            options={[
+              { value: 'week', label: 'Previous calendar week' },
+              { value: 'month', label: 'Previous calendar month' },
+            ]}
+            disabled={saving}
+          />
         </div>
         <Button
           type="submit"

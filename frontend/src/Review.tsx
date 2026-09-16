@@ -22,13 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TransactionDetail } from '@/components/transaction/detail';
@@ -296,8 +290,12 @@ export default function Review() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={'/cash?display=' + displayCurrency}>Add cash expense</a>
+          <Button
+            variant="outline"
+            size="sm"
+            render={<a href={'/cash?display=' + displayCurrency} />}
+          >
+            Add cash expense
           </Button>
           <Button
             variant="outline"
@@ -477,31 +475,26 @@ export default function Review() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="review-period">Period</Label>
-              <Select
+              <Choice
+                id="review-period"
+                className="w-full"
                 value={windowFilter}
-                onValueChange={(value) => {
+                onChange={(value) => {
                   setWindowFilter(value);
                   setLimit(12);
                   setSelectedId(null);
                 }}
-              >
-                <SelectTrigger id="review-period">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="previous_month">
-                    Previous calendar month
-                  </SelectItem>
-                  <SelectItem value="current_month">
-                    This month · new payments
-                  </SelectItem>
-                  <SelectItem value="historical">Older 2026 history</SelectItem>
-                  <SelectItem value="2026">Since January 2026</SelectItem>
-                  <SelectItem value="all">
-                    All history · includes 2025
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                options={[
+                  { value: 'previous_month', label: 'Previous calendar month' },
+                  {
+                    value: 'current_month',
+                    label: 'This month · new payments',
+                  },
+                  { value: 'historical', label: 'Older 2026 history' },
+                  { value: '2026', label: 'Since January 2026' },
+                  { value: 'all', label: 'All history · includes 2025' },
+                ]}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="review-search">

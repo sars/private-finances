@@ -76,4 +76,7 @@ page scroll, ever; long text truncates with a title attribute.
 
 No hex colours in `.tsx`. No `Intl.NumberFormat` outside `lib/format.ts`. No
 `<input type="date">`; use `PeriodPicker`. No raw `<table>`; use the data table
-or card rows. No new spacing values, no new font sizes, no new shadows.
+or card rows. No raw `Select`; use `Choice`, which carries the labels Base UI
+needs and never reports an empty pick. No `asChild`; Base UI composes with
+`render={<a href … />}`. No new spacing values, no new font sizes, no new
+shadows.

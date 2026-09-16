@@ -3,13 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useSession, invalidateFinancialData } from './lib/query';
 import { rigaCalendarDate, validCashAmount } from './lib/cash-entry';
@@ -86,8 +80,11 @@ export default function Cash() {
   }
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <Button variant="ghost" asChild>
-        <a href={'/review?display=' + display}>← Transactions</a>
+      <Button
+        variant="ghost"
+        render={<a href={'/review?display=' + display} />}
+      >
+        ← Transactions
       </Button>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
@@ -118,18 +115,16 @@ export default function Cash() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="cash-currency">Currency</Label>
-              <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger id="cash-currency">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {['UAH', 'EUR', 'USD', 'GBP'].map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Choice
+                id="cash-currency"
+                className="w-full"
+                value={currency}
+                onChange={setCurrency}
+                options={['UAH', 'EUR', 'USD', 'GBP'].map((value) => ({
+                  value,
+                  label: value,
+                }))}
+              />
             </div>
           </div>
           <div className="grid gap-2">

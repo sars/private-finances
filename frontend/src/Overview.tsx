@@ -27,13 +27,7 @@ import { money, toNumber } from './lib/format';
 import { Button } from '@/components/ui/button';
 const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Choice } from '@/components/finance';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -457,16 +451,17 @@ export default function Overview({
           >
             Account owner
           </label>
-          <Select value={owner} onValueChange={setOwner}>
-            <SelectTrigger id="overview-owner" className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Together</SelectItem>
-              <SelectItem value="rodion">Rodion</SelectItem>
-              <SelectItem value="katya">Katya</SelectItem>
-            </SelectContent>
-          </Select>
+          <Choice
+            id="overview-owner"
+            className="w-full sm:w-40"
+            value={owner}
+            onChange={setOwner}
+            options={[
+              { value: 'all', label: 'Together' },
+              { value: 'rodion', label: 'Rodion' },
+              { value: 'katya', label: 'Katya' },
+            ]}
+          />
         </div>
         <div className="min-w-32 flex-1 sm:flex-none">
           <label
@@ -475,26 +470,23 @@ export default function Overview({
           >
             Original currency
           </label>
-          <Select value={currency} onValueChange={setCurrency}>
-            <SelectTrigger id="overview-currency" className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All currencies</SelectItem>
-              {[
+          <Choice
+            id="overview-currency"
+            className="w-full sm:w-40"
+            value={currency}
+            onChange={setCurrency}
+            options={[
+              { value: 'all', label: 'All currencies' },
+              ...[
                 ...new Set([
                   ...knownCurrencies,
                   ...(currency !== 'all' ? [currency] : []),
                 ]),
               ]
                 .sort()
-                .map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+                .map((c) => ({ value: c, label: c })),
+            ]}
+          />
         </div>
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
@@ -503,31 +495,25 @@ export default function Overview({
           >
             Category
           </label>
-          <Select
+          <Choice
+            id="overview-category"
+            className="w-full sm:w-44"
             value={category ? `category:${category}` : 'all'}
-            onValueChange={(value) =>
+            onChange={(value) =>
               setCategory(value === 'all' ? '' : value.slice(9))
             }
-          >
-            <SelectTrigger id="overview-category" className="w-full sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {[
+            options={[
+              { value: 'all', label: 'All categories' },
+              ...[
                 ...new Set([
                   ...knownCategories,
                   ...(category ? [category] : []),
                 ]),
               ]
                 .sort()
-                .map((name) => (
-                  <SelectItem key={name} value={`category:${name}`}>
-                    {name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+                .map((name) => ({ value: `category:${name}`, label: name })),
+            ]}
+          />
         </div>
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
@@ -536,17 +522,18 @@ export default function Overview({
           >
             Spending pattern
           </label>
-          <Select value={pattern} onValueChange={setPattern}>
-            <SelectTrigger id="overview-pattern" className="w-full sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All patterns</SelectItem>
-              <SelectItem value="routine">Routine</SelectItem>
-              <SelectItem value="exceptional">Exceptional</SelectItem>
-              <SelectItem value="unreviewed">Not reviewed</SelectItem>
-            </SelectContent>
-          </Select>
+          <Choice
+            id="overview-pattern"
+            className="w-full sm:w-44"
+            value={pattern}
+            onChange={setPattern}
+            options={[
+              { value: 'all', label: 'All patterns' },
+              { value: 'routine', label: 'Routine' },
+              { value: 'exceptional', label: 'Exceptional' },
+              { value: 'unreviewed', label: 'Not reviewed' },
+            ]}
+          />
         </div>
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
@@ -555,17 +542,18 @@ export default function Overview({
           >
             Money movements
           </label>
-          <Select value={scope} onValueChange={setScope}>
-            <SelectTrigger id="overview-scope" className="w-full sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All movements</SelectItem>
-              <SelectItem value="spending">Personal expenses</SelectItem>
-              <SelectItem value="excluded">Excluded from spending</SelectItem>
-              <SelectItem value="unresolved">Unresolved</SelectItem>
-            </SelectContent>
-          </Select>
+          <Choice
+            id="overview-scope"
+            className="w-full sm:w-44"
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: 'all', label: 'All movements' },
+              { value: 'spending', label: 'Personal expenses' },
+              { value: 'excluded', label: 'Excluded from spending' },
+              { value: 'unresolved', label: 'Unresolved' },
+            ]}
+          />
         </div>
         <div className="min-w-36 flex-1 sm:flex-none">
           <label
@@ -645,11 +633,9 @@ export default function Overview({
                 Clear filters
               </Button>
             ) : (
-              <Button asChild>
-                <a href="/connections">
-                  View bank connections
-                  <ArrowRight className="ml-2 size-4" />
-                </a>
+              <Button render={<a href="/connections" />}>
+                View bank connections
+                <ArrowRight className="ml-2 size-4" />
               </Button>
             )}
           </CardContent>
@@ -682,11 +668,13 @@ export default function Overview({
                   )}
                 </div>
               </div>
-              <Button variant="ghost" size="sm" asChild>
-                <a href="/review?all=0&window=all">
-                  Review transactions
-                  <ArrowRight className="ml-2 size-3.5" />
-                </a>
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<a href="/review?all=0&window=all" />}
+              >
+                Review transactions
+                <ArrowRight className="ml-2 size-3.5" />
               </Button>
             </div>
           )}
@@ -824,19 +812,18 @@ export default function Overview({
                     · Europe/Riga
                   </p>
                 </div>
-                <Select value={granularity} onValueChange={setGranularity}>
-                  <SelectTrigger
-                    aria-label="Chart interval"
-                    className="h-8 w-24 text-xs"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="day">Daily</SelectItem>
-                    <SelectItem value="week">Weekly</SelectItem>
-                    <SelectItem value="month">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Choice
+                  aria-label="Chart interval"
+                  size="sm"
+                  className="w-24"
+                  value={granularity}
+                  onChange={setGranularity}
+                  options={[
+                    { value: 'day', label: 'Daily' },
+                    { value: 'week', label: 'Weekly' },
+                    { value: 'month', label: 'Monthly' },
+                  ]}
+                />
               </CardHeader>
               <CardContent>
                 {chart.points.length ? (
@@ -999,11 +986,13 @@ export default function Overview({
                   {currency === 'all' ? ' · all currencies' : ` · ${currency}`}
                 </p>
               </div>
-              <Button asChild variant="ghost" size="sm">
-                <a href="/review?all=1">
-                  All transactions
-                  <ArrowRight className="ml-1.5 size-3.5" />
-                </a>
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<a href="/review?all=1" />}
+              >
+                All transactions
+                <ArrowRight className="ml-1.5 size-3.5" />
               </Button>
             </CardHeader>
             <CardContent className="px-0 pb-0">
