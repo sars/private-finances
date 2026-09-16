@@ -1,5 +1,6 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import type { Owner } from '../domain.js';
+import { bankName, isBankSlug, type BankSlug } from './banks.js';
 import {
   ConnectorError,
   decimalToMinor,
@@ -54,11 +55,6 @@ function identity(owner: Owner, hash: string): string {
 }
 
 /** Read-only existing-session adapter. Requester must enforce the fixed provider host and GET-only requests. */
-/** The bank as the owner knows it, never the aggregator that fetched it. */
-const BANK_NAME: Record<'wise' | 'revolut', string> = {
-  wise: 'Wise',
-  revolut: 'Revolut',
-};
 
 /**
  * What an account is called on screen.
@@ -80,21 +76,21 @@ const BANK_NAME: Record<'wise' | 'revolut', string> = {
  * have generated ourselves, adds nothing and is dropped.
  */
 export function accountLabel(
-  bank: 'wise' | 'revolut',
+  bank: BankSlug,
   currency: string,
   details: Record<string, unknown> = {},
 ): string {
   const provider = [details.details, details.product]
     .filter((value) => typeof value === 'string' && value.trim())
     .map((value) => text(value))[0];
-  const base = `${BANK_NAME[bank]} ${currency}`;
+  const base = `${bankName(bank)} ${currency}`;
   if (!provider) return base;
   const noise = new Set([
     currency.toLowerCase(),
     `${currency.toLowerCase()} account`,
     'account',
     'current account',
-    BANK_NAME[bank].toLowerCase(),
+    bankName(bank).toLowerCase(),
   ]);
   const extra = provider.trim();
   return noise.has(extra.toLowerCase()) ? base : `${base} · ${extra}`;
@@ -103,11 +99,11 @@ export function accountLabel(
 export class EnableBankingConnector implements BankConnector {
   readonly source = 'enablebanking' as const;
   readonly owner: Owner;
-  readonly bank: 'wise' | 'revolut';
+  readonly bank: BankSlug;
   constructor(
     private readonly config: {
       owner: Owner;
-      bank: 'wise' | 'revolut';
+      bank: BankSlug;
       applicationId: string;
       privateKey: string;
       sessionId: string;
@@ -116,8 +112,7 @@ export class EnableBankingConnector implements BankConnector {
   ) {
     this.owner = config.owner;
     this.bank = config.bank;
-    if (this.bank !== 'wise' && this.bank !== 'revolut')
-      throw new ConnectorError('schema');
+    if (!isBankSlug(this.bank)) throw new ConnectorError('schema');
     text(config.sessionId);
     if (this.owner !== 'rodion' && this.owner !== 'katya')
       throw new ConnectorError('schema');

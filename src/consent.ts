@@ -4,8 +4,14 @@ import { isAbsolute, join } from 'node:path';
 import { migrate, type Database } from './database.js';
 import type { Owner } from './domain.js';
 import { signJwt } from './connectors/enablebanking.js';
+import {
+  BANK_NAMES,
+  bankSlug,
+  isBankName,
+  type BankName,
+} from './connectors/banks.js';
 
-type Bank = 'Wise' | 'Revolut';
+type Bank = BankName;
 export type ConsentCredentials = { applicationId: string; privateKey: string };
 /** A single, non-retrying POST. Production transport only permits these AIS endpoints. */
 export type ConsentPost = (
@@ -130,7 +136,7 @@ export class ConsentService {
   }
   async start(owner: Owner, bank: Bank, country: string): Promise<string> {
     ownerCheck(owner);
-    if (!['Wise', 'Revolut'].includes(bank) || !/^[A-Z]{2}$/.test(country))
+    if (!isBankName(bank) || !/^[A-Z]{2}$/.test(country))
       throw new ConsentError();
     const credentials = this.credentials(owner);
     const state = randomBytes(32).toString('base64url');
@@ -238,7 +244,7 @@ export class ConsentService {
         throw new ConsentError();
       const destination = join(
         this.config.secretDirectory,
-        `enablebanking-${owner}-${String(row.bank).toLowerCase()}-session`,
+        `enablebanking-${owner}-${bankSlug(row.bank as BankName)}-session`,
       );
       temporary = `${destination}.${randomUUID()}.tmp`;
       const file = await open(temporary, 'wx', 0o600);

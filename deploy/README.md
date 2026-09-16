@@ -54,9 +54,10 @@ Do not put secrets in GitHub Actions or release artifacts. The server sync comma
 with DATABASE_URL and CREDENTIALS_DIRECTORY supplied by restricted configuration.
 Katya's token filename is monobank-kate-token. Enable Banking additionally needs
 ENABLEBANKING_APPLICATION_ID, ENABLEBANKING_SESSION_DIRECTORY and
-`enablebanking-<owner>-<bank>-session` files. Select `wise` or `revolut` as the
-fifth CLI argument (or ENABLEBANKING_BANK for a manual pilot). Scheduled instances
-must be `enablebanking-<owner>-wise` or `enablebanking-<owner>-revolut`;
+`enablebanking-<owner>-<bank>-session` files. Select a slug from
+`src/connectors/banks.ts` — `wise`, `revolut` or `swedbank` — as the fifth CLI
+argument (or ENABLEBANKING_BANK for a manual pilot). Scheduled instances must be
+`enablebanking-<owner>-<slug>`;
 Monobank remains `monobank-<owner>`. Each instance has its own enable marker,
 retry cooldown and failure latch. Legacy bank-unspecified Enable Banking
 instances are rejected; do not enable them. Existing provider:owner history stays

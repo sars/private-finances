@@ -217,7 +217,7 @@ export default function Connections() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Landmark className="size-4 text-primary" />
-                    Wise and Revolut
+                    Wise, Revolut and Swedbank
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     Connect through Enable Banking.
@@ -253,6 +253,7 @@ export default function Connections() {
                             <SelectContent>
                               <SelectItem value="Wise">Wise</SelectItem>
                               <SelectItem value="Revolut">Revolut</SelectItem>
+                              <SelectItem value="Swedbank">Swedbank</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -391,7 +392,7 @@ export default function Connections() {
                 <div className="rounded-xl border border-dashed p-8 text-center">
                   <ShieldCheck className="mx-auto mb-3 size-7 text-muted-foreground" />
                   <p className="text-sm font-medium">
-                    No Wise or Revolut approval recorded for you yet
+                    No bank approval recorded for you yet
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     Your partner’s approvals are managed from their own sign-in.

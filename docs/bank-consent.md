@@ -1,4 +1,4 @@
-# Wise and Revolut consent
+# Bank consent
 
 Application authentication and bank consent are separate. The production PEM
 works on the server. In restricted mode, link each desired account in the Enable
@@ -11,7 +11,8 @@ the private Tailscale hostname recorded in
 `~/.config/private-finances/server-access.md`, which is kept outside Git.
 The original example.com callback must be replaced. Keep Tailscale connected on
 the device completing bank approval. No public endpoint is required for this
-browser redirect. The Bank connections page asks for Wise/Revolut and the
+browser redirect. The Bank connections page offers the banks listed in
+`src/connectors/banks.ts` — Wise, Revolut and Swedbank — and asks for the
 appropriate country code, then links to the provider's approval page.
 
 The server signs AIS requests, stores only a hash of the 15-minute state token,

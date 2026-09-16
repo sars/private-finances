@@ -41,6 +41,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { parseFilters, filterTransactions } from './filters.js';
 import { Repository, Conflict } from './repository.js';
 import { expenseSummary, type Owner } from './domain.js';
+import { BANK_NAMES, isBankName, type BankName } from './connectors/banks.js';
 
 export type WebConfig = {
   frontendDirectory?: string;
@@ -54,11 +55,7 @@ export type WebConfig = {
   telegram?: TelegramClarifications;
   classifierFor?: (owner: Owner) => Promise<Classifier>;
   consent?: {
-    start(
-      owner: Owner,
-      bank: 'Wise' | 'Revolut',
-      country: string,
-    ): Promise<string>;
+    start(owner: Owner, bank: BankName, country: string): Promise<string>;
     finish(owner: Owner, state: string, code: string): Promise<void>;
     list(
       owner: Owner,
@@ -696,7 +693,7 @@ export function web(
           ? await config.consent.list(actor)
           : [];
         html(
-          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>Wise and Revolut</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank"><option>Wise</option><option>Revolut</option></select></label><label>Country code for the bank connection<input name="country" required pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
+          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>Wise, Revolut and Swedbank</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANK_NAMES.map((b) => `<option>${escape(b)}</option>`).join('')}</select></label><label>Country code for the bank connection<input name="country" required pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
         );
         return;
       }
@@ -1104,8 +1101,7 @@ export function web(
         if (route === '/connections/enablebanking/start') {
           if (!config.consent) throw new Error('consent_not_configured');
           const bank = form.bank;
-          if (bank !== 'Wise' && bank !== 'Revolut')
-            throw new Error('invalid_bank');
+          if (!isBankName(bank)) throw new Error('invalid_bank');
           const target = await config.consent.start(
             actor,
             bank,

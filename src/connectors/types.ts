@@ -1,4 +1,5 @@
 import type { Owner, TransactionInput } from '../domain.js';
+import type { BankSlug } from './banks.js';
 
 export type BankAccount = {
   source: 'monobank' | 'enablebanking';
@@ -26,7 +27,7 @@ export type BankTransaction = TransactionInput & {
 export interface BankConnector {
   readonly source: BankAccount['source'];
   readonly owner: Owner;
-  readonly bank?: 'wise' | 'revolut';
+  readonly bank?: BankSlug;
   accounts(): Promise<BankAccount[]>;
   transactions(
     account: BankAccount,

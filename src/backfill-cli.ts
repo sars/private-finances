@@ -9,6 +9,7 @@ import { EnableBankingConnector } from './connectors/enablebanking.js';
 import { requester } from './connectors/http.js';
 import { ConnectorError } from './connectors/types.js';
 import { loadEnableBankingCredentials } from './enablebanking-credentials.js';
+import { isBankSlug, type BankSlug } from './connectors/banks.js';
 
 async function secret(path: string): Promise<string> {
   const info = await stat(path);
@@ -44,7 +45,7 @@ async function main() {
   )
     throw new Error('invalid_backfill_window');
   const bank = bankArg ?? process.env.ENABLEBANKING_BANK;
-  if (provider === 'enablebanking' && bank !== 'wise' && bank !== 'revolut')
+  if (provider === 'enablebanking' && !isBankSlug(bank))
     throw new Error('backfill_configuration');
   if (
     provider === 'enablebanking' &&
@@ -75,7 +76,7 @@ async function main() {
       : new EnableBankingConnector(
           {
             owner,
-            bank: bank as 'wise' | 'revolut',
+            bank: bank as BankSlug,
             applicationId: credentials!.applicationId,
             privateKey: credentials!.privateKey,
             sessionId: await secret(

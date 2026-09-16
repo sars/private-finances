@@ -594,6 +594,24 @@ async function applyMigrations(db: Database): Promise<void> {
       await nameTheBankOnAccounts(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (39)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=40'))
+        .rows.length
+    ) {
+      // Money left Wise for a Swedbank account this application could not see,
+      // so the spending it paid for was missing from every total. The consent
+      // table has allowed exactly two banks since it was created; it now allows
+      // the three in src/connectors/banks.ts. A bank added there later needs a
+      // migration of its own — test/database.test.ts fails until it has one.
+      await tx.query(
+        'ALTER TABLE bank_consents DROP CONSTRAINT IF EXISTS bank_consents_bank_check',
+      );
+      await tx.query(
+        `ALTER TABLE bank_consents ADD CONSTRAINT bank_consents_bank_check
+         CHECK (bank IN ('Wise','Revolut','Swedbank'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (40)');
+    }
   });
 }
 

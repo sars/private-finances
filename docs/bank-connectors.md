@@ -1,6 +1,9 @@
 # Bank connections
 
-Enable Banking handles Wise/Revolut; Monobank uses its direct personal API.
+Enable Banking handles the banks listed in `src/connectors/banks.ts` — Wise,
+Revolut and Swedbank; Monobank uses its direct personal API. Adding another bank
+means a row in that table plus a `bank_consents` migration; nothing else is
+spelled out per bank.
 Adapters are read-only and require injected, fixed-host HTTP clients. Requests
 have timeouts, response limits, no redirects and sanitized error codes.
 Monobank clients must share a requester with a 60-second minimum interval per token.
