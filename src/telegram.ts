@@ -281,6 +281,15 @@ export async function initializeTelegram(tx: Executor): Promise<void> {
     status text NOT NULL DEFAULT 'pending' CHECK(status='pending'),
     created_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // `owner` is whose payment the question was about; `answered_by` is who
+  // actually typed the answer. The chat is shared and either member may answer
+  // any question in it, because either of them may genuinely know what a
+  // payment was for — but which of them did is worth keeping. Rows written
+  // before this have none and are read as having been answered by the owner.
+  await tx.query(
+    `ALTER TABLE telegram_proposal_inputs ADD COLUMN IF NOT EXISTS answered_by text
+     CHECK(answered_by IN ('rodion','katya'))`,
+  );
   // The owner's own message, so the bot can react to it and answer it in
   // place. Rows written before this have none, and are answered without a
   // reply target rather than being repaired.
@@ -583,45 +592,41 @@ export class TelegramClarifications {
         );
         return outcome;
       };
+      // Any member of the household may answer any question in the shared chat;
+      // the question is addressed to the card's owner but the other one may
+      // well know what the payment was. Who answered is recorded rather than
+      // being a reason to throw the answer away.
       const row = (
         await tx.query(
-          "SELECT * FROM telegram_outbox WHERE chat_id=$1 AND message_id=$2 AND owner=$3 AND state='sent'",
-          [this.settings.chatId, reply!.message_id, actor],
+          "SELECT * FROM telegram_outbox WHERE chat_id=$1 AND message_id=$2 AND state='sent'",
+          [this.settings.chatId, reply!.message_id],
         )
       ).rows[0];
-      if (!row) {
-        const addressed = (
-          await tx.query(
-            "SELECT owner FROM telegram_outbox WHERE chat_id=$1 AND message_id=$2 AND state='sent'",
-            [this.settings.chatId, reply!.message_id],
-          )
-        ).rows[0];
+      if (!row)
         return settle(
           'ignored',
-          addressed
-            ? `${actor} answered a question addressed to ${String(addressed.owner)}`
-            : 'the message replied to is not an open question',
+          'the message replied to is not an open question',
         );
-      }
       const current = (
         await tx.query('SELECT * FROM transactions WHERE id=$1 FOR UPDATE', [
           row.transaction_id,
         ])
       ).rows[0];
       if (!current) return settle('stale', 'the payment no longer exists');
-      if (current.owner !== actor)
-        return settle('stale', 'the payment belongs to the other member');
+      if (current.owner !== row.owner)
+        return settle('stale', 'the question no longer matches the payment');
       if (!(await rebasePendingQuestion(tx, row, current)))
         return settle(
           'stale',
           `the payment moved on from revision ${String(row.revision)} to ${String(current.revision)} before the answer arrived`,
         );
       await tx.query(
-        'INSERT INTO telegram_proposal_inputs(id,outbox_id,update_id,owner,input_text,message_id) VALUES($1,$2,$3,$4,$5,$6)',
+        'INSERT INTO telegram_proposal_inputs(id,outbox_id,update_id,owner,answered_by,input_text,message_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
         [
           randomUUID(),
           row.id,
           update!.update_id,
+          String(row.owner),
           actor,
           message!.text,
           positiveId(message?.message_id) ? message!.message_id : null,
@@ -629,7 +634,7 @@ export class TelegramClarifications {
       );
       return settle(
         'accepted',
-        `linked to payment ${String(row.transaction_id)}`,
+        `${actor} answered for ${String(row.owner)}; linked to payment ${String(row.transaction_id)}`,
       );
     });
   }
@@ -638,6 +643,7 @@ export class TelegramClarifications {
     return (
       await this.db.query(
         `SELECT p.id,p.input_text,p.status,p.created_at,o.transaction_id,o.revision,
+          coalesce(p.answered_by,p.owner) AS answered_by,
           w.state AS workflow_state,t.description AS transaction_description
         FROM telegram_proposal_inputs p
         JOIN telegram_outbox o ON o.id=p.outbox_id

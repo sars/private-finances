@@ -669,6 +669,22 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (43)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=44'))
+        .rows.length
+    ) {
+      // A question is addressed to whoever's card was used, but the chat is
+      // shared and the owner settled what should happen when the other member
+      // answers: it counts, and which of them answered is recorded. Rows
+      // written before this are read as having been answered by the owner,
+      // which is what the old rule guaranteed. `initializeTelegram` adds the
+      // column to a fresh database but is gated behind version 7.
+      await tx.query(
+        `ALTER TABLE telegram_proposal_inputs ADD COLUMN IF NOT EXISTS answered_by text
+         CHECK(answered_by IN ('rodion','katya'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (44)');
+    }
   });
 }
 

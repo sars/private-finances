@@ -62,17 +62,24 @@ test('owner-bound question, reply mapping, strict identity, dedup and pending na
     assert.equal(await bot.dispatchOne(), 'sent');
     assert.equal(await bot.dispatchOne(), 'idle');
     assert.equal(sends, 1);
+    // A stranger, the wrong chat, and a reply to something that is not an open
+    // question are all still nothing to us.
     assert.equal(await bot.receive(update(1, 999)), 'ignored');
     assert.equal(await bot.receive(update(2, 101, -999)), 'ignored');
-    assert.equal(await bot.receive(update(3, 102)), 'ignored');
     assert.equal(await bot.receive(update(4, 101, -123, 999)), 'ignored');
     assert.equal(await bot.receive(update(5)), 'accepted');
     assert.equal(await bot.receive(update(5)), 'duplicate');
-    assert.equal((await bot.pending('rodion')).length, 1);
+    // The question was addressed to Rodion, but Katya may answer it: the answer
+    // belongs to his payment and records that she wrote it.
+    assert.equal(await bot.receive(update(3, 102)), 'accepted');
     assert.deepEqual(await bot.pending('katya'), []);
-    assert.equal(
-      (await bot.pending('rodion'))[0]!.input_text,
-      update(5).message.text,
+    const waiting = await bot.pending('rodion');
+    assert.equal(waiting.length, 2);
+    assert.equal(waiting[0]!.input_text, update(5).message.text);
+    const answers = await bot.history('rodion');
+    assert.deepEqual(
+      answers.map((a) => a.answered_by),
+      ['katya', 'rodion'],
     );
     const unchanged = (await repo.list('rodion')).find(
       (t) => t.id === transaction.id,
@@ -86,7 +93,7 @@ test('owner-bound question, reply mapping, strict identity, dedup and pending na
       'rodion',
     );
     assert.equal(await bot.receive(update(6)), 'stale');
-    assert.equal((await bot.pending('rodion')).length, 1);
+    assert.equal((await bot.pending('rodion')).length, 2);
   } finally {
     await db.close();
   }
@@ -555,26 +562,34 @@ test('an answer that reaches nothing records why, naming the other member when t
         )
       ).rows[0];
 
-    // Katya answers a question the bot addressed to Rodion. This is exactly the
-    // shape that lost two of her answers in September, and the reason it failed
-    // was nowhere on record.
-    assert.equal(await bot.receive(update(11, 102)), 'ignored');
-    assert.equal((await outcomeOf(11))!.outcome, 'ignored');
+    // Katya answers a question the bot addressed to Rodion. This is the shape
+    // that silently lost two of her answers in September; it is now accepted,
+    // against his payment, recording that she was the one who wrote it.
+    assert.equal(await bot.receive(update(11, 102)), 'accepted');
+    assert.equal((await outcomeOf(11))!.outcome, 'accepted');
     assert.match(
       String((await outcomeOf(11))!.detail),
-      /katya answered a question addressed to rodion/,
+      /katya answered for rodion/,
     );
+    const answered = await db.query(
+      'SELECT owner, answered_by FROM telegram_proposal_inputs WHERE update_id=$1',
+      [11],
+    );
+    assert.equal(answered.rows[0]!.owner, 'rodion');
+    assert.equal(answered.rows[0]!.answered_by, 'katya');
 
     // A reply aimed at a message that was never a question.
     assert.equal(await bot.receive(update(12, 101, -123, 777)), 'ignored');
     assert.match(String((await outcomeOf(12))!.detail), /not an open question/);
 
-    // The answer that does land says what it landed on.
+    // The owner's own answer says so rather than naming someone else.
     assert.equal(await bot.receive(update(13)), 'accepted');
     assert.equal((await outcomeOf(13))!.outcome, 'accepted');
     assert.match(
       String((await outcomeOf(13))!.detail),
-      new RegExp(transaction.id),
+      new RegExp(
+        `rodion answered for rodion; linked to payment ${transaction.id}`,
+      ),
     );
 
     // And one that arrives after the payment has moved on says so too.

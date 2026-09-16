@@ -192,9 +192,7 @@ it ships an unsettled purchase still waits for the bank.
 
 # A settling card hold stops discarding the answer — September 16, 2026
 
-Schema version 42 and 43. **Built and tested, not yet deployed**: pushing the
-branch was blocked, so nothing has reached the server and the deployed release
-above is unchanged.
+Schema versions 42 to 44.
 
 The owner opened Review and found a Rimi shop and an H&M purchase waiting on
 them, and asked why the system could not have been sure about either. It had
@@ -243,6 +241,19 @@ which check had rejected them. Schema 43 records the `outcome` and a short
 the poller writes a `telegram_reply_discarded` line to its log. Telling the
 person in the chat that their answer did not land is **not** implemented: the
 outbox carries a question about a payment and has no way to hold a loose note.
+
+Schema 44 removes what was almost certainly the cause. A question is addressed
+to the owner of the card, and a reply used to be matched only against questions
+addressed to the person who wrote it, so an answer from the other member matched
+nothing at all. The owner settled the point — "other members can answer and it
+is fine. But better to record who answered" — so either of them may now answer
+any question in the shared chat, or confirm any suggestion, and
+`telegram_proposal_inputs.answered_by` keeps which of them did. The payment is
+still classified as its owner, because that is who may decide it and the
+dashboard's authorisation rests on it; the person who explained it is named in
+the payment's audit trail, in the reply history and in the chat, where the
+confirmation reads `rodion (answered by katya):`. Rows written before this are
+read as answered by the owner, which is what the old rule guaranteed.
 
 Two things were found and deliberately not changed. Twelve ATM withdrawals sit as
 personal expenses on the catch-all while two identical `Банкомат DN00`

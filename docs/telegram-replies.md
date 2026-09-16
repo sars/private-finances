@@ -28,13 +28,35 @@ that the payment moved on between the question and the answer. The poller also
 writes a `telegram_reply_discarded` line to its log, so a lost answer shows up in
 `journalctl` rather than only under inspection.
 
-Note the shape of the most likely cause. A question is addressed to one member
-and only that member's reply is matched to it, but the chat is shared, so either
-of them may answer any question in it. Whether the other member's answer should
-count is the owner's decision to make, and nothing here presumes it; the reason
-is recorded so the next occurrence can be read rather than guessed at. Telling
-the person in the chat that their answer did not land is still not implemented:
-the outbox holds a question about a payment and has no way to carry a loose note.
+Telling the person in the chat that their answer did not land is still not
+implemented: the outbox holds a question about a payment and has no way to carry
+a loose note.
+
+## Either member may answer, and the answer records who did
+
+That was the most likely cause of the two lost answers: the question is
+addressed to the owner of the card, and a reply used to be matched only against
+questions addressed to the person who wrote it, so an answer from the other
+member matched nothing. The owner settled it — "other members can answer and it
+is fine. But better to record who answered."
+
+So any household member may answer any question in the shared chat, and the
+answer is applied exactly as if the addressee had written it. The chat is shared
+because the household is the unit, and either of them may genuinely know what a
+payment was for. The same now holds for confirming or rejecting a suggestion.
+
+The two identities are kept apart rather than collapsed.
+`telegram_proposal_inputs.owner` is whose payment the question was about;
+`answered_by` is who typed the answer. The payment is still classified **as its
+owner**, because that is who is allowed to decide it and the dashboard's
+authorisation rests on it — widening that is a separate decision and was not
+made here. What changes is that the person who explained it is named where it
+matters: in the payment's own audit trail ("Saved from katya's explanation in
+Telegram, answering for rodion"), in the reply history the dashboard shows, and
+in the chat, where the confirmation reads `rodion (answered by katya):` instead
+of just `rodion:`. When the owner answered their own question nothing extra is
+said. Rows written before schema 44 have no `answered_by` and are read as having
+been answered by the owner, which is what the old rule guaranteed.
 
 Applying without asking is safe because of what is checked first, inside the
 same transaction that writes the decision: the payment must still belong to

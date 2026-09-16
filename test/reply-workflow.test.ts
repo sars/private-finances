@@ -368,3 +368,70 @@ test('a pending outflow is decided while the bank status stays pending', async (
     await s.db.close();
   }
 });
+
+test('Katya can answer a question about Rodion’s payment, and it says she did', async () => {
+  const s = await setup();
+  try {
+    await s.db.transaction(initializeReplyWorkflow);
+    // The question went to Rodion, whose card was used. Katya answers it from
+    // the chat they share, which the household treats as an answer like any
+    // other — but whose it was must not be lost.
+    assert.equal(
+      await s.question.receive(update(1, 'Dinner with family', 42, 102)),
+      'accepted',
+    );
+    assert.equal(await s.workflow.processOne(), 'ready');
+    assert.equal(await s.workflow.dispatchOne(), 'applied');
+
+    const changed = (await s.repo.list('rodion'))[0]!;
+    assert.equal(changed.kind, 'personal_expense');
+    assert.equal(changed.category, 'Food / Restaurants / Dining in');
+
+    // The payment is still Rodion's and is decided as him, because that is who
+    // may decide it; the history names Katya as the one who explained it.
+    const classified = (
+      await s.db.query(
+        "SELECT actor, reason FROM audit_events WHERE transaction_id=$1 AND event='classified'",
+        [s.row.id],
+      )
+    ).rows[0]!;
+    assert.equal(classified.actor, 'rodion');
+    assert.match(
+      String(classified.reason),
+      /Saved from katya’s explanation in Telegram, answering for rodion/,
+    );
+
+    // And the reply in the chat says so too.
+    assert.equal(await s.workflow.dispatchReceiptOne(), 'sent');
+    assert.match(s.replies[0]!.text, /^rodion \(answered by katya\):/);
+  } finally {
+    await s.db.close();
+  }
+});
+
+test('the owner’s own answer names nobody else', async () => {
+  const s = await setup();
+  try {
+    await s.db.transaction(initializeReplyWorkflow);
+    assert.equal(
+      await s.question.receive(update(1, 'Dinner with family')),
+      'accepted',
+    );
+    assert.equal(await s.workflow.processOne(), 'ready');
+    assert.equal(await s.workflow.dispatchOne(), 'applied');
+    const classified = (
+      await s.db.query(
+        "SELECT reason FROM audit_events WHERE transaction_id=$1 AND event='classified'",
+        [s.row.id],
+      )
+    ).rows[0]!;
+    assert.match(
+      String(classified.reason),
+      /Saved from the owner’s own explanation in Telegram/,
+    );
+    assert.equal(await s.workflow.dispatchReceiptOne(), 'sent');
+    assert.match(s.replies[0]!.text, /^rodion:/);
+  } finally {
+    await s.db.close();
+  }
+});
