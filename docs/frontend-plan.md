@@ -138,7 +138,7 @@ Recharts leaves the entry chunk.
   every `pnpm check`; one `money` in `lib/format.ts` replacing five copies;
   `BarSeries` as the only Recharts consumer; `DESIGN.md`, `shots.ts` and the
   `frontend-screen` skill in place. Screens themselves are unchanged.
-- Stage 1: built. Primitives on Base UI (`base-nova`); the sidebar with
+- Stage 1: deployed as `393a3fa` on September 17. Primitives on Base UI (`base-nova`); the sidebar with
   Money / Setup / System groups, the phone tab bar, the ⌘K command menu
   (lazy), sonner, and the installable app with a shell-only service worker.
   The server now serves fonts, icons, manifest and worker from an explicit
@@ -148,4 +148,15 @@ Recharts leaves the entry chunk.
   twenty-two pick-lists across the screens now go through it, guarded by
   `check_frontend.py`. Entry chunk 125 KB gzip. The awaiting-review badge
   waits for a count the session does not yet carry (Stage 2).
-- Stages 2–5: not started.
+- Stage 2: built. The vocabulary — `Money`, `KpiCard` (amount, change
+  against the period of equal length just before, the previous figure, a link
+  when it drills), `PeriodPicker` (presets plus a custom range in a popover),
+  `FilterBar`/`Field`, `BarList`, `EmptyState`, `PageHeader` — and Home
+  rebuilt on it in the Tremor layout: title line, period control with
+  Filters behind one button, the three KPI cards comparing with the previous
+  period (a second `/api/overview` request in parallel), the chart without a
+  Y axis on the phone, "Where it went" as a bar list. A `warning` token
+  replaces the ad-hoc amber classes. Not yet: `CategoryBar` (nothing needs it
+  before Analytics) and drill links from categories (the filter grammar comes
+  with Stage 3).
+- Stages 3–5: not started.

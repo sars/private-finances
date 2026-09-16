@@ -9,14 +9,16 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**ca7ca14ad7254a83dfa9eeb2f7a990ea4d0037b5**, live since September 17, 2026 at
+**393a3fa2dd98a01af471b1d66b93872fb94bb938**, live since September 17, 2026 at
 schema version 44, deployed with `deploy/release.sh` over
-`deab213944955ecbdccd7b10dc88de1113489c7d`. It carries no migration: it is
-Stage 0 of [the frontend plan](frontend-plan.md) — Tremor's palette and
-self-hosted Inter, Recharts moved into a chunk that loads only on chart screens,
-one money formatter in place of five, and `scripts/check_frontend.py` as part of
-`pnpm check`. After the switch both services are active and the ledger holds
-4,139 transactions.
+`ca7ca14ad7254a83dfa9eeb2f7a990ea4d0037b5`, itself released earlier the same
+day over `deab213944955ecbdccd7b10dc88de1113489c7d`. Neither carries a
+migration: they are Stages 0 and 1 of [the frontend plan](frontend-plan.md) —
+Tremor's palette and self-hosted Inter, Recharts in a chunk that loads only on
+chart screens, one money formatter, `scripts/check_frontend.py` in `pnpm check`;
+then the primitives on Base UI, the grouped sidebar with a phone tab bar and ⌘K,
+the installable app, and `Choice` for every pick-list. After each switch both
+services were active and the ledger holds 4,139 transactions.
 
 The release before it, **deab213944955ecbdccd7b10dc88de1113489c7d**, went live on
 September 16, 2026 at schema version 44 over

@@ -117,6 +117,7 @@
   --color-destructive: var(--destructive);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--border);
   --color-ring: var(--primary);
@@ -161,6 +162,7 @@
   --destructive: #dc2626;
   --positive: #059669;
   --negative: #dc2626;
+  --warning: #d97706;
   --chart-1: #3b82f6;
   --chart-2: #10b981;
   --chart-3: #8b5cf6;
@@ -181,6 +183,7 @@
   --destructive: #f87171;
   --positive: #34d399;
   --negative: #f87171;
+  --warning: #fbbf24;
   --chart-1: #3b82f6;
   --chart-2: #10b981;
   --chart-3: #8b5cf6;
