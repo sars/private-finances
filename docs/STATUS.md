@@ -9,20 +9,22 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**2655695c3edb891c1dc0f0e9a4a987ffdb84163d**, live since September 17, 2026 at
-schema version 44, deployed with `deploy/release.sh` — the fifth release that
-day, over `69d91c219b2d0988027bf6b9cb7983257c26b375`,
+**15eae42d2b5ff2d7301d62cf2f7ed75780c3538c**, live since September 17, 2026 at
+schema version 44, deployed with `deploy/release.sh` — the sixth release that
+day, after `2655695c3edb891c1dc0f0e9a4a987ffdb84163d`,
+`69d91c219b2d0988027bf6b9cb7983257c26b375`,
 `25e513dbedb7736c36785028ad851b11253d03dc`,
 `393a3fa2dd98a01af471b1d66b93872fb94bb938` and
 `ca7ca14ad7254a83dfa9eeb2f7a990ea4d0037b5`, which followed
-`deab213944955ecbdccd7b10dc88de1113489c7d`. None of the five carries a
-migration: they are Stages 0 to 4 of [the frontend plan](frontend-plan.md) —
+`deab213944955ecbdccd7b10dc88de1113489c7d`. None of the six carries a
+migration: they are Stages 0 to 5 of [the frontend plan](frontend-plan.md) —
 Tremor's palette and self-hosted Inter, Recharts loading only on chart screens,
 one money formatter, `scripts/check_frontend.py` in `pnpm check`; the
 primitives on Base UI, the grouped sidebar with a phone tab bar and ⌘K, the
 installable app, `Choice` for every pick-list; the finance vocabulary and Home
 in the Tremor layout with previous-period deltas; `/api/analytics` with the
-Analytics screen it feeds; and Transactions as dense rows. After each switch
+Analytics screen it feeds; Transactions as dense rows; and every remaining
+screen opening with the same header on the same card scale. After each switch
 both services were active and the ledger holds 4,139 transactions.
 
 The release before it, **deab213944955ecbdccd7b10dc88de1113489c7d**, went live on

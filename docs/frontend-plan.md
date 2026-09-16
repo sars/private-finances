@@ -185,7 +185,7 @@ Recharts leaves the entry chunk.
   the planned sheet/drawer would have undone a product decision. Review's move
   to Base UI happened in Stage 1 and held. Not yet: Transactions accepting the
   analytics grammar (period, category), so drill links still go to Home.
-- Stage 5: first pass built. Every remaining screen — Categories, Accounts,
+- Stage 5: first pass deployed as `15eae42` on September 17. Every remaining screen — Categories, Accounts,
   Currency conversion, Bank connections, Reports, System health, Cash,
   Decision history, Receipts, Settings — opens with the same `PageHeader`
   (one `text-lg` title line, one sentence, actions right) instead of its own
