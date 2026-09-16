@@ -953,3 +953,55 @@ export async function restoreSettlementInvalidatedDecisions(
   }
   return restored;
 }
+
+/**
+ * The three delivery platforms, which had been filed as eating out.
+ *
+ * Wolt, Bolt Food and Glovo bring food to the door; the tree has had
+ * `Food / Restaurants / Delivery` for exactly that since the reshape. They were
+ * filed under `Dining in` because the merchant code they send is a restaurant
+ * code — 5812, 5814, and for the delivery arms 5811 — and a code describes the
+ * business the money reached, which really is a restaurant. Only the merchant's
+ * name distinguishes the two, so no merchant-code table can tell them apart.
+ *
+ * Both leaves hang off `Food / Restaurants`, so no total moves; what changes is
+ * that the breakdown stops claiming the household ate out twenty-four times
+ * when it was ordering in. Payments a person has decided are left alone, and no
+ * standing rule is created: naming a merchant here is a correction to these
+ * payments, not a licence to answer every future one without being asked.
+ */
+export async function fileDeliveryPlatformsAsDelivery(
+  tx: Executor,
+): Promise<number> {
+  const target = (
+    await tx.query(
+      "SELECT id FROM category_tree WHERE slug='food.restaurants.delivery'",
+    )
+  ).rows[0];
+  if (!target) return 0;
+  const moved = await tx.query(
+    `UPDATE transactions t SET category_id=$1
+     WHERE t.kind='personal_expense'
+       AND t.category_id IS DISTINCT FROM $1
+       AND (t.description ILIKE 'Wolt' OR t.description ILIKE 'Wolt %'
+            OR t.description ILIKE 'Bolt Food%' OR t.description ILIKE 'Glovo%')
+       AND NOT EXISTS(SELECT 1 FROM audit_events a
+                      WHERE a.transaction_id=t.id AND a.event='classified')
+     RETURNING t.id`,
+    [String(target.id)],
+  );
+  for (const row of moved.rows) {
+    await tx.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'migration','auto_classified',$3,$4,$5)`,
+      [
+        randomUUID(),
+        String(row.id),
+        JSON.stringify({ category: 'Food / Restaurants / Dining in' }),
+        JSON.stringify({ categoryId: String(target.id) }),
+        'The merchant is a delivery platform, which its restaurant merchant code cannot show',
+      ],
+    );
+  }
+  return moved.rows.length;
+}

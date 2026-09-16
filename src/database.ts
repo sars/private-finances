@@ -48,6 +48,7 @@ import {
   fileOwnerNamedMerchants,
   placeRootCatchAllByMerchantCode,
   restoreSettlementInvalidatedDecisions,
+  fileDeliveryPlatformsAsDelivery,
 } from './category-migration.js';
 import { createRuleMatchFunction } from './categories.js';
 import { initializeTelegram } from './telegram.js';
@@ -641,8 +642,13 @@ async function applyMigrations(db: Database): Promise<void> {
       // the resting place could only leave on the catch-all — a photo shop, a
       // florist, a guesthouse, an airport shop, a caterer, a paint shop — rest
       // somewhere that says something about them instead.
+      // And the three delivery platforms, which the merchant code cannot tell
+      // apart from a restaurant because the money really does reach one. Both
+      // leaves hang off Food / Restaurants, so no total moves; the breakdown
+      // stops claiming the household ate out when it was ordering in.
       await restoreSettlementInvalidatedDecisions(tx);
       await placeRootCatchAllByMerchantCode(tx);
+      await fileDeliveryPlatformsAsDelivery(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (42)');
     }
     if (

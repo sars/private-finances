@@ -580,3 +580,76 @@ test('version 42 leaves alone a payment a person decided, or one already re-answ
     await db.close();
   }
 });
+
+test('version 42 files the delivery platforms as delivery, but not one a person decided', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const repo = new Repository(db);
+    const order = (sourceId: string, description: string, mcc: number) => ({
+      source: 'synthetic' as const,
+      sourceId,
+      accountId: 'rodion-uah',
+      owner: 'rodion' as const,
+      bookedAt: '2026-09-10T18:00:00.000Z',
+      currency: 'UAH',
+      amountMinor: '-45000',
+      description,
+      status: 'booked' as const,
+      sourceDetails: { mcc, hold: false },
+    });
+    await repo.importBatch([
+      order('wolt', 'Wolt', 5812),
+      order('bolt-food', 'Bolt Food', 5811),
+      order('glovo-decided', 'Glovo', 5811),
+      // A restaurant that merely starts with the same letters must not move.
+      order('woltair', 'Woltair heating', 5812),
+    ]);
+    const idOf = async (sourceId: string) =>
+      String(
+        (
+          await db.query('SELECT id FROM transactions WHERE source_id=$1', [
+            sourceId,
+          ])
+        ).rows[0]!.id,
+      );
+    for (const sourceId of ['wolt', 'bolt-food', 'glovo-decided', 'woltair']) {
+      await db.query(
+        `UPDATE transactions SET kind='personal_expense',
+         category_id=(SELECT id FROM category_tree WHERE slug='food.restaurants.dining')
+         WHERE source_id=$1`,
+        [sourceId],
+      );
+    }
+    await db.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'rodion','classified','{}','{}','The owner decided this themselves')`,
+      [randomUUID(), await idOf('glovo-decided')],
+    );
+
+    await db.query('DELETE FROM schema_versions WHERE version=42');
+    await migrate(db);
+
+    const categoryOf = async (sourceId: string) =>
+      String(
+        (
+          await db.query(
+            'SELECT category FROM transactions WHERE source_id=$1',
+            [sourceId],
+          )
+        ).rows[0]!.category,
+      );
+    assert.equal(await categoryOf('wolt'), 'Food / Restaurants / Delivery');
+    assert.equal(
+      await categoryOf('bolt-food'),
+      'Food / Restaurants / Delivery',
+    );
+    assert.equal(
+      await categoryOf('glovo-decided'),
+      'Food / Restaurants / Dining in',
+    );
+    assert.equal(await categoryOf('woltair'), 'Food / Restaurants / Dining in');
+  } finally {
+    await db.close();
+  }
+});
