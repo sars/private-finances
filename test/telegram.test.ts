@@ -524,3 +524,69 @@ test('reaction and plain reply share the bounded fixed-origin transport', async 
   await assert.rejects(failing.react('-123', 5, null), uncertain);
   await assert.rejects(failing.reply('-123', 5, 'Plain text'), uncertain);
 });
+
+test('an answer that reaches nothing records why, naming the other member when they replied', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    await db.transaction(initializeTelegram);
+    const repo = new Repository(db);
+    await repo.importBatch(synthetic);
+    const transaction = (await repo.list('rodion'))[0]!;
+    const bot = new TelegramClarifications(db, settings, {
+      async send() {
+        return { messageId: 42 };
+      },
+      async react() {
+        throw new Error('unexpected_react');
+      },
+      async reply() {
+        throw new Error('unexpected_reply');
+      },
+    });
+    await bot.queue(transaction.id, 0, 'What was this?', 'rodion');
+    assert.equal(await bot.dispatchOne(), 'sent');
+
+    const outcomeOf = async (id: number) =>
+      (
+        await db.query(
+          'SELECT outcome, detail FROM telegram_updates WHERE update_id=$1',
+          [id],
+        )
+      ).rows[0];
+
+    // Katya answers a question the bot addressed to Rodion. This is exactly the
+    // shape that lost two of her answers in September, and the reason it failed
+    // was nowhere on record.
+    assert.equal(await bot.receive(update(11, 102)), 'ignored');
+    assert.equal((await outcomeOf(11))!.outcome, 'ignored');
+    assert.match(
+      String((await outcomeOf(11))!.detail),
+      /katya answered a question addressed to rodion/,
+    );
+
+    // A reply aimed at a message that was never a question.
+    assert.equal(await bot.receive(update(12, 101, -123, 777)), 'ignored');
+    assert.match(String((await outcomeOf(12))!.detail), /not an open question/);
+
+    // The answer that does land says what it landed on.
+    assert.equal(await bot.receive(update(13)), 'accepted');
+    assert.equal((await outcomeOf(13))!.outcome, 'accepted');
+    assert.match(
+      String((await outcomeOf(13))!.detail),
+      new RegExp(transaction.id),
+    );
+
+    // And one that arrives after the payment has moved on says so too.
+    await repo.classify(
+      transaction.id,
+      0,
+      { kind: 'unresolved', category: null, reason: 'Owner reviewed' },
+      'rodion',
+    );
+    assert.equal(await bot.receive(update(14)), 'stale');
+    assert.match(String((await outcomeOf(14))!.detail), /revision 0 to 1/);
+  } finally {
+    await db.close();
+  }
+});

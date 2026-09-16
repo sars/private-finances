@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 export type Owner = 'rodion' | 'katya';
 export type Kind =
   | 'personal_expense'
@@ -244,4 +246,46 @@ export function expenseSummary(
         pendingCount: totals.pendingCount,
       })),
   };
+}
+
+/**
+ * A bank row that is re-imported unchanged except that a card hold has settled.
+ *
+ * Monobank publishes a card purchase twice: first as a hold, then as the booked
+ * payment. The second copy differs only in `status` and `sourceDetails.hold`;
+ * the merchant, the merchant category code, the amount and the date are the
+ * same, because nothing about the purchase changed — only the bank's own
+ * bookkeeping caught up. A settlement is therefore not new evidence about what
+ * the payment was for, and must not discard a classification that was made from
+ * evidence which still reads exactly the same.
+ *
+ * The test is deliberately strict in the other direction: anything else that
+ * moved — the amount, the description, the merchant category, a key that was
+ * not there before — is a real provider correction and is not a settlement.
+ */
+export function isSettlementOnly(
+  before: Record<string, unknown> | null | undefined,
+  after: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!before || !after) return false;
+  if (before.status !== 'pending' || after.status !== 'booked') return false;
+  const beforeDetails = before.sourceDetails;
+  const afterDetails = after.sourceDetails;
+  if (
+    !isPlainRecord(beforeDetails) ||
+    !isPlainRecord(afterDetails) ||
+    beforeDetails.hold !== true ||
+    afterDetails.hold !== false
+  )
+    return false;
+  const settled = {
+    ...before,
+    status: after.status,
+    sourceDetails: { ...beforeDetails, hold: afterDetails.hold },
+  };
+  return isDeepStrictEqual(settled, after);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

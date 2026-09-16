@@ -163,8 +163,20 @@ export async function pollOnce(
     let next = offset;
     for (const update of normalized) {
       if (Number(update.update_id) < next) continue;
-      if (!(receiveWorkflow && (await receiveWorkflow(scoped, update))))
-        await bot.receive(update);
+      if (!(receiveWorkflow && (await receiveWorkflow(scoped, update)))) {
+        const outcome = await bot.receive(update);
+        // A household member's answer that reached nothing is a failure to
+        // report, not a quiet no-op: without this the only trace was an
+        // update number, and nobody could say what had rejected it.
+        if (outcome === 'ignored' || outcome === 'stale')
+          process.stdout.write(
+            `${JSON.stringify({
+              event: 'telegram_reply_discarded',
+              updateId: Number(update.update_id),
+              outcome,
+            })}\n`,
+          );
+      }
       next = Number(update.update_id) + 1;
     }
     await tx.query(
