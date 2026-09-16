@@ -14,7 +14,11 @@ import { attachRefunds, type RefundAnnotation } from './refunds.js';
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import type { Database, Executor, Row } from './database.js';
-import { validateTransaction, validateClassification } from './domain.js';
+import {
+  validateTransaction,
+  validateClassification,
+  isSettlementOnly,
+} from './domain.js';
 import { resolveCategoryId } from './category-tree.js';
 import type { ClassificationSource } from './resting-place.js';
 import type { TransactionInput, Kind, Owner } from './domain.js';
@@ -315,17 +319,25 @@ export class Repository {
           JSON.stringify(t.sourceDetails ?? {}),
         ],
       );
+      const settlementOnly = isSettlementOnly(before, after);
       await tx.query(
-        `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason) VALUES($1,$2,'importer',$3,$4,$5,'Source import')`,
+        `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason) VALUES($1,$2,'importer',$3,$4,$5,$6)`,
         [
           randomUUID(),
           id,
-          previous ? 'source_corrected' : 'imported',
+          !previous
+            ? 'imported'
+            : settlementOnly
+              ? 'settled'
+              : 'source_corrected',
           JSON.stringify(before),
           JSON.stringify(after),
+          settlementOnly
+            ? 'The card hold settled; the payment itself is unchanged'
+            : 'Source import',
         ],
       );
-      if (previous && previous.kind !== 'unresolved') {
+      if (previous && previous.kind !== 'unresolved' && !settlementOnly) {
         const automatic = await tx.query(
           `SELECT 1 FROM audit_events WHERE transaction_id=$1 AND event='auto_classified'
           AND NOT EXISTS(SELECT 1 FROM audit_events h WHERE h.transaction_id=$1 AND h.event IN ('classified','refund_linked','refund_unlinked')) LIMIT 1`,

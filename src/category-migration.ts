@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Executor } from './database.js';
 import { readMcc } from './mcc.js';
+import { isSettlementOnly } from './domain.js';
+import type { ClassificationSource } from './resting-place.js';
 import {
   installCategoryAssignmentGuard,
   createCategoryTree,
@@ -134,8 +136,10 @@ export const MCC_CATEGORY: Readonly<Record<number, string>> = {
   5192: 'entertainment.hobbies',
   5200: 'home.goods',
   5211: 'home.repairs',
+  5231: 'home.repairs',
   5251: 'home.repairs',
   5261: 'home.goods',
+  5309: 'travel.other',
   5310: 'food.groceries',
   5311: 'home.goods',
   5411: 'food.groceries',
@@ -163,20 +167,24 @@ export const MCC_CATEGORY: Readonly<Record<number, string>> = {
   5732: 'electronics',
   5734: 'apps_services',
   5735: 'entertainment.hobbies',
-  5815: 'apps_services',
+  5811: 'food.restaurants.dining',
   5812: 'food.restaurants.dining',
   5813: 'food.restaurants.dining',
   5814: 'food.restaurants.dining',
+  5815: 'apps_services',
   5912: 'health.pharmacy',
   5921: 'food.alcohol',
   5941: 'sport.equipment',
   5942: 'entertainment.hobbies',
   5945: 'entertainment.hobbies',
+  5946: 'entertainment.hobbies',
   5947: 'gifts',
   5977: 'beauty.cosmetics',
+  5992: 'gifts',
   5995: 'pets',
   6513: 'home.rent',
   7011: 'travel.accommodation',
+  7033: 'travel.accommodation',
   7217: 'home.services',
   7230: 'beauty.services',
   7523: 'transport.car.parking',
@@ -774,4 +782,226 @@ export async function fileOwnerNamedMerchants(tx: Executor): Promise<number> {
     filed += applied.rows.length;
   }
   return filed;
+}
+
+/**
+ * Payments left on the root catch-all that the bank's own merchant code can
+ * explain.
+ *
+ * The resting place files a payment it cannot read on the root catch-all so the
+ * money is still counted (ADR 0008), and marks it provisional so it comes back
+ * for review. That is the right resting place, but the owner's objection stands:
+ * the catch-all says nothing. Where a merchant code has since been added to
+ * `MCC_CATEGORY`, reading it again moves the payment somewhere that does say
+ * something.
+ *
+ * It stays provisional. A merchant code is evidence about the shop, never proof
+ * about the purchase, so nobody has confirmed anything and the payment is still
+ * owed a review — it is simply resting somewhere more honest while it waits.
+ * Anything a person has decided is left alone.
+ */
+export async function placeRootCatchAllByMerchantCode(
+  tx: Executor,
+): Promise<number> {
+  const ids = await slugIds(tx);
+  const candidates = (
+    await tx.query(
+      `SELECT t.id, t.source_details FROM transactions t
+       JOIN category_tree n ON n.id=t.category_id
+       WHERE n.parent_id IS NULL AND lower(n.name)='unspecified'
+         AND t.kind='personal_expense' AND t.provisional
+         AND NOT EXISTS(SELECT 1 FROM audit_events a
+                        WHERE a.transaction_id=t.id AND a.event='classified')`,
+    )
+  ).rows;
+  let placed = 0;
+  for (const row of candidates) {
+    const mcc = readMcc(row.source_details as Record<string, unknown>);
+    // A money-transfer code says nothing about what was bought.
+    if (!mcc || mcc.financialTransfer) continue;
+    const target = ids.get(MCC_CATEGORY[mcc.code] ?? '');
+    if (!target) continue;
+    await tx.query(
+      "UPDATE transactions SET category_id=$1, classification_source='mcc' WHERE id=$2",
+      [target, String(row.id)],
+    );
+    await tx.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'migration','auto_classified',$3,$4,$5)`,
+      [
+        randomUUID(),
+        String(row.id),
+        JSON.stringify({ category: 'Unspecified' }),
+        JSON.stringify({ categoryId: target, provisional: true }),
+        `Merchant category ${mcc.code} (${mcc.meaning}) moved this off the catch-all; nobody has confirmed it`,
+      ],
+    );
+    placed++;
+  }
+  return placed;
+}
+
+/** What decided a payment, as the automatic pass recorded it, in the vocabulary
+ * the `transactions` row uses. Sources this does not know about are left out,
+ * because guessing the provenance of a restored decision would be worse than
+ * leaving the payment in the review queue where it already is. */
+const RESTORED_SOURCE: Readonly<Record<string, ClassificationSource>> = {
+  confirmed_rule: 'rule',
+  rule: 'rule',
+  memory: 'memory',
+  identity: 'identity',
+  mcc: 'mcc',
+  model: 'model',
+  model_cache: 'model',
+  receipt_model: 'model',
+};
+
+/**
+ * Decisions that a settling card hold threw away.
+ *
+ * Monobank publishes a card purchase twice, and the importer treated the second
+ * copy as the bank correcting itself: it discarded the classification and the
+ * payment fell back to whatever its merchant code alone implied, marked
+ * provisional, which put it in front of the owner as though nothing had ever
+ * decided it. Every one of the thirty re-imports in the ledger was a settlement
+ * of this kind — not once had an amount, a description, a date or a merchant
+ * code actually moved — so the rule had only ever destroyed correct answers.
+ *
+ * `isSettlementOnly` now stops that happening again. This puts back what was
+ * lost, reading the decision out of the audit trail that recorded it, and only
+ * where the payment is still waiting: a payment a person has since decided, or
+ * one a later automatic pass already answered, is left exactly as it is.
+ */
+export async function restoreSettlementInvalidatedDecisions(
+  tx: Executor,
+): Promise<number> {
+  const rows = (
+    await tx.query(
+      `SELECT inv.transaction_id, inv.before_value AS lost,
+              correction.before_value AS was, correction.after_value AS became,
+              decision.after_value AS provenance
+       FROM audit_events inv
+       JOIN LATERAL (
+         SELECT * FROM audit_events s WHERE s.transaction_id=inv.transaction_id
+           AND s.event='source_corrected' AND s.created_at<=inv.created_at
+         ORDER BY s.created_at DESC, s.id DESC LIMIT 1) correction ON true
+       LEFT JOIN LATERAL (
+         SELECT * FROM audit_events d WHERE d.transaction_id=inv.transaction_id
+           AND d.event='auto_classified' AND d.created_at<=inv.created_at
+         ORDER BY d.created_at DESC, d.id DESC LIMIT 1) decision ON true
+       JOIN transactions t ON t.id=inv.transaction_id
+       WHERE inv.event='auto_classification_invalidated' AND inv.actor='importer'
+         AND (t.kind='unresolved' OR t.provisional)
+         AND NOT EXISTS(SELECT 1 FROM audit_events h WHERE h.transaction_id=t.id
+                        AND h.event IN ('classified','refund_linked','refund_unlinked'))
+       ORDER BY inv.created_at`,
+    )
+  ).rows;
+  let restored = 0;
+  for (const row of rows) {
+    if (
+      !isSettlementOnly(
+        row.was as Record<string, unknown>,
+        row.became as Record<string, unknown>,
+      )
+    )
+      continue;
+    const lost = row.lost as Record<string, unknown> | null;
+    const kind = typeof lost?.kind === 'string' ? lost.kind : null;
+    if (!kind || kind === 'unresolved') continue;
+    const provenance = row.provenance as Record<string, unknown> | null;
+    const decided = (provenance?.provenance as Record<string, unknown>)
+      ?.decision as Record<string, unknown> | undefined;
+    const source = RESTORED_SOURCE[String(decided?.source ?? '')];
+    if (!source) continue;
+    const path = typeof lost?.category === 'string' ? lost.category : null;
+    const target = path
+      ? (
+          await tx.query(
+            'SELECT id FROM category_tree WHERE lower(category_path(id))=lower($1) LIMIT 1',
+            [path],
+          )
+        ).rows[0]
+      : undefined;
+    if (kind === 'personal_expense' && !target) continue;
+    await tx.query(
+      'UPDATE transactions SET kind=$1, category_id=$2, classification_source=$3, provisional=false WHERE id=$4',
+      [
+        kind,
+        target ? String(target.id) : null,
+        source,
+        String(row.transaction_id),
+      ],
+    );
+    await tx.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'migration','auto_classified',$3,$4,$5)`,
+      [
+        randomUUID(),
+        String(row.transaction_id),
+        JSON.stringify({ provisional: true }),
+        JSON.stringify({
+          kind,
+          category: path,
+          source,
+          provisional: false,
+        }),
+        'Restoring the decision a settling card hold discarded; the payment itself never changed',
+      ],
+    );
+    restored++;
+  }
+  return restored;
+}
+
+/**
+ * The three delivery platforms, which had been filed as eating out.
+ *
+ * Wolt, Bolt Food and Glovo bring food to the door; the tree has had
+ * `Food / Restaurants / Delivery` for exactly that since the reshape. They were
+ * filed under `Dining in` because the merchant code they send is a restaurant
+ * code — 5812, 5814, and for the delivery arms 5811 — and a code describes the
+ * business the money reached, which really is a restaurant. Only the merchant's
+ * name distinguishes the two, so no merchant-code table can tell them apart.
+ *
+ * Both leaves hang off `Food / Restaurants`, so no total moves; what changes is
+ * that the breakdown stops claiming the household ate out twenty-four times
+ * when it was ordering in. Payments a person has decided are left alone, and no
+ * standing rule is created: naming a merchant here is a correction to these
+ * payments, not a licence to answer every future one without being asked.
+ */
+export async function fileDeliveryPlatformsAsDelivery(
+  tx: Executor,
+): Promise<number> {
+  const target = (
+    await tx.query(
+      "SELECT id FROM category_tree WHERE slug='food.restaurants.delivery'",
+    )
+  ).rows[0];
+  if (!target) return 0;
+  const moved = await tx.query(
+    `UPDATE transactions t SET category_id=$1
+     WHERE t.kind='personal_expense'
+       AND t.category_id IS DISTINCT FROM $1
+       AND (t.description ILIKE 'Wolt' OR t.description ILIKE 'Wolt %'
+            OR t.description ILIKE 'Bolt Food%' OR t.description ILIKE 'Glovo%')
+       AND NOT EXISTS(SELECT 1 FROM audit_events a
+                      WHERE a.transaction_id=t.id AND a.event='classified')
+     RETURNING t.id`,
+    [String(target.id)],
+  );
+  for (const row of moved.rows) {
+    await tx.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'migration','auto_classified',$3,$4,$5)`,
+      [
+        randomUUID(),
+        String(row.id),
+        JSON.stringify({ category: 'Food / Restaurants / Dining in' }),
+        JSON.stringify({ categoryId: String(target.id) }),
+        'The merchant is a delivery platform, which its restaurant merchant code cannot show',
+      ],
+    );
+  }
+  return moved.rows.length;
 }

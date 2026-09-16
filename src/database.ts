@@ -46,6 +46,9 @@ import {
   migrateTags,
   rescueMigrationStrandedCatchAll,
   fileOwnerNamedMerchants,
+  placeRootCatchAllByMerchantCode,
+  restoreSettlementInvalidatedDecisions,
+  fileDeliveryPlatformsAsDelivery,
 } from './category-migration.js';
 import { createRuleMatchFunction } from './categories.js';
 import { initializeTelegram } from './telegram.js';
@@ -621,6 +624,66 @@ async function applyMigrations(db: Database): Promise<void> {
       // CURRENT". Rename it to something the owner recognises.
       await nameTheMultiCurrencyAccounts(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (41)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=42'))
+        .rows.length
+    ) {
+      // The owner opened their review queue and found a Rimi shop and an H&M
+      // purchase waiting on them. Both had already been categorised — Rimi by
+      // the model at 0.96, H&M by a rule the owner had confirmed themselves —
+      // and both were thrown away two days later when the card hold settled,
+      // because the importer read `hold: false` as the bank correcting its own
+      // evidence. It never was: across the whole ledger every re-import had
+      // changed nothing but the hold flag. The importer now says so, and this
+      // puts back the decisions that were lost while nobody has decided since.
+      //
+      // Six merchant codes join the map in the same change, so that payments
+      // the resting place could only leave on the catch-all — a photo shop, a
+      // florist, a guesthouse, an airport shop, a caterer, a paint shop — rest
+      // somewhere that says something about them instead.
+      // And the three delivery platforms, which the merchant code cannot tell
+      // apart from a restaurant because the money really does reach one. Both
+      // leaves hang off Food / Restaurants, so no total moves; the breakdown
+      // stops claiming the household ate out when it was ordering in.
+      await restoreSettlementInvalidatedDecisions(tx);
+      await placeRootCatchAllByMerchantCode(tx);
+      await fileDeliveryPlatformsAsDelivery(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (42)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=43'))
+        .rows.length
+    ) {
+      // Two of Katya's answers were consumed by the poller and vanished. Only
+      // the update number had been kept, so afterwards nobody could say which
+      // check had rejected them, the payments stayed unresolved and she was
+      // never told. What became of each message is recorded from now on.
+      // `initializeTelegram` adds these columns to a fresh database but is
+      // gated behind version 7, so an existing one needs them here.
+      await tx.query(
+        'ALTER TABLE telegram_updates ADD COLUMN IF NOT EXISTS outcome text',
+      );
+      await tx.query(
+        'ALTER TABLE telegram_updates ADD COLUMN IF NOT EXISTS detail text',
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (43)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=44'))
+        .rows.length
+    ) {
+      // A question is addressed to whoever's card was used, but the chat is
+      // shared and the owner settled what should happen when the other member
+      // answers: it counts, and which of them answered is recorded. Rows
+      // written before this are read as having been answered by the owner,
+      // which is what the old rule guaranteed. `initializeTelegram` adds the
+      // column to a fresh database but is gated behind version 7.
+      await tx.query(
+        `ALTER TABLE telegram_proposal_inputs ADD COLUMN IF NOT EXISTS answered_by text
+         CHECK(answered_by IN ('rodion','katya'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (44)');
     }
   });
 }

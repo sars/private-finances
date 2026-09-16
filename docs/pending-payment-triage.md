@@ -39,7 +39,38 @@ owner, account, source, date, amount, currency, description and provider evidenc
 are otherwise identical. The only provider-evidence exception is Monobank's exact
 `hold: true` to `hold: false` transition. No general metadata is ignored. Monetary,
 merchant, date or other evidence changes remain stale; human decisions are never
-rebased. Legacy questions without snapshots retain strict revision checks.
+rebased. Legacy questions without snapshots retain strict revision checks. A
+payment resting provisionally still has a live question, because a provisional
+placement is where the evidence pointed and not a decision; only a person's
+decision retires one.
+
+## A settling hold is not the bank correcting itself
+
+The same test decides whether a re-import may discard an automatic
+classification, and one function — `isSettlementOnly` in `src/domain.ts` — now
+answers it for both the importer and the question rebase, so the two can never
+drift apart.
+
+The importer used to compare the whole row, so `status` moving from pending to
+booked and `hold` from true to false counted as the bank correcting the evidence
+its classification had been built on. It discarded the classification and the
+payment fell back to whatever its merchant code alone implied, marked
+provisional, arriving in the owner's review queue as though nothing had ever
+decided it. That is what happened to a Rimi shop the model had placed at 0.96
+confidence and an H&M purchase an owner-confirmed rule had placed at 1.0.
+
+Every one of the thirty re-imports in the ledger's history was a settlement of
+this kind: not once had an amount, a currency, a description, a date or a
+merchant category actually moved. The rule had never caught a real provider
+correction and had only ever destroyed correct answers.
+
+A settlement is now recorded as its own audit event, `settled`, and leaves the
+classification standing. The test stays strict in the other direction: anything
+else that moves, including a key that was not there before, is `source_corrected`
+and still invalidates an automatic decision. Migration 42 restores the decisions
+already lost, reading each one out of the audit trail that recorded it, and only
+where no person has decided the payment since and no later automatic pass has
+already answered it.
 
 Migration 16 adds the column for existing databases as well as fresh installs.
 The migration is additive and initializes idempotently; old binaries tolerate the

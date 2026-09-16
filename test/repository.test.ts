@@ -254,3 +254,57 @@ test('pending settlement preserves decisions and source provenance without dupli
     await db.close();
   }
 });
+
+test('a card hold settling keeps the classification it already earned', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const repo = new Repository(db);
+    const hold = {
+      ...synthetic[0]!,
+      status: 'pending' as const,
+      sourceDetails: { mcc: 5411, hold: true, balance: 34355391 },
+    };
+    await repo.importBatch([hold]);
+    const t = (await repo.list())[0]!;
+    await db.query(
+      `UPDATE transactions SET kind='personal_expense',revision=revision+1,
+       category_id=(SELECT id FROM category_tree WHERE slug='food.groceries') WHERE id=$1`,
+      [t.id],
+    );
+    await db.query(
+      "INSERT INTO audit_events(id,transaction_id,actor,event,after_value,reason) VALUES('22222222-2222-4222-8222-222222222222',$1,'transaction_triage','auto_classified','{}','Synthetic automatic decision')",
+      [t.id],
+    );
+
+    // The bank publishes the same purchase again, now booked: nothing about the
+    // merchant, the amount or the merchant category moved, only the hold flag.
+    await repo.importBatch([
+      {
+        ...hold,
+        status: 'booked' as const,
+        sourceDetails: { mcc: 5411, hold: false, balance: 34355391 },
+      },
+    ]);
+    const settled = (await repo.list())[0]!;
+    assert.equal(settled.kind, 'personal_expense');
+    assert.equal(settled.category, 'Food / Groceries');
+    const history = await repo.history(t.id);
+    assert.ok(history.some((e) => e.event === 'settled'));
+    assert.ok(
+      !history.some((e) => e.event === 'auto_classification_invalidated'),
+    );
+
+    // A genuine correction arriving after settlement still invalidates.
+    await repo.importBatch([
+      {
+        ...hold,
+        status: 'booked' as const,
+        sourceDetails: { mcc: 5812, hold: false, balance: 34355391 },
+      },
+    ]);
+    assert.equal((await repo.list())[0]!.kind, 'unresolved');
+  } finally {
+    await db.close();
+  }
+});

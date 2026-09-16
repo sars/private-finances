@@ -83,6 +83,20 @@ async function applyProposedTags(
   ]);
   return wanted.map((tag) => tag.name);
 }
+/**
+ * Why a payment was classified, naming the household member who explained it.
+ *
+ * Either of them may answer any question in the shared chat, so the person who
+ * wrote the answer is not always the owner of the card. The payment is still
+ * decided as its owner — that is who is allowed to decide it — so without this
+ * the history would credit the wrong person.
+ */
+export function explanationReason(answeredBy: string, paymentOwner: string) {
+  return answeredBy === paymentOwner
+    ? 'Saved from the owner’s own explanation in Telegram'
+    : `Saved from ${answeredBy}’s explanation in Telegram, answering for ${paymentOwner}`;
+}
+
 function scoped(db: Executor): Database {
   return {
     query: (sql, params) => db.query(sql, params),
@@ -186,7 +200,8 @@ export class TelegramReplyWorkflow {
       );
       const row = (
         await tx.query(
-          `SELECT w.*,p.proposal,i.message_id AS input_message_id,t.description,t.owner AS current_owner,t.revision AS current_revision,t.kind AS current_kind,t.status AS current_status
+          `SELECT w.*,p.proposal,i.message_id AS input_message_id,coalesce(i.answered_by,i.owner) AS answered_by,
+          t.description,t.owner AS current_owner,t.revision AS current_revision,t.kind AS current_kind,t.status AS current_status
         FROM telegram_reply_workflows w JOIN classifier_proposals p ON p.id=w.proposal_id
         JOIN telegram_proposal_inputs i ON i.id=w.input_id JOIN transactions t ON t.id=w.transaction_id
         WHERE w.chat_id=$1 AND w.state='ready' ORDER BY w.created_at,w.id LIMIT 1 FOR UPDATE OF w,t`,
@@ -235,7 +250,13 @@ export class TelegramReplyWorkflow {
         {
           kind: proposal.kind,
           category: proposal.category,
-          reason: 'Saved from the owner\u2019s own explanation in Telegram',
+          // The payment is classified as its owner, because that is who may
+          // decide it; the household member who actually wrote the answer is
+          // named here so the payment's own history says so.
+          reason: explanationReason(
+            String(row.answered_by ?? row.owner),
+            String(row.owner),
+          ),
         },
         row.owner as Owner,
       );
@@ -307,7 +328,8 @@ export class TelegramReplyWorkflow {
       );
       const row = (
         await tx.query(
-          `SELECT w.*,i.message_id AS input_message_id,t.description,t.kind AS current_kind,t.category AS current_category
+          `SELECT w.*,i.message_id AS input_message_id,coalesce(i.answered_by,i.owner) AS answered_by,
+          t.description,t.kind AS current_kind,t.category AS current_category
         FROM telegram_reply_workflows w JOIN telegram_proposal_inputs i ON i.id=w.input_id
         JOIN transactions t ON t.id=w.transaction_id
         WHERE w.chat_id=$1 AND w.receipt_state='queued' ORDER BY w.created_at,w.id LIMIT 1 FOR UPDATE OF w SKIP LOCKED`,
@@ -322,7 +344,14 @@ export class TelegramReplyWorkflow {
       return row;
     });
     if (!item) return 'idle';
-    const message = `${item.owner}: ${await this.receiptText(item)}`;
+    // The payment's owner leads the line, and when the other member answered it
+    // says so, so the thread shows whose money it was and who explained it.
+    const answeredBy = String(item.answered_by ?? item.owner);
+    const who =
+      answeredBy === String(item.owner)
+        ? String(item.owner)
+        : `${String(item.owner)} (answered by ${answeredBy})`;
+    const message = `${who}: ${await this.receiptText(item)}`;
     try {
       // Answering the owner's own message keeps the thread readable; without a
       // recorded message to answer, it still has to be said, so it is sent.
@@ -382,7 +411,8 @@ export class TelegramReplyWorkflow {
         )
       ).rows[0];
       if (!row) return 'unmatched';
-      if (row.owner !== actor) return 'ignored';
+      // Either member may answer for the household, here as well as when the
+      // question was first asked; `actor` is only who spoke, not whose money.
       const action = String(message!.text).trim().toLowerCase();
       if (action !== 'confirm' && action !== 'reject') return 'ignored';
       const inserted = await tx.query(
@@ -410,7 +440,7 @@ export class TelegramReplyWorkflow {
       ).rows.length;
       if (
         !current ||
-        current.owner !== actor ||
+        current.owner !== row.owner ||
         Number(current.revision) !== Number(row.revision) ||
         current.kind !== 'unresolved' ||
         !['booked', 'pending'].includes(String(current.status)) ||
@@ -436,7 +466,7 @@ export class TelegramReplyWorkflow {
       const saved = (
         await tx.query(
           "SELECT proposal FROM classifier_proposals WHERE id=$1 AND owner=$2 AND transaction_id=$3 AND revision=$4 AND state='proposed'",
-          [row.proposal_id, actor, row.transaction_id, row.revision],
+          [row.proposal_id, row.owner, row.transaction_id, row.revision],
         )
       ).rows[0];
       if (!saved) return 'stale';
@@ -460,9 +490,11 @@ export class TelegramReplyWorkflow {
           kind: proposal.kind,
           category: proposal.category,
           reason:
-            'Owner explicitly confirmed the AI proposal by replying to its Telegram message',
+            actor === String(row.owner)
+              ? 'Owner explicitly confirmed the AI proposal by replying to its Telegram message'
+              : `${actor} explicitly confirmed the AI proposal in Telegram, answering for ${String(row.owner)}`,
         },
-        actor,
+        row.owner as Owner,
       );
       await tx.query(
         "UPDATE telegram_reply_workflows SET state='confirmed',receipt_state='queued' WHERE id=$1",

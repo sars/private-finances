@@ -1,7 +1,6 @@
-import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import type { Database, Executor, Row } from './database.js';
-import type { Owner } from './domain.js';
+import { isSettlementOnly, type Owner } from './domain.js';
 import type { ReportContent } from './reports.js';
 import { currencyExponent } from './fx.js';
 
@@ -264,6 +263,17 @@ export async function initializeTelegram(tx: Executor): Promise<void> {
   await tx.query(`CREATE TABLE IF NOT EXISTS telegram_updates (
     update_id bigint PRIMARY KEY,received_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // What became of each message a household member sent us. Two of Katya's
+  // answers were consumed by the poller on 15 September 2026, matched nothing,
+  // and vanished leaving only an update number: the payments stayed unresolved,
+  // she was never told, and afterwards no one could say which check had
+  // rejected them. The reason is recorded here so the next one is answerable.
+  await tx.query(
+    'ALTER TABLE telegram_updates ADD COLUMN IF NOT EXISTS outcome text',
+  );
+  await tx.query(
+    'ALTER TABLE telegram_updates ADD COLUMN IF NOT EXISTS detail text',
+  );
   await tx.query(`CREATE TABLE IF NOT EXISTS telegram_proposal_inputs (
     id uuid PRIMARY KEY,outbox_id uuid NOT NULL REFERENCES telegram_outbox(id),
     update_id bigint NOT NULL UNIQUE REFERENCES telegram_updates(update_id),
@@ -271,6 +281,15 @@ export async function initializeTelegram(tx: Executor): Promise<void> {
     status text NOT NULL DEFAULT 'pending' CHECK(status='pending'),
     created_at timestamptz NOT NULL DEFAULT now()
   )`);
+  // `owner` is whose payment the question was about; `answered_by` is who
+  // actually typed the answer. The chat is shared and either member may answer
+  // any question in it, because either of them may genuinely know what a
+  // payment was for — but which of them did is worth keeping. Rows written
+  // before this have none and are read as having been answered by the owner.
+  await tx.query(
+    `ALTER TABLE telegram_proposal_inputs ADD COLUMN IF NOT EXISTS answered_by text
+     CHECK(answered_by IN ('rodion','katya'))`,
+  );
   // The owner's own message, so the bot can react to it and answer it in
   // place. Rows written before this have none, and are answered without a
   // reply target rather than being repaired.
@@ -302,23 +321,17 @@ export async function rebasePendingQuestion(
   if (question.owner !== current.owner) return false;
   if (Number(question.revision) === Number(current.revision)) return true;
   const before = question.payment_snapshot as Record<string, unknown> | null;
+  // A provisional placement is where the evidence pointed, not a decision, so a
+  // question about it is still live; only a person's decision retires one.
   if (
     !before ||
     before.status !== 'pending' ||
     current.status !== 'booked' ||
-    current.kind !== 'unresolved'
+    (current.kind !== 'unresolved' && current.provisional !== true)
   )
     return false;
   const after = paymentSnapshot(current);
-  const old = structuredClone(before);
-  old.status = 'booked';
-  if (old.source === 'monobank') {
-    const details = old.sourceDetails as Record<string, unknown>;
-    const nextDetails = after.sourceDetails as Record<string, unknown>;
-    if (details.hold === true && nextDetails.hold === false)
-      details.hold = false;
-  }
-  if (!isDeepStrictEqual(old, after)) return false;
+  if (!isSettlementOnly(before, after)) return false;
   const human = await tx.query(
     "SELECT 1 FROM audit_events WHERE transaction_id=$1 AND event IN ('classified','refund_linked','refund_unlinked') LIMIT 1",
     [current.id],
@@ -567,36 +580,62 @@ export class TelegramClarifications {
         [update!.update_id],
       );
       if (!inserted.rows.length) return 'duplicate';
+      // Whatever happens below, say so on the row: an answer that reaches
+      // nothing must not disappear leaving only its update number behind.
+      const settle = async (
+        outcome: 'accepted' | 'ignored' | 'stale',
+        detail: string,
+      ) => {
+        await tx.query(
+          'UPDATE telegram_updates SET outcome=$2,detail=$3 WHERE update_id=$1',
+          [update!.update_id, outcome, detail],
+        );
+        return outcome;
+      };
+      // Any member of the household may answer any question in the shared chat;
+      // the question is addressed to the card's owner but the other one may
+      // well know what the payment was. Who answered is recorded rather than
+      // being a reason to throw the answer away.
       const row = (
         await tx.query(
-          "SELECT * FROM telegram_outbox WHERE chat_id=$1 AND message_id=$2 AND owner=$3 AND state='sent'",
-          [this.settings.chatId, reply!.message_id, actor],
+          "SELECT * FROM telegram_outbox WHERE chat_id=$1 AND message_id=$2 AND state='sent'",
+          [this.settings.chatId, reply!.message_id],
         )
       ).rows[0];
-      if (!row) return 'ignored';
+      if (!row)
+        return settle(
+          'ignored',
+          'the message replied to is not an open question',
+        );
       const current = (
         await tx.query('SELECT * FROM transactions WHERE id=$1 FOR UPDATE', [
           row.transaction_id,
         ])
       ).rows[0];
-      if (
-        !current ||
-        current.owner !== actor ||
-        !(await rebasePendingQuestion(tx, row, current))
-      )
-        return 'stale';
+      if (!current) return settle('stale', 'the payment no longer exists');
+      if (current.owner !== row.owner)
+        return settle('stale', 'the question no longer matches the payment');
+      if (!(await rebasePendingQuestion(tx, row, current)))
+        return settle(
+          'stale',
+          `the payment moved on from revision ${String(row.revision)} to ${String(current.revision)} before the answer arrived`,
+        );
       await tx.query(
-        'INSERT INTO telegram_proposal_inputs(id,outbox_id,update_id,owner,input_text,message_id) VALUES($1,$2,$3,$4,$5,$6)',
+        'INSERT INTO telegram_proposal_inputs(id,outbox_id,update_id,owner,answered_by,input_text,message_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
         [
           randomUUID(),
           row.id,
           update!.update_id,
+          String(row.owner),
           actor,
           message!.text,
           positiveId(message?.message_id) ? message!.message_id : null,
         ],
       );
-      return 'accepted';
+      return settle(
+        'accepted',
+        `${actor} answered for ${String(row.owner)}; linked to payment ${String(row.transaction_id)}`,
+      );
     });
   }
   async history(actor: Owner): Promise<Array<Record<string, unknown>>> {
@@ -604,6 +643,7 @@ export class TelegramClarifications {
     return (
       await this.db.query(
         `SELECT p.id,p.input_text,p.status,p.created_at,o.transaction_id,o.revision,
+          coalesce(p.answered_by,p.owner) AS answered_by,
           w.state AS workflow_state,t.description AS transaction_description
         FROM telegram_proposal_inputs p
         JOIN telegram_outbox o ON o.id=p.outbox_id

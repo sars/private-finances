@@ -9,14 +9,15 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**840540234b4e6d8bbd19544ba32d53fccb71e39f**, live since September 16, 2026 at
-schema version 38, deployed with `deploy/release.sh` over
-`22911d217b2c7a81c6372a1f3e3cfe35ec2499eb`. Both `private-finances.service` and
-`private-finances-telegram.service` are active and the ledger holds 4,085
-transactions. Its migration was rehearsed first on a restored copy of the real
-database, which reached schema 38 in 28 milliseconds with the transaction count
-unchanged, 140 refund links still active, no expense without a category and
-nothing filed on a heading.
+**b50918e354a05b080ae0f2dd8b384485c186c6cc**, live since September 16, 2026 at
+schema version 41, and the head of `origin/main`. Observed on the server rather
+than reconstructed: both `private-finances.service` and
+`private-finances-telegram.service` are active, eight timers are running, Node is
+24.15.0, and the ledger holds 4,139 transactions with 140 active refund links and
+no expense left without a category. The three releases between schema 38 and 41
+were deployed without this section being rewritten; it is corrected here from the
+running host, and the paragraph below still describes release 840540 rather than
+the two after it.
 
 This release changes what the household browsing defaults hide. The first
 preference hid a payment for the account it sat on, which the application stopped
@@ -188,6 +189,80 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# A settling card hold stops discarding the answer — September 16, 2026
+
+Schema versions 42 to 44.
+
+The owner opened Review and found a Rimi shop and an H&M purchase waiting on
+them, and asked why the system could not have been sure about either. It had
+been. Both were categorised within ten seconds of import on 13 September — Rimi
+as `Food / Groceries` by the model at 0.96 confidence, H&M as `Clothes` by a rule
+the owner had confirmed themselves — and both were thrown away two days later
+when the Monobank sync ran and the card holds had settled.
+
+The importer compared the whole row, so `status` moving from pending to booked
+and `hold` from true to false read as the bank correcting the evidence the
+classification rested on. Nothing else had moved: same merchant, same amount,
+same date, same merchant category. Across the ledger's whole history all thirty
+re-imports were settlements of exactly this kind, so the rule had never once
+caught a real provider correction and had only ever destroyed correct answers.
+
+`isSettlementOnly` in `src/domain.ts` now decides this, and the pending-question
+rebase uses the same function instead of its own copy so the two cannot drift. A
+settlement is recorded as its own `settled` audit event and leaves the
+classification standing; anything else that moves, including a key that was not
+there before, is still `source_corrected` and still invalidates. Migration 42
+restores what was lost. Read against the production database, it will restore
+exactly two payments — the Rimi shop and the H&M purchase the owner was looking
+at — because the other eighteen had already been re-answered by a later
+automatic pass.
+
+Six merchant codes join `MCC_CATEGORY`: photography supplies, florists,
+campgrounds, duty free, caterers and paint shops. Seventeen payments move off the
+root catch-all, including two of the eight TEMPUSS FOTO payments the owner asked
+about; the other six carry a `human` classification from the 12 September
+reference import and are left alone. Codes whose business does not imply a single
+household purpose were deliberately left out, so 237 payments on the catch-all
+become 220 rather than something better — 115 of those remaining are transfers to
+people, which rest there by design under ADR 0008.
+
+Twenty-four payments to Wolt, Bolt Food and Glovo move from
+`Food / Restaurants / Dining in` to the `Delivery` leaf. The merchant code cannot
+tell the two apart because the money really does reach a restaurant; only the
+name distinguishes ordering in from sitting down. Both leaves hang off the same
+branch, so no total changes.
+
+Separately, two of Katya's Telegram answers were consumed by the poller on
+15 September, matched nothing, and vanished leaving only an update number: the
+payments stayed unresolved, she was never told, and afterwards nobody could say
+which check had rejected them. Schema 43 records the `outcome` and a short
+`detail` on `telegram_updates` for every message a household member sends, and
+the poller writes a `telegram_reply_discarded` line to its log. Telling the
+person in the chat that their answer did not land is **not** implemented: the
+outbox carries a question about a payment and has no way to hold a loose note.
+
+Schema 44 removes what was almost certainly the cause. A question is addressed
+to the owner of the card, and a reply used to be matched only against questions
+addressed to the person who wrote it, so an answer from the other member matched
+nothing at all. The owner settled the point — "other members can answer and it
+is fine. But better to record who answered" — so either of them may now answer
+any question in the shared chat, or confirm any suggestion, and
+`telegram_proposal_inputs.answered_by` keeps which of them did. The payment is
+still classified as its owner, because that is who may decide it and the
+dashboard's authorisation rests on it; the person who explained it is named in
+the payment's audit trail, in the reply history and in the chat, where the
+confirmation reads `rodion (answered by katya):`. Rows written before this are
+read as answered by the owner, which is what the old rule guaranteed.
+
+Two things were found and deliberately not changed. Twelve ATM withdrawals sit as
+personal expenses on the catch-all while two identical `Банкомат DN00`
+withdrawals are filed `non_personal` — all of them below the roughly 40,000 UAH
+threshold at which the owner said a withdrawal is an internal transfer, so the
+rule as stated does not settle them. And GymBeam carries two of the owner's own
+decisions that disagree with each other, one `Food / Groceries` and one
+`Sport / Unspecified`; picking a side is theirs to do.
+
 
 # A rule can match part of a description — September 15, 2026
 

@@ -10,6 +10,54 @@ what was saved — the payment, its type, its category, any tags — and a link 
 the payment so a wrong answer can be corrected in one click. When nothing could
 be saved it reacts 👀 and the reply says why.
 
+## An answer that reaches nothing
+
+That is the path for an answer the application accepted. An answer it never
+accepted used to leave no trace at all. On 15 September 2026 two of Katya's
+replies were consumed by the poller a couple of hours after the questions went
+out; the cursor advanced, no proposal input was created, the two payments stayed
+unresolved, and she was never told. Afterwards nobody could say which check had
+rejected them, because the only thing kept was the update number.
+
+`telegram_updates` now carries the `outcome` and a short `detail` for every
+message a household member sends the bot, written inside the same transaction
+that consumes it: which payment an accepted answer was linked to, or why a
+discarded one reached nothing — that the message replied to is not an open
+question, that the person answered a question addressed to the other member, or
+that the payment moved on between the question and the answer. The poller also
+writes a `telegram_reply_discarded` line to its log, so a lost answer shows up in
+`journalctl` rather than only under inspection.
+
+Telling the person in the chat that their answer did not land is still not
+implemented: the outbox holds a question about a payment and has no way to carry
+a loose note.
+
+## Either member may answer, and the answer records who did
+
+That was the most likely cause of the two lost answers: the question is
+addressed to the owner of the card, and a reply used to be matched only against
+questions addressed to the person who wrote it, so an answer from the other
+member matched nothing. The owner settled it — "other members can answer and it
+is fine. But better to record who answered."
+
+So any household member may answer any question in the shared chat, and the
+answer is applied exactly as if the addressee had written it. The chat is shared
+because the household is the unit, and either of them may genuinely know what a
+payment was for. The same now holds for confirming or rejecting a suggestion.
+
+The two identities are kept apart rather than collapsed.
+`telegram_proposal_inputs.owner` is whose payment the question was about;
+`answered_by` is who typed the answer. The payment is still classified **as its
+owner**, because that is who is allowed to decide it and the dashboard's
+authorisation rests on it — widening that is a separate decision and was not
+made here. What changes is that the person who explained it is named where it
+matters: in the payment's own audit trail ("Saved from katya's explanation in
+Telegram, answering for rodion"), in the reply history the dashboard shows, and
+in the chat, where the confirmation reads `rodion (answered by katya):` instead
+of just `rodion:`. When the owner answered their own question nothing extra is
+said. Rows written before schema 44 have no `answered_by` and are read as having
+been answered by the owner, which is what the old rule guaranteed.
+
 Applying without asking is safe because of what is checked first, inside the
 same transaction that writes the decision: the payment must still belong to
 that owner, still be at the revision the answer was about, still be unresolved,

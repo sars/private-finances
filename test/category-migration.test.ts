@@ -367,3 +367,289 @@ test('version 35 repairs human decisions the migration flattened onto the root c
     await db.close();
   }
 });
+
+/**
+ * Version 42: the two repairs that follow from the importer no longer reading a
+ * settled card hold as the bank correcting itself.
+ */
+test('version 42 restores decisions a settling hold discarded, and reads the new merchant codes', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const repo = new Repository(db);
+
+    // Two payments that a card hold settled under. One had been categorised by
+    // a rule the owner confirmed, the other by the model; the importer threw
+    // both away and they fell back to the catch-all, provisional.
+    const lost: Array<{ id: string; path: string; source: string }> = [];
+    for (const [sourceId, path, source] of [
+      ['settled-rule', 'Clothes', 'confirmed_rule'],
+      ['settled-model', 'Food / Groceries', 'model_cache'],
+    ] as const) {
+      await repo.importBatch([
+        {
+          source: 'synthetic',
+          sourceId,
+          accountId: 'rodion-uah',
+          owner: 'rodion',
+          bookedAt: '2026-09-13T12:00:00.000Z',
+          currency: 'UAH',
+          amountMinor: '-6296',
+          description: sourceId,
+          status: 'booked',
+          sourceDetails: { mcc: 5651, hold: false },
+        },
+      ]);
+      const id = String(
+        (
+          await db.query('SELECT id FROM transactions WHERE source_id=$1', [
+            sourceId,
+          ])
+        ).rows[0]!.id,
+      );
+      lost.push({ id, path, source });
+      await db.query(
+        `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+         VALUES($1,$2,'transaction_triage','auto_classified','{}',$3,'Automatic decision')`,
+        [
+          randomUUID(),
+          id,
+          JSON.stringify({ provenance: { decision: { source } } }),
+        ],
+      );
+      await db.query(
+        `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+         VALUES($1,$2,'importer','source_corrected',$3,$4,'Source import')`,
+        [
+          randomUUID(),
+          id,
+          JSON.stringify({ status: 'pending', sourceDetails: { hold: true } }),
+          JSON.stringify({ status: 'booked', sourceDetails: { hold: false } }),
+        ],
+      );
+      await db.query(
+        `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+         VALUES($1,$2,'importer','auto_classification_invalidated',$3,'{}','Bank corrected the evidence used by automatic classification')`,
+        [
+          randomUUID(),
+          id,
+          JSON.stringify({ kind: 'personal_expense', category: path }),
+        ],
+      );
+      await db.query(
+        `UPDATE transactions SET kind='personal_expense', provisional=true,
+         classification_source='default',
+         category_id=(SELECT id FROM category_tree WHERE slug='unspecified') WHERE id=$1`,
+        [id],
+      );
+    }
+
+    // A payment nothing could read until 5946 joined the merchant-code map.
+    await repo.importBatch([
+      {
+        source: 'synthetic',
+        sourceId: 'photo-shop',
+        accountId: 'katya-uah',
+        owner: 'katya',
+        bookedAt: '2026-09-14T11:00:00.000Z',
+        currency: 'UAH',
+        amountMinor: '-6240',
+        description: 'A photo shop',
+        status: 'booked',
+        sourceDetails: { mcc: 5946, hold: false },
+      },
+    ]);
+    const photo = String(
+      (
+        await db.query(
+          "SELECT id FROM transactions WHERE source_id='photo-shop'",
+        )
+      ).rows[0]!.id,
+    );
+    await db.query(
+      `UPDATE transactions SET kind='personal_expense', provisional=true,
+       classification_source='default',
+       category_id=(SELECT id FROM category_tree WHERE slug='unspecified') WHERE id=$1`,
+      [photo],
+    );
+
+    await db.query('DELETE FROM schema_versions WHERE version=42');
+    await migrate(db);
+
+    for (const { id, path, source } of lost) {
+      const row = (
+        await db.query('SELECT * FROM transactions WHERE id=$1', [id])
+      ).rows[0]!;
+      assert.equal(row.category, path, `${path} was not restored`);
+      assert.equal(row.provisional, false);
+      assert.equal(
+        row.classification_source,
+        source === 'confirmed_rule' ? 'rule' : 'model',
+      );
+    }
+
+    const placed = (
+      await db.query('SELECT * FROM transactions WHERE id=$1', [photo])
+    ).rows[0]!;
+    assert.equal(placed.category, 'Entertainment / Hobbies');
+    assert.equal(placed.classification_source, 'mcc');
+    // A merchant code is evidence about the shop, not proof about the purchase,
+    // so it still owes the owner a review.
+    assert.equal(placed.provisional, true);
+  } finally {
+    await db.close();
+  }
+});
+
+test('version 42 leaves alone a payment a person decided, or one already re-answered', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const repo = new Repository(db);
+    await repo.importBatch([
+      {
+        source: 'synthetic',
+        sourceId: 'owner-decided',
+        accountId: 'rodion-uah',
+        owner: 'rodion',
+        bookedAt: '2026-09-13T12:00:00.000Z',
+        currency: 'UAH',
+        amountMinor: '-6296',
+        description: 'Decided by a person',
+        status: 'booked',
+        sourceDetails: { mcc: 5651, hold: false },
+      },
+    ]);
+    const id = String(
+      (
+        await db.query(
+          "SELECT id FROM transactions WHERE source_id='owner-decided'",
+        )
+      ).rows[0]!.id,
+    );
+    for (const [event, after, reason] of [
+      [
+        'auto_classified',
+        JSON.stringify({ provenance: { decision: { source: 'model' } } }),
+        'Automatic decision',
+      ],
+      [
+        'source_corrected',
+        JSON.stringify({ status: 'booked', sourceDetails: { hold: false } }),
+        'Source import',
+      ],
+      ['classified', '{}', 'The owner decided this themselves'],
+    ] as const) {
+      await db.query(
+        `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+         VALUES($1,$2,'rodion',$3,$4,$5,$6)`,
+        [
+          randomUUID(),
+          id,
+          event,
+          JSON.stringify({ status: 'pending', sourceDetails: { hold: true } }),
+          after,
+          reason,
+        ],
+      );
+    }
+    await db.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'importer','auto_classification_invalidated',$3,'{}','Bank corrected the evidence used by automatic classification')`,
+      [
+        randomUUID(),
+        id,
+        JSON.stringify({ kind: 'personal_expense', category: 'Clothes' }),
+      ],
+    );
+    await db.query(
+      `UPDATE transactions SET kind='personal_expense', provisional=false,
+       classification_source='human',
+       category_id=(SELECT id FROM category_tree WHERE slug='pets') WHERE id=$1`,
+      [id],
+    );
+
+    await db.query('DELETE FROM schema_versions WHERE version=42');
+    await migrate(db);
+
+    const row = (await db.query('SELECT * FROM transactions WHERE id=$1', [id]))
+      .rows[0]!;
+    assert.equal(row.category, 'Pets');
+    assert.equal(row.classification_source, 'human');
+  } finally {
+    await db.close();
+  }
+});
+
+test('version 42 files the delivery platforms as delivery, but not one a person decided', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const repo = new Repository(db);
+    const order = (sourceId: string, description: string, mcc: number) => ({
+      source: 'synthetic' as const,
+      sourceId,
+      accountId: 'rodion-uah',
+      owner: 'rodion' as const,
+      bookedAt: '2026-09-10T18:00:00.000Z',
+      currency: 'UAH',
+      amountMinor: '-45000',
+      description,
+      status: 'booked' as const,
+      sourceDetails: { mcc, hold: false },
+    });
+    await repo.importBatch([
+      order('wolt', 'Wolt', 5812),
+      order('bolt-food', 'Bolt Food', 5811),
+      order('glovo-decided', 'Glovo', 5811),
+      // A restaurant that merely starts with the same letters must not move.
+      order('woltair', 'Woltair heating', 5812),
+    ]);
+    const idOf = async (sourceId: string) =>
+      String(
+        (
+          await db.query('SELECT id FROM transactions WHERE source_id=$1', [
+            sourceId,
+          ])
+        ).rows[0]!.id,
+      );
+    for (const sourceId of ['wolt', 'bolt-food', 'glovo-decided', 'woltair']) {
+      await db.query(
+        `UPDATE transactions SET kind='personal_expense',
+         category_id=(SELECT id FROM category_tree WHERE slug='food.restaurants.dining')
+         WHERE source_id=$1`,
+        [sourceId],
+      );
+    }
+    await db.query(
+      `INSERT INTO audit_events(id,transaction_id,actor,event,before_value,after_value,reason)
+       VALUES($1,$2,'rodion','classified','{}','{}','The owner decided this themselves')`,
+      [randomUUID(), await idOf('glovo-decided')],
+    );
+
+    await db.query('DELETE FROM schema_versions WHERE version=42');
+    await migrate(db);
+
+    const categoryOf = async (sourceId: string) =>
+      String(
+        (
+          await db.query(
+            'SELECT category FROM transactions WHERE source_id=$1',
+            [sourceId],
+          )
+        ).rows[0]!.category,
+      );
+    assert.equal(await categoryOf('wolt'), 'Food / Restaurants / Delivery');
+    assert.equal(
+      await categoryOf('bolt-food'),
+      'Food / Restaurants / Delivery',
+    );
+    assert.equal(
+      await categoryOf('glovo-decided'),
+      'Food / Restaurants / Dining in',
+    );
+    assert.equal(await categoryOf('woltair'), 'Food / Restaurants / Dining in');
+  } finally {
+    await db.close();
+  }
+});
