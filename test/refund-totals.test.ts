@@ -218,7 +218,10 @@ test('a screen that adds up the counted rows arrives at the headline total', asy
         .reduce((total, row) => total - BigInt(pick(row) ?? '0'), 0n)
         .toString();
 
-    assert.equal(sum((row) => row.netAmountMinor), uah.confirmedMinor);
+    assert.equal(
+      sum((row) => row.netAmountMinor),
+      uah.confirmedMinor,
+    );
     assert.equal(
       sum((row) => row.netAmountMinor),
       uah.monthly
@@ -227,7 +230,10 @@ test('a screen that adds up the counted rows arrives at the headline total', asy
     );
     // And the reason the distinction matters: before refunds this is the whole
     // 936.39, which is 93,639 more than the household actually spent.
-    assert.equal(sum((row) => row.convertedAmountMinor), '93639');
+    assert.equal(
+      sum((row) => row.convertedAmountMinor),
+      '93639',
+    );
     assert.equal(uah.confirmedMinor, '754');
   } finally {
     await db.close();
