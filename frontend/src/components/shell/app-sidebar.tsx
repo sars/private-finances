@@ -10,6 +10,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
@@ -17,9 +18,12 @@ import { visibleGroups } from './navigation';
 
 export function AppSidebar({
   isAdmin,
+  counts = {},
   footer,
 }: {
   isAdmin: boolean;
+  /** A number beside a screen's name, by href: what is waiting there. */
+  counts?: Record<string, number | undefined>;
   footer?: ReactNode;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -59,6 +63,11 @@ export function AppSidebar({
                       <Icon />
                       <span>{label}</span>
                     </SidebarMenuButton>
+                    {counts[href] ? (
+                      <SidebarMenuBadge className="rounded-full bg-primary/10 text-primary">
+                        {counts[href]}
+                      </SidebarMenuBadge>
+                    ) : null}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

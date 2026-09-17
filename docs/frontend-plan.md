@@ -210,3 +210,29 @@ Recharts leaves the entry chunk.
   token, the account chip's tones onto the neutrals and chart series, and
   `check_frontend.py` refuses any palette class outside `components/ui` so the
   colour rule is enforced rather than remembered. The plan is complete.
+
+## After the plan: review and transactions become two screens
+
+Agreed with the owner on September 17, 2026, after the plan closed. Reviewing
+is one task and browsing is another, so they get their own screens, both
+reading the paged `/api/transactions` endpoint (see [performance](performance.md))
+through one virtualised list, and both showing the household with a "Whose"
+filter. The payment itself splits the same way: a review page that leads with
+the decision, and a view page that leads with the facts.
+
+- Step 1, merged as PR #30: the endpoint pages, filters and counts in SQL;
+  the 3,000 UAH priority is retired everywhere.
+- Step 2: `/review` is the review list — only payments still waiting for a
+  decision, the signed-in member's by default, a search box, no period and no
+  visibility toggles (none of them can change a review list). Rows are
+  `PaymentRow` on `PagedList`: the account badge with its holder, the day and
+  the clock time where the bank gives one, account, category, what it cost,
+  and the facts as badges. The sidebar and the phone tab bar carry the count
+  of what waits for the signed-in member. Explanations and AI history stay as
+  tabs here and are fetched only when opened. The payment page under
+  `/review?id=` is unchanged until step 4.
+- Step 3: `/transactions`, the browsing list, with the period picker and the
+  full filter panel; Analytics drill links land here.
+- Step 4: the payment page split into `/review/:id` (decision first, saved
+  explanations inside the decision block) and `/transactions/:id` (facts,
+  receipt, refunds, bank record without the cashback line, decision history).

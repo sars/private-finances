@@ -5,7 +5,12 @@ import { cn } from '@/lib/utils';
 import { tabScreens } from './navigation';
 
 /** Bottom navigation on the phone: the four everyday screens, then everything. */
-export function TabBar() {
+export function TabBar({
+  counts = {},
+}: {
+  /** A number on a tab, by href: what is waiting there. */
+  counts?: Record<string, number | undefined>;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { setOpenMobile } = useSidebar();
   const item =
@@ -27,7 +32,14 @@ export function TabBar() {
               active ? 'text-primary' : 'text-muted-foreground',
             )}
           >
-            <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} />
+            <span className="relative">
+              <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} />
+              {counts[href] ? (
+                <span className="absolute -top-1.5 -right-3 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground tabular-nums">
+                  {counts[href]! > 99 ? '99+' : counts[href]}
+                </span>
+              ) : null}
+            </span>
             {label === 'Spending analytics' ? 'Analytics' : label}
           </a>
         );
