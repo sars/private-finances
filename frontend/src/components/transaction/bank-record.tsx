@@ -100,13 +100,10 @@ export function BankRecord({
   const hasParty = Boolean(
     party.name || party.iban || party.card || party.bank,
   );
+  // Cashback is left out on purpose: it says nothing about what was bought,
+  // and the complete field list below still carries it.
   const hasAnything =
-    hasParty ||
-    s.originalAmount ||
-    s.purpose ||
-    s.mcc ||
-    s.cashback ||
-    s.bankTransactionType;
+    hasParty || s.originalAmount || s.purpose || s.mcc || s.bankTransactionType;
   return (
     <section
       aria-label={cash ? 'Payment record' : 'Bank record'}
@@ -172,11 +169,6 @@ export function BankRecord({
                   {party.bankSource}
                 </span>
               )}
-            </Fact>
-          )}
-          {s.cashback && (
-            <Fact icon={Hash} label="Cashback">
-              {s.cashback}
             </Fact>
           )}
           {s.bankTransactionType && (

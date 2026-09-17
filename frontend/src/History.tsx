@@ -75,9 +75,13 @@ export default function History() {
   }, [refresh, id]);
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-8">
-      <Button variant="ghost" className="-ml-3" render={<a href="/" />}>
+      <Button
+        variant="ghost"
+        className="-ml-3"
+        render={<a href={`/transactions/${encodeURIComponent(id ?? '')}`} />}
+      >
         <ArrowLeft className="size-4" />
-        Back to overview
+        Back to the payment
       </Button>
       <PageHeader
         title="Decision history"

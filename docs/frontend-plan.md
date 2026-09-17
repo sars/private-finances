@@ -240,6 +240,12 @@ the decision, and a view page that leads with the facts.
   reset. Choosing a type the household hides shows it. Analytics drill links
   land here with the member, period and category prefix. Add cash expense
   lives here, not on Review.
-- Step 4: the payment page split into `/review/:id` (decision first, saved
-  explanations inside the decision block) and `/transactions/:id` (facts,
-  receipt, refunds, bank record without the cashback line, decision history).
+- Step 4: the payment page split in two. The review page stays at
+  `/review?id=` so Telegram's links keep working; its decision block is the
+  left, widest column, with what has been said so far inside it above the
+  explanation box, and the evidence — receipt, refunds, the bank record —
+  beside it. The payment page is `/transactions/:id`: the same header (with
+  whose account it is), explanations when there are any, receipt, refunds,
+  the bank record on the right without its cashback line, and Decision
+  history and Review this payment in the header. Decision history's back link
+  returns to the payment page.
