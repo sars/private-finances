@@ -9,9 +9,23 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**943f05ae213589ded422212ba2ec2098844e0f62**, live since September 17, 2026 at
-schema version 45, deployed with `deploy/release.sh` as the ninth release that
-day. Its migration adds only indexes and was rehearsed first on a restored copy
+**b947646947271a9fe9ea7aca51264b43640397b7**, live since September 17, 2026 at
+schema version 47, deployed with `deploy/release.sh` as the tenth release that
+day. Its two migrations (the Swedbank account is called `Swedbank`; an
+explanation records who answered) were rehearsed first on a restored copy of the
+real database, which reached schema 47 in 27 milliseconds with 4,140
+transactions, 140 active refund links, no expense without a category and
+nothing filed on a heading; the full suite passed on the server first (542
+tests). After the switch both services were active, the ledger holds 4,140
+transactions, the logs show no error and the Swedbank row reads `Swedbank`. It
+carries the owner's first-look polish (PR #35), the rule that either member may
+open and decide the other's payment in the app with the record naming who did
+(PRs #36 and #37), and the refund filter that lists purchases rather than the
+money back. See the entry below.
+
+The release before it, **943f05ae213589ded422212ba2ec2098844e0f62**, went live
+on September 17, 2026 at schema version 45 as the ninth release that day. Its
+migration adds only indexes and was rehearsed first on a restored copy
 of the real database, which reached schema 45 in 97 milliseconds with 4,139
 transactions, 140 active refund links, no expense without a category and
 nothing filed on a heading. After the switch both services were active, the
@@ -242,6 +256,36 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# Either member decides, and the lists take their first polish — September 17, 2026
+
+Schema version 47, deployed as `b947646947271a9fe9ea7aca51264b43640397b7`.
+
+The owner's first look at the split screens found one gap in the rule and a
+dozen rough edges. The gap: Katya's payments appeared on the review list but
+her payment page said "not available", because every read and action was scoped
+to the signed-in member. PR #36 resolves the payment's owner from the payment
+itself for the detail read, the bank record, refund candidates, classify, tags,
+spending pattern, refund link and unlink, the Telegram question and the saved
+explanation, while the audit records the member who signed in — the same rule
+Telegram already followed. Migration 47 gives an explanation an `answered_by`
+column for that record; migration 46 renames the one Swedbank account to
+`Swedbank`. `test/household-review.test.ts` does every action on Katya's payment
+as Rodion and checks who is recorded where. PR #37 offers the routine or
+exceptional toggle on the other member's payment too.
+
+The refund filter lists purchases that were refunded, not the money-in credits.
+
+The polish (PR #35): the period picker is one button with presets and a
+calendar range picker, one month in a bottom sheet on the phone; list rows open
+the payment by tapping the row on the phone and lose their History link; a
+refunded row shows the net figure only; the amount bounds sit on one line; the
+payment pages fold their secondary actions behind one button on the phone; the
+header card is two columns on desktop; the mobile menu closes when a screen is
+chosen; the "Go to" command menu is gone; the Receipts screen says one sentence.
+
+Verified after the switch: both services active, 4,140 transactions, no error
+in either log, schema 47, the Swedbank row renamed.
 
 # Review and Transactions become two screens — September 17, 2026
 
