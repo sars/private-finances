@@ -191,7 +191,7 @@ Recharts leaves the entry chunk.
   (one `text-lg` title line, one sentence, actions right) instead of its own
   eyebrow-and-3xl heading, and cards sit on the design scale (`rounded-lg`,
   `shadow-xs`) throughout.
-- Stage 5, second pass: built. The filter rows on Currency conversion,
+- Stage 5, second pass: deployed as `eedcc32` on September 17. The filter rows on Currency conversion,
   Reports and Bank connections use `FilterBar`/`Field`, and Currency's two
   date inputs became the `PeriodPicker`, so no screen writes a date input by
   hand any more. Home lost its dead `analytics` branch — Analytics has been
