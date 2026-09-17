@@ -14,8 +14,10 @@ export interface TelegramConfig {
    */
   publicOrigin?: string;
 }
-/** Reactions the bot is allowed to leave; Telegram rejects arbitrary emoji. */
-export type TelegramReaction = '👍' | '👀' | '🙌' | null;
+/** Reactions the bot is allowed to leave. Telegram accepts only a fixed set
+ * of emoji from a bot and answers REACTION_INVALID to anything else; 🙌 was
+ * in this list until 18 September 2026 and never once landed. */
+export type TelegramReaction = '👍' | '👀' | null;
 export interface TelegramTransport {
   send(
     chatId: string,
