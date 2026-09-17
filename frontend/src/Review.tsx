@@ -3,6 +3,8 @@ import { apiGet, useSession, invalidateFinancialData } from './lib/query';
 import { useUrlSearch, useSearchPatch } from './lib/navigation';
 import { useDisplayCurrency } from './lib/display-currency';
 import {
+  accountOptions,
+  useHouseholdAccounts,
   usePaymentContext,
   usePaymentPages,
   type PaymentFilters,
@@ -74,6 +76,8 @@ export default function Review() {
       ? url.who
       : (actor ?? 'all');
   const search = url.q ?? '';
+  const account = url.account ?? '';
+  const householdAccounts = useHouseholdAccounts(actor);
   const [draft, setDraft] = useDebouncedField(search, (value) =>
     patch({ q: value || undefined }, true),
   );
@@ -81,6 +85,7 @@ export default function Review() {
     review: '1',
     display: displayCurrency,
     ...(who === 'all' ? {} : { owner: who }),
+    ...(account ? { account } : {}),
     ...(search ? { q: search } : {}),
   };
   const pages = usePaymentPages(actor, filters, !selectedId);
@@ -319,6 +324,20 @@ export default function Review() {
                 value={who}
                 onChange={(value) => patch({ who: value })}
                 options={whoOptions}
+              />
+            </Field>
+            <Field label="Account" htmlFor="review-account">
+              <Choice
+                id="review-account"
+                className="w-full sm:w-56"
+                value={account || 'all'}
+                onChange={(value) =>
+                  patch({ account: value === 'all' ? undefined : value })
+                }
+                options={accountOptions(householdAccounts.data, {
+                  rodion: owners.rodion.name,
+                  katya: owners.katya.name,
+                })}
               />
             </Field>
             <Field label="Search" htmlFor="review-search" className="sm:flex-1">

@@ -289,6 +289,22 @@ test('every page of the SQL list agrees with the in-memory filters, in order', a
       tagged,
       all.filter((t) => t.description === 'Katya IKEA').map((t) => t.id),
     );
+    // One account, by id: the LHV payments the owner could not find by
+    // searching descriptions are found by the account they sit on.
+    const anAccount = all[0]!.accountId;
+    const onAccount = (
+      await paged(
+        repo,
+        `account=${encodeURIComponent(anAccount)}&includeNonPersonal=1&includeTransfers=1&includeRefunds=1&includeZeroAmount=1`,
+        50,
+      )
+    ).ids;
+    assert.ok(onAccount.length > 0);
+    assert.deepEqual(
+      onAccount,
+      all.filter((t) => t.accountId === anAccount).map((t) => t.id),
+    );
+    assert.deepEqual((await paged(repo, 'account=nobody', 50)).ids, []);
     const withReceipt = (await paged(repo, 'receipts=with', 50)).ids;
     assert.deepEqual(
       withReceipt,

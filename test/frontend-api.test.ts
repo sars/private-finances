@@ -228,6 +228,7 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     assert.deepEqual(await (await get('/api/accounts')).json(), {
       accounts: [],
       suggestions: [],
+      household: [],
     });
     assert.deepEqual(await (await get('/api/reports?owner=all')).json(), {
       reports: [],
