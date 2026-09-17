@@ -21,6 +21,7 @@ import {
 } from './refund-automation.js';
 import { initializeRefundQuestions } from './refund-questions.js';
 import { initializeFxRates } from './fx-rates.js';
+import { initializeHoldings } from './holdings.js';
 import { initializeSpendingPatterns } from './spending-pattern.js';
 import { initializeTransactionTriage } from './transaction-triage.js';
 import { initializeLlmBudget } from './llm-budget.js';
@@ -797,6 +798,16 @@ async function applyMigrations(db: Database): Promise<void> {
                        WHERE w.account_id=a.account_id AND w.connection LIKE 'enablebanking:%:lhv')`,
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (50)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=51'))
+        .rows.length
+    ) {
+      // What the household owns, snapshot by snapshot (PF-020): holdings,
+      // their dated quantities and the prices that value them. Three new
+      // tables, nothing existing touched; see docs/assets.md.
+      await initializeHoldings(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
     }
   });
 }

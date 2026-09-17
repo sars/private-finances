@@ -34,6 +34,7 @@ import type { TelegramClarifications } from './telegram.js';
 import type { Classifier } from './classifier.js';
 import { Reports, previousReportPeriod } from './reports.js';
 import { Accounts } from './accounts.js';
+import { Holdings } from './holdings.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
@@ -102,6 +103,7 @@ const frontendRoutes = new Set([
   '/fx',
   '/settings',
   '/cash',
+  '/assets',
 ]);
 const assetTypes: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
@@ -377,6 +379,18 @@ export function web(
             country: b.country,
           })),
         });
+        return;
+      }
+      if (req.method === 'GET' && route === '/api/holdings') {
+        // The household's holdings are shared: either member reads and
+        // records them, so nothing here is scoped to the actor.
+        json(
+          200,
+          await new Holdings(repo.db).report(
+            url.searchParams.get('display') || 'USD',
+            url.searchParams.get('at') || undefined,
+          ),
+        );
         return;
       }
       if (req.method === 'GET' && route === '/api/accounts') {
@@ -856,6 +870,45 @@ export function web(
         const form = await body(req);
         if (!equals(form.csrf ?? '', csrf)) {
           json(403, { error: 'invalid_csrf', requestId });
+          return;
+        }
+        if (route === '/api/holdings') {
+          const holding = await new Holdings(repo.db).upsert(actor, {
+            id: form.id,
+            name: form.name!,
+            kind: form.kind!,
+            denomination: form.denomination!,
+            invested: form.invested!,
+            liquid: form.liquid!,
+            owner: form.owner,
+            group: form.group,
+            maturesOn: form.maturesOn,
+            note: form.note,
+            archived: form.archived,
+            sortOrder: form.sortOrder,
+            revision: form.revision,
+          });
+          json(200, { holding });
+          return;
+        }
+        if (route === '/api/holding-snapshots') {
+          const snapshot = await new Holdings(repo.db).recordSnapshot(actor, {
+            holdingId: form.holdingId!,
+            asOf: form.asOf!,
+            amount: form.amount!,
+            currency: form.currency || undefined,
+            note: form.note,
+          });
+          json(200, { snapshot });
+          return;
+        }
+        if (route === '/api/asset-prices') {
+          const price = await new Holdings(repo.db).recordPrice(actor, {
+            symbol: form.symbol!,
+            asOf: form.asOf!,
+            usdPerUnit: form.usdPerUnit!,
+          });
+          json(200, { price });
           return;
         }
         if (
