@@ -9,9 +9,24 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**7a78a80e346c8ab111f05826d4c7687753c1a862**, live since September 17, 2026 at
-schema version 44, deployed with `deploy/release.sh` — the eighth release that
-day, after `eedcc3260dc61ea2982f9161f72df708ba800797`,
+**943f05ae213589ded422212ba2ec2098844e0f62**, live since September 17, 2026 at
+schema version 45, deployed with `deploy/release.sh` as the ninth release that
+day. Its migration adds only indexes and was rehearsed first on a restored copy
+of the real database, which reached schema 45 in 97 milliseconds with 4,139
+transactions, 140 active refund links, no expense without a category and
+nothing filed on a heading. After the switch both services were active, the
+ledger still holds 4,139 transactions, the service logs show no error, and
+the five new indexes exist. It carries the account badge (PR #29) and the four
+steps that split Transactions into a review list, a transactions list and two
+payment pages (PRs #30 to #33), described in
+[the frontend plan](frontend-plan.md) and [performance](performance.md); the
+3,000 UAH priority is retired everywhere. On the real ledger the review list
+holds 422 outflows waiting for a decision: 155 on Rodion's accounts and 267 on
+Katya's.
+
+The release before it, **7a78a80e346c8ab111f05826d4c7687753c1a862**, went live
+on September 17, 2026 at schema version 44 as the eighth release that day,
+after `eedcc3260dc61ea2982f9161f72df708ba800797`,
 `15eae42d2b5ff2d7301d62cf2f7ed75780c3538c`,
 `2655695c3edb891c1dc0f0e9a4a987ffdb84163d`,
 `69d91c219b2d0988027bf6b9cb7983257c26b375`,
@@ -81,7 +96,7 @@ Two lessons from getting here are worth keeping. A migration that writes
 household-specific data must be conditional on that data already being present,
 or it seeds every fresh install and test fixture — this one put seven rules per
 member into every database and broke thirteen tests before CI caught it. And a
-local gate run as `pnpm check | tail` reports *tail's* exit code, so it can
+local gate run as `pnpm check | tail` reports _tail's_ exit code, so it can
 never fail; run it to a log and read `$?`.
 
 This release closes a gap the owner found: a 12,543 UAH shoe purchase showed as
@@ -228,6 +243,39 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# Review and Transactions become two screens — September 17, 2026
+
+Schema version 45, deployed as `943f05ae213589ded422212ba2ec2098844e0f62`.
+
+The owner asked for reviewing and browsing to be separate tasks with separate
+screens, both fast on the phone, both showing the household, and for a payment
+to have a page that leads with the facts as well as the one that leads with the
+decision. Four pull requests, each merged on green CI, deliver it:
+
+- PR #30: `GET /api/transactions` selects, filters, counts and cuts a page in
+  SQL with a keyset cursor and enriches only the page; it speaks the analytics
+  grammar plus review mode, search, kinds, tag, receipts, refunds and an amount
+  range compared with what a payment finally cost. Migration 45 adds the
+  indexes. A test walks every page of 23 query combinations and requires
+  equality, in order, with the in-memory pipeline. The 3,000 UAH priority is
+  removed from the API, the screens and historical estimates.
+- PR #31: `/review` is the review list — the signed-in member's payments still
+  waiting for a decision by default, either's or both on request, a search box,
+  no period and no visibility toggles — on a virtualised, infinitely scrolling
+  list whose rows carry the account badge with its holder. The sidebar and the
+  phone tab bar show the count waiting for the signed-in member.
+- PR #32: `/transactions` is the browsing list, household by default, with the
+  period picker, search, and the whole filter panel behind one button.
+  Analytics drill links land here.
+- PR #33: the review page leads with the decision, with what has been said so
+  far inside the decision block; `/transactions/:id` is the payment page with
+  the facts, evidence and bank record (without the cashback line), Decision
+  history and a Review this payment button.
+
+Verified after the switch: both services active, 4,139 transactions, no error
+in either service's log, the five indexes present, and 422 outflows waiting for
+review on the real ledger (155 Rodion, 267 Katya).
+
 # A settling card hold stops discarding the answer — September 16, 2026
 
 Schema versions 42 to 44.
@@ -301,7 +349,6 @@ rule as stated does not settle them. And GymBeam carries two of the owner's own
 decisions that disagree with each other, one `Food / Groceries` and one
 `Sport / Unspecified`; picking a side is theirs to do.
 
-
 # A rule can match part of a description — September 15, 2026
 
 Schema 36 and 37. A rule had to equal the whole description, which a bank
@@ -310,7 +357,7 @@ Salnik` is a new string, so one rule answered one payment and the next transfer
 needed another. 323 of the owner's 520 active rules match a single payment for
 reasons like this.
 
-Rules now offer a second way to match: the description *contains* this text.
+Rules now offer a second way to match: the description _contains_ this text.
 There is no pattern syntax — no asterisks to place, nothing to escape — because
 the owner asked for the cleanest possible version and what they actually wanted
 was to type the part that stays the same. Matching ignores case, which also
