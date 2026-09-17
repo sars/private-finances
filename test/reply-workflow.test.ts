@@ -180,7 +180,8 @@ test('an explanation in Telegram is applied, acknowledged and answered with what
     assert.equal(changed.kind, 'personal_expense');
     assert.equal(changed.category, 'Food / Restaurants / Dining in');
     assert.equal(changed.revision, 1);
-    assert.deepEqual(s.reactions, [{ messageId: 1, emoji: '🙌' }]);
+    // 👍, not 🙌: Telegram refuses 🙌 from a bot, and did so silently for days.
+    assert.deepEqual(s.reactions, [{ messageId: 1, emoji: '👍' }]);
     assert.equal(await s.workflow.dispatchOne(), 'idle');
 
     // The answer lands on the owner's own message and says what was saved.

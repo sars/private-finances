@@ -70,3 +70,13 @@ non-personal kind instead of failing, asking the model for null there, logging
 person under their message. Tests: `test/classifier.test.ts` "a category
 beside a non-personal kind is dropped" and `test/reply-workflow.test.ts` "an
 answer the model step cannot use is logged and answered".
+
+## Second addendum, 18 September
+
+With 4f19583 live all three answers were saved and confirmed, yet the owner saw
+no reaction on his messages. Telegram refuses 🙌 from a bot with
+`REACTION_INVALID` (bots may react only with a fixed set of emoji), and the
+workflow swallowed the refusal, so the "applied" reaction had never landed
+since it was introduced. A probe from the server confirmed 🙌 refused and 👍
+accepted on the same message. The reaction is 👍 now and a refused one is
+logged. The probe left a 👍 on the owner's Facebook answer.

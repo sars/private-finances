@@ -5,7 +5,7 @@ uses the configured bounded AI model to read that answer, and then **saves the
 decision**: the owner's own words are their decision, so they are not handed
 back for a second confirmation.
 
-The bot reacts 🙌 to the message it acted on and answers that same message with
+The bot reacts 👍 to the message it acted on and answers that same message with
 what was saved — the payment, its type, its category, any tags — and a link to
 the payment so a wrong answer can be corrected in one click. When nothing could
 be saved it reacts 👀 and the reply says why.
@@ -60,6 +60,13 @@ ask for null there. When the model step still fails, the worker logs
 answer or the provider's text) and the person is told under their message to
 decide the payment themselves, with the link. A failed answer is not retried;
 answering again starts a fresh one.
+
+The reaction itself was the last thing that "did nothing": until 18 September
+2026 a saved answer drew 🙌, which Telegram refuses from a bot
+(`REACTION_INVALID`; bots may use only a fixed set of emoji), and the refusal
+was swallowed as a courtesy that must not block the decision. The saved
+answer's reaction is 👍 now, and a refused reaction is logged as
+`telegram_reaction_failed`.
 
 Still open: each receiver takes the update number itself, so "match before
 consume" is an invariant every receiver must uphold separately and the
