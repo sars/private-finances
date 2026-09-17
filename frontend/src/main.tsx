@@ -198,7 +198,7 @@ function App() {
               <span>Demo workspace · synthetic examples only</span>
               <form action="/import" method="post">
                 <input type="hidden" name="csrf" value={identity.csrf} />
-                <Button size="sm" variant="outline">
+                <Button type="submit" size="sm" variant="outline">
                   Import example transactions
                 </Button>
               </form>
