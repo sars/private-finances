@@ -108,6 +108,22 @@ export function aggregateSpending(
     }
   >();
   const coverage = new Map<string, Sum>();
+  // The largest payments, per bucket and over the whole period: what made a
+  // heavy month heavy is usually two or three of them, and the screen names
+  // them rather than asking a model to guess.
+  type Largest = {
+    id: string;
+    description: string;
+    netMinor: string;
+    category: string | null;
+    bookedAt: string;
+    owner: string;
+    period: string;
+  };
+  const candidates: Array<Largest & { amount: bigint }> = [];
+  const byAmount = (a: { amount: bigint }, b: { amount: bigint }) =>
+    a.amount > b.amount ? -1 : a.amount < b.amount ? 1 : 0;
+  const strip = ({ amount: _, ...rest }: Largest & { amount: bigint }) => rest;
   for (const row of rows) {
     // Outflows only; a personal expense or unresolved payment on an account
     // the owner excluded stays out, exactly as it does in the totals. A kind
@@ -150,6 +166,16 @@ export function aggregateSpending(
     if (amount !== null) {
       if (row.kind === 'unresolved') unresolvedMinor += amount;
       if (row.provisional) provisionalMinor += amount;
+      candidates.push({
+        id: row.id,
+        description: row.description,
+        netMinor: amount.toString(),
+        category: row.category,
+        bookedAt: row.bookedAt,
+        owner: row.owner,
+        period,
+        amount,
+      });
     }
     const path = parts.length ? parts : ['Uncategorized'];
     for (let d = 1; d <= path.length; d++) {
@@ -170,6 +196,7 @@ export function aggregateSpending(
     coverage.set(row.classificationSource, source);
     add(source);
   }
+  candidates.sort(byAmount);
   return {
     bucket,
     series,
@@ -182,7 +209,14 @@ export function aggregateSpending(
             a.netMinor > b.netMinor ? -1 : a.netMinor < b.netMinor ? 1 : 0,
           )
           .map(([key, entry]) => ({ key, label: entry.label, ...out(entry) })),
+        /** The three largest payments of the bucket, largest first. */
+        top: candidates
+          .filter((c) => c.period === period)
+          .slice(0, 3)
+          .map(strip),
       })),
+    /** The fifteen largest payments of the period, largest first. */
+    largest: candidates.slice(0, 15).map(strip),
     totals: {
       ...out(totals),
       unresolvedMinor: unresolvedMinor.toString(),

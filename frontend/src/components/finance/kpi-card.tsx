@@ -31,12 +31,15 @@ export function KpiCard({
   note,
   href,
   icon: Icon,
+  previousLabel = 'the period before',
 }: {
   label: string;
   minor: string;
   currency: string;
   /** The same figure for the period before; enables the delta. */
   previousMinor?: string | null;
+  /** What the previous figure is, when it is not simply the period before. */
+  previousLabel?: string;
   /** Spending going up is the bad direction; a balance going up is not. */
   higherIsWorse?: boolean;
   note?: string;
@@ -74,8 +77,8 @@ export function KpiCard({
       <p className="mt-1 text-xs text-muted-foreground">
         {previousMinor !== null ? (
           <>
-            from <Money minor={previousMinor} currency={currency} /> the period
-            before
+            from <Money minor={previousMinor} currency={currency} />{' '}
+            {previousLabel}
           </>
         ) : (
           note

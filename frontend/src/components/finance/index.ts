@@ -12,6 +12,8 @@ export {
 } from './period-picker'; // preset ranges plus a custom one; Riga calendar days
 export { FilterBar, Field } from './filter-bar'; // a row of labelled controls
 export { BarList, type BarListRow } from './bar-list'; // ranked horizontal bars; the phone-friendly breakdown
+export { BucketBars, type BucketBar } from './bucket-bars'; // one bar per time bucket with the figure on it, an average rule, the open bucket hatched
+export { HeatGrid, type HeatColumn, type HeatRow } from './heat-grid'; // figures in a grid, darker for more; rows open on tap
 export { CategoryBar, type Segment } from './category-bar'; // one bar split into shares, legend with percentages
 export { TreeTable, type TreeRow } from './tree-table'; // rolled-up tree with totals, expand, drill links
 export { TransactionRow } from './transaction-row'; // one payment in a list: dense on desktop, two lines on the phone

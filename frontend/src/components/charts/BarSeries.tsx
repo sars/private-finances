@@ -7,6 +7,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -31,6 +33,10 @@ export type BarSeriesProps = {
   /** Hidden on the phone by the caller; see DESIGN.md. */
   showYAxis?: boolean;
   minTickGap?: number;
+  /** A horizontal rule, such as the average bucket, with its label. */
+  reference?: { value: number; label: string };
+  /** Index values whose background is shaded, such as weekend days. */
+  shaded?: (index: string) => boolean;
 };
 
 const palette = [
@@ -51,6 +57,8 @@ export default function BarSeries({
   formatHeading,
   showYAxis = true,
   minTickGap = 28,
+  reference,
+  shaded,
 }: BarSeriesProps) {
   const heading = formatHeading ?? formatIndex;
   return (
@@ -65,6 +73,33 @@ export default function BarSeries({
           stroke="var(--color-border)"
           strokeDasharray="3 3"
         />
+        {shaded &&
+          data
+            .filter((row) => shaded(String(row[index])))
+            .map((row) => (
+              <ReferenceArea
+                key={`shade-${String(row[index])}`}
+                x1={row[index]}
+                x2={row[index]}
+                fill="var(--color-muted)"
+                fillOpacity={0.6}
+                strokeOpacity={0}
+              />
+            ))}
+        {reference && (
+          <ReferenceLine
+            y={reference.value}
+            stroke="var(--color-foreground)"
+            strokeDasharray="4 4"
+            strokeOpacity={0.5}
+            label={{
+              value: reference.label,
+              position: 'insideTopRight',
+              fontSize: 11,
+              fill: 'var(--color-muted-foreground)',
+            }}
+          />
+        )}
         <XAxis
           dataKey={index}
           axisLine={false}

@@ -146,6 +146,30 @@ test('every bucket and series sums to the total, the tree rolls up, kinds and mi
       .flatMap((b) => b.series)
       .reduce((n, s) => n + BigInt(s.netMinor), 0n);
     assert.equal(seriesSum.toString(), byCategory.totals.netMinor);
+    // The largest payments name what made a bucket heavy: each bucket's top
+    // three belong to it and come largest first, and the period's fifteen
+    // largest are the same payments ranked across buckets.
+    const descending = (list: Array<{ netMinor: string }>) =>
+      list.every(
+        (item, i) =>
+          i === 0 || BigInt(list[i - 1]!.netMinor) >= BigInt(item.netMinor),
+      );
+    for (const bucket of byCategory.buckets) {
+      assert.ok(bucket.top.length <= 3);
+      assert.ok(descending(bucket.top));
+      for (const item of bucket.top) {
+        assert.equal(item.period, bucket.period);
+        assert.ok(BigInt(item.netMinor) > 0n);
+      }
+    }
+    assert.ok(descending(byCategory.largest));
+    assert.equal(byCategory.largest.length, byCategory.totals.count);
+    assert.equal(
+      byCategory.largest
+        .reduce((n, item) => n + BigInt(item.netMinor), 0n)
+        .toString(),
+      byCategory.totals.netMinor,
+    );
     for (const bucket of byCategory.buckets) {
       const listed = filterTransactions(
         rows,

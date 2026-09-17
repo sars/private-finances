@@ -263,3 +263,12 @@ the decision, and a view page that leads with the facts.
   payment" under the header; the header card is two columns on desktop; the
   mobile menu closes when a screen is chosen; the "Go to" command menu is
   removed; the Receipts screen says one sentence.
+- Analytics rebuilt, September 17 (evening), around the owner's reading of
+  the household workbook; see [analytics](analytics.md) for the layout. New
+  vocabulary: `BucketBars` (one bar per bucket with the figure on it and an
+  average rule) and `HeatGrid` (figures in a grid, darker for more, rows that
+  open). `BarSeries` gained a reference line and shaded columns. The "who
+  decided the money" strip lives on System health as `DecisionCoverage`; the
+  historical-estimates toggle is gone. The pending-payment note became a
+  tooltip on the "Bank processing" chip, and a failed explanation save now
+  says so in a toast with the status.

@@ -6,7 +6,23 @@ and roll-up semantics are ADR 0006's. Status: built in Stage 3 of
 [the frontend plan](frontend-plan.md) on September 17, 2026 — `/api/analytics`
 (`src/analytics-aggregation.ts`) answers `bucket`, `series` (none, category,
 owner, kind), `depth` and `kinds` on top of the existing filter grammar and
-`owner`; the screen is `frontend/src/Analytics.tsx`. Not yet in the grammar:
+`owner`; the screen is `frontend/src/Analytics.tsx`. Since September 17, 2026
+(evening) every bucket also carries `top`, its three largest payments, and the
+response carries `largest`, the fifteen largest of the period, so the screen
+can name what made a heavy month heavy without a model: the categories that ran
+above their own average across the full buckets, and those payments. The screen
+itself was rebuilt the same day around the owner's reading of the household
+workbook: one period control (this year by month by default; a month by day,
+a few weeks by week, with an override), Spent / average full bucket / biggest
+bucket / not yet placed, horizontal bucket bars with the figure written on each
+and a rule at the average (a column chart with the average line and shaded
+weekends once there are more than fourteen buckets), the heaviest-bucket
+drivers, a category-by-bucket grid where darker means more and a category opens
+into its parts (transposed on the phone: buckets as rows, the six largest
+categories as columns), the category shares, the fifteen largest payments with
+bucket chips, and the rolled-up tree. A single month is read against the
+average of the year's other full months. The "who decided the money" strip moved
+to System health, and the historical-estimates toggle is gone. Not yet in the grammar:
 `account`, `tag`/`excludeTag`, `provisional` as a filter, and category node ids
 (categories are still path strings). Drill links go to the Transactions list
 (`/transactions`, since September 17, 2026), which shows the household through
