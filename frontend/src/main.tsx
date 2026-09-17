@@ -35,6 +35,7 @@ const Settings = lazy(() => import('./Settings'));
 const Receipts = lazy(() => import('./Receipts'));
 const Categories = lazy(() => import('./Categories'));
 const Review = lazy(() => import('./Review'));
+const Transactions = lazy(() => import('./Transactions'));
 const Operations = lazy(() => import('./Operations'));
 const Fx = lazy(() => import('./Fx'));
 const Analytics = lazy(() => import('./Analytics'));
@@ -50,6 +51,7 @@ const screens: Record<
   '/': Overview,
   '/analytics': Analytics,
   '/review': Review,
+  '/transactions': Transactions,
   '/cash': Cash,
   '/receipts': Receipts,
   '/categories': Categories,

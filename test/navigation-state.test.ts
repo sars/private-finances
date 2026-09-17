@@ -14,6 +14,8 @@ const { isAppPath, reviewSearch, stringSearch, validDisplay } = await import(
 
 test('workspace navigation only intercepts owned screens and validates scalar URL state', () => {
   assert.equal(isAppPath('/receipts'), true);
+  assert.equal(isAppPath('/transactions'), true);
+  assert.equal(isAppPath('/review'), true);
   assert.equal(
     isAppPath('/transactions/12345678-1234-1234-1234-123456789012/history'),
     true,

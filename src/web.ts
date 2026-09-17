@@ -82,6 +82,7 @@ const frontendRoutes = new Set([
   '/receipts',
   '/connections',
   '/review',
+  '/transactions',
   '/categories',
   '/ops',
   '/fx',

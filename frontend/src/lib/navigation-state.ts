@@ -2,6 +2,7 @@ export const appPaths = [
   '/',
   '/analytics',
   '/review',
+  '/transactions',
   '/cash',
   '/receipts',
   '/categories',

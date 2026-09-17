@@ -100,16 +100,16 @@ export default function Analytics() {
   const data = current.data;
   const currency = data?.currency ?? display;
 
-  // Home speaks the same grammar for a category prefix and a period, and its
-  // totals come from the same conversion, so a row here drills to the payments
-  // that made it.
+  // Transactions speaks the same grammar for a category prefix, a period and a
+  // member, and lists the household through the same conversion, so a row
+  // here drills to the payments that made it.
   const drill = (category?: string) => {
     const p = new URLSearchParams({ display });
     if (from) p.set('from', from);
     if (to) p.set('to', to);
-    if (owner !== 'all') p.set('owner', owner);
+    if (owner !== 'all') p.set('who', owner);
     if (category && category !== 'Uncategorized') p.set('category', category);
-    return `/?${p.toString()}`;
+    return `/transactions?${p.toString()}`;
   };
 
   // The chart keeps the five largest series and folds the rest into one, so
@@ -324,7 +324,7 @@ export default function Analytics() {
                 previousMinor={earlier.data?.totals.unresolvedMinor ?? null}
                 currency={currency}
                 note="Unresolved outflows inside the total"
-                href={`/review?all=0&window=all&display=${display}`}
+                href={`/review?who=all&display=${display}`}
               />
               <KpiCard
                 label="Placed provisionally"

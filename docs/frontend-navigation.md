@@ -15,6 +15,13 @@ them, and the search box writes to the URL only once typing pauses. A selected
 payment uses the separate owner-scoped `detailOnly=1` endpoint and does not
 reload the list. The count beside Review in the sidebar and the phone tab bar is
 the same endpoint asked for one row.
+
+Transactions (`/transactions`) is the browsing list on the same paged endpoint
+and the same list component, the household by default. Its URL carries `from`,
+`to`, `who`, `q`, `category`, `kind`, `pattern`, `min`, `max`, `receipts`,
+`refunds`, `tag` and the four `include*` visibility overrides; Analytics drill
+links are URLs of this form. The amount bounds are typed in the display
+currency and sent as minor units.
 Display values come from backend `reporting` conversions; original bank amounts
 remain explicit, missing rates are visible, and estimates are marked. Pending
 bank status and financial eligibility are not rewritten by this frontend work.
