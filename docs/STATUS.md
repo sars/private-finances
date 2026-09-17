@@ -9,6 +9,28 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**b22a37a080ad523b08b24847af3ca3a914e0a2ec**, live since September 18, 2026 at
+schema version 54, the fifth release of the assets feeds that night, each
+deployed with `deploy/release.sh` in one run with 579 application tests
+passing on the server and the rehearsal on a restored copy reaching schema 54
+with 4,165 transactions unchanged. `0e848955` (PR #64) reads the broker's
+cash from the settled-cash field as well and made `--check` print the cash
+rows' attribute names; that showed the live query's Cash Report carries only
+the `BASE_SUMMARY` row, so `b22a37a0` (PR #65) reads that row as cash in the
+account's base currency, which the statement's ConversionRates section names.
+The Flex query itself stays as the owner saved it.
+
+End state of the September 18 snapshot, counts confirmed in the database:
+28 of the 29 fed holdings hold a figure — 14 bank balances, 10 broker
+positions and the broker's cash, the exchange total and both wallets — with
+168 prices stored from the broker and the exchange. The one without a figure
+is LHV, whose bank has stated no balance yet under its rate limit; it fills
+when an import stores one. Both credential checks answer `ok`. The timer next
+fires on Thursday, September 24 at 10:05 Riga, the month's last Thursday, and
+runs the same job. 93 holdings exist, 41 of them retired spreadsheet rows.
+The Telegram round (AS-3) and the FOP's personal share from the company file
+are the remaining assets work.
+
 **cb3066a256ba1b028a94cc9c17bad4c3c4623d6d**, live since September 18, 2026 at
 schema version 54, the third release of the assets feeds that night, each
 deployed with `deploy/release.sh` in one run with 579 application tests
