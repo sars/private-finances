@@ -9,6 +9,18 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**88c2034d3a6efdc23f5abf95b601b4635e2ad749**, live since September 17, 2026 at
+schema version 50, deployed with `deploy/release.sh`. Transactions and Review
+gained an Account filter beside Whose, listing every account of the household
+by the owner's own name for it; `/api/transactions` takes `account=<id>`. The
+owner had reported not seeing the LHV payments: they were in both lists (the
+live API returned both for the September Transactions query and for the Review
+query), but the description search could not find an account. No migration;
+both services active after the switch.
+
+The release before it, **03539611ad6ef8663f575fd5d095c08df0b7eb97**, brought the
+Bank imports page and renamed the LHV account; its entry follows.
+
 **03539611ad6ef8663f575fd5d095c08df0b7eb97**, live since September 17, 2026 at
 schema version 50, deployed with `deploy/release.sh`. It adds the Bank imports
 page (`/imports`): one card per connection with its verdict, last complete run,
