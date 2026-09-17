@@ -1,12 +1,16 @@
 # Bank connections
 
 Enable Banking handles the banks listed in `src/connectors/banks.ts` — Wise,
-Revolut and Swedbank; Monobank uses its direct personal API. An account may hold
-several currencies, which a bank reports as the currency `XXX`; then only each
-payment knows what it was settled in, and the account is not checked against
-them. Adding another bank
-means a row in that table plus a `bank_consents` migration; nothing else is
-spelled out per bank.
+Revolut, Swedbank and LHV; Monobank uses its direct personal API. An account may
+hold several currencies, which a bank reports as the currency `XXX`; then only
+each payment knows what it was settled in, and the account is not checked
+against them. Each row of that table carries three spellings: the provider's
+registered name, which the consent must match byte for byte ("LHV Pank"), our
+lowercase slug for filenames and systemd instances (`lhv`), and the label the
+owner knows the bank by ("LHV"), which names its accounts and appears on every
+page. Adding another bank means a row in that table, a `bank_consents`
+migration, a glyph and colour in `frontend/src/lib/account-visuals.ts`, and a
+timer drop-in under `deploy/`; nothing else is spelled out per bank.
 Adapters are read-only and require injected, fixed-host HTTP clients. Requests
 have timeouts, response limits, no redirects and sanitized error codes.
 Monobank clients must share a requester with a 60-second minimum interval per token.

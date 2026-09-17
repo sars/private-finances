@@ -42,7 +42,7 @@ import { parseFilters, filterTransactions } from './filters.js';
 import { pageTransactions, parsePageQuery } from './transaction-page.js';
 import { Repository, Conflict } from './repository.js';
 import { expenseSummary, type Owner } from './domain.js';
-import { BANK_NAMES, isBankName, type BankName } from './connectors/banks.js';
+import { BANKS, isBankName, type BankName } from './connectors/banks.js';
 
 export type WebConfig = {
   frontendDirectory?: string;
@@ -66,6 +66,12 @@ export type WebConfig = {
   };
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** "Wise, Revolut, Swedbank and LHV" — the heading of the provider section. */
+function bankListSentence(): string {
+  const labels = BANKS.map((b) => b.label);
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
 const escape = (v: unknown) =>
   String(v).replace(
     /[&<>"']/g,
@@ -355,6 +361,9 @@ export function web(
             consent: Boolean(config.consent),
             monobankJarsExcluded: Boolean(config.monobankJarsExcluded),
           },
+          // The banks the Connections page may offer: the provider's name is
+          // what the form sends back, the label is what the owner reads.
+          banks: BANKS.map((b) => ({ name: b.name, label: b.label })),
         });
         return;
       }
@@ -736,7 +745,7 @@ export function web(
           ? await config.consent.list(actor)
           : [];
         html(
-          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>Wise, Revolut and Swedbank</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANK_NAMES.map((b) => `<option>${escape(b)}</option>`).join('')}</select></label><label>Country code for the bank connection<input name="country" required pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
+          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>${escape(bankListSentence())}</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANKS.map((b) => `<option value="${escape(b.name)}">${escape(b.label)}</option>`).join('')}</select></label><label>Country code for the bank connection<input name="country" required pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
         );
         return;
       }

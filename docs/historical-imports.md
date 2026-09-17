@@ -27,11 +27,12 @@ complete response does not prove the account had no earlier activity.
 
 How far back each bank will go, measured rather than assumed:
 
-| Bank | History served | How it refuses |
-| --- | --- | --- |
-| Wise | Full history to date | — |
-| Revolut | About 90 days | — |
-| Swedbank LV | 90 days, measured 16 September 2026 | A window of 120 days or more returns an empty first page together with a continuation key that never advances. The connector sees the repeated cursor and reports `incomplete`, which is accurate: ask for 90 days or fewer. |
+| Bank        | History served                            | How it refuses                                                                                                                                                                                                               |
+| ----------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wise        | Full history to date                      | —                                                                                                                                                                                                                            |
+| Revolut     | About 90 days                             | —                                                                                                                                                                                                                            |
+| Swedbank LV | 90 days, measured 16 September 2026       | A window of 120 days or more returns an empty first page together with a continuation key that never advances. The connector sees the repeated cursor and reports `incomplete`, which is accurate: ask for 90 days or fewer. |
+| LHV EE      | Not measured yet; added 17 September 2026 | The provider lists the bank as "LHV Pank", personal accounts, redirect approval, marked beta on its side, with an approval valid for up to 180 days. Measure the history window at the first backfill and record it here.    |
 
 Swedbank LV also reports its account currency as `XXX`, the ISO code for "no
 currency", because the account holds several. Each payment carries its own
