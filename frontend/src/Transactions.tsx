@@ -300,7 +300,7 @@ export default function Transactions() {
           />
         </Field>
         <Field
-          label="Find a merchant or recipient"
+          label="Search"
           htmlFor="transactions-search"
           className="sm:flex-1"
         >
@@ -317,7 +317,7 @@ export default function Transactions() {
           <Field label="Category" htmlFor="transactions-category">
             <Combobox
               id="transactions-category"
-              className="w-full sm:w-64"
+              className="h-9 w-full py-0 sm:w-56"
               options={categoryOptions}
               value={category || '*'}
               onChange={(value) =>
@@ -355,36 +355,37 @@ export default function Transactions() {
             />
           </Field>
           <Field
-            label={`Amount from (${displayCurrency})`}
+            label={`Amount (${displayCurrency})`}
             htmlFor="transactions-min"
+            className="sm:w-60"
           >
-            <Input
-              id="transactions-min"
-              inputMode="decimal"
-              className="w-full sm:w-32"
-              value={minText}
-              onChange={(e) => setMinText(e.target.value)}
-              placeholder="0"
-              aria-invalid={Boolean(
-                minText && !minorOf(minText, displayCurrency),
-              )}
-            />
-          </Field>
-          <Field
-            label={`up to (${displayCurrency})`}
-            htmlFor="transactions-max"
-          >
-            <Input
-              id="transactions-max"
-              inputMode="decimal"
-              className="w-full sm:w-32"
-              value={maxText}
-              onChange={(e) => setMaxText(e.target.value)}
-              placeholder="Any"
-              aria-invalid={Boolean(
-                maxText && !minorOf(maxText, displayCurrency),
-              )}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="transactions-min"
+                inputMode="decimal"
+                aria-label={`Amount from, ${displayCurrency}`}
+                value={minText}
+                onChange={(e) => setMinText(e.target.value)}
+                placeholder="From"
+                aria-invalid={Boolean(
+                  minText && !minorOf(minText, displayCurrency),
+                )}
+              />
+              <span aria-hidden="true" className="text-muted-foreground">
+                –
+              </span>
+              <Input
+                id="transactions-max"
+                inputMode="decimal"
+                aria-label={`Amount up to, ${displayCurrency}`}
+                value={maxText}
+                onChange={(e) => setMaxText(e.target.value)}
+                placeholder="To"
+                aria-invalid={Boolean(
+                  maxText && !minorOf(maxText, displayCurrency),
+                )}
+              />
+            </div>
           </Field>
           <Field label="Receipts" htmlFor="transactions-receipts">
             <Choice
@@ -540,6 +541,7 @@ export default function Transactions() {
             transaction={t}
             context={context}
             displayCurrency={displayCurrency}
+            href={`/transactions/${encodeURIComponent(t.id)}?display=${displayCurrency}`}
             action={
               <Button
                 size="sm"

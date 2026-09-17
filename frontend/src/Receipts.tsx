@@ -176,12 +176,8 @@ export default function Receipts() {
             </a>
           )}
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Either of you can send receipts to the family Telegram chat. We
-            check both people’s payments about every minute, including ones the
-            bank has not finalized yet. If the bank later reports the finished
-            payment as a separate record, the receipt follows it. You can also
-            link any payment manually. Receipt amounts always show the currency
-            printed on the receipt.
+            Photos sent to the family Telegram chat, matched to payments; link
+            one by hand when the match is missing.
           </p>
         </div>
         <Button

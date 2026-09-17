@@ -16,7 +16,7 @@ import {
 } from './lib/display-currency';
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { CircleHelp, Monitor, Moon, Search, Sun } from 'lucide-react';
+import { CircleHelp, Monitor, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   SidebarInset,
@@ -27,8 +27,6 @@ import { AppSidebar } from '@/components/shell/app-sidebar';
 import { useReviewCount } from './lib/payments';
 import { TabBar } from '@/components/shell/tab-bar';
 import './index.css';
-// The command menu and its search library load the first time ⌘K is pressed.
-const CommandMenu = lazy(() => import('@/components/shell/command-menu'));
 
 const Cash = lazy(() => import('./Cash'));
 const Settings = lazy(() => import('./Settings'));
@@ -75,7 +73,6 @@ function App() {
       return 'system';
     }
   });
-  const [command, setCommand] = useState(false);
   const { data: identity } = useSession();
   const router = useRouter();
 
@@ -133,16 +130,6 @@ function App() {
     document.addEventListener('click', follow);
     return () => document.removeEventListener('click', follow);
   }, [goTo]);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setCommand((open) => !open);
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
   useEffect(() => {
     const media = matchMedia('(prefers-color-scheme: dark)');
     const update = () =>
@@ -202,18 +189,6 @@ function App() {
             Household workspace · Europe/Riga
           </span>
           <div className="ml-auto flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label="Go to a screen"
-              onClick={() => setCommand(true)}
-            >
-              <Search />
-              <span className="hidden sm:inline">Go to</span>
-              <kbd className="hidden rounded border px-1 font-sans text-[10px] text-muted-foreground lg:inline">
-                ⌘K
-              </kbd>
-            </Button>
             <CurrencyControl />
           </div>
         </header>
@@ -254,16 +229,6 @@ function App() {
         </div>
       </SidebarInset>
       <TabBar counts={counts} />
-      {command && (
-        <Suspense fallback={null}>
-          <CommandMenu
-            open={command}
-            onOpenChange={setCommand}
-            isAdmin={isAdmin}
-            onNavigate={goTo}
-          />
-        </Suspense>
-      )}
       <Toaster theme="system" position="top-center" closeButton />
     </SidebarProvider>
   );

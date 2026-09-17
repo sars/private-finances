@@ -251,3 +251,15 @@ the decision, and a view page that leads with the facts.
   returns to the payment page.
 - All four steps are deployed as `943f05a` on September 17, 2026 (schema 45);
   see STATUS.
+- Polish after the owner's first look, September 17: the `PeriodPicker` is
+  one button naming the period, behind it presets (this and last month, this
+  and last year, the whole month in view) and a shadcn calendar range picker,
+  two months on desktop and one month in a bottom sheet on the phone, weeks
+  starting Monday; list rows open the payment by tapping the row on the
+  phone and lose their History link (it lives on the payment page); a
+  refunded row shows the net figure only; the filter panel groups the amount
+  bounds and aligns the category field; the payment pages fold Refresh and
+  the secondary link behind one "⋯" button on the phone and put "Review this
+  payment" under the header; the header card is two columns on desktop; the
+  mobile menu closes when a screen is chosen; the "Go to" command menu is
+  removed; the Receipts screen says one sentence.

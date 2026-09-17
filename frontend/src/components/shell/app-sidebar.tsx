@@ -13,6 +13,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { visibleGroups } from './navigation';
 
@@ -27,6 +28,12 @@ export function AppSidebar({
   footer?: ReactNode;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { isMobile, setOpenMobile } = useSidebar();
+  // On the phone the menu is a sheet over the screen; choosing a screen
+  // should show it, not leave the sheet in the way.
+  const close = () => {
+    if (isMobile) setOpenMobile(false);
+  };
   return (
     <Sidebar collapsible="offcanvas">
       <SidebarHeader>
@@ -56,6 +63,7 @@ export function AppSidebar({
                       render={
                         <a
                           href={href}
+                          onClick={close}
                           aria-current={pathname === href ? 'page' : undefined}
                         />
                       }

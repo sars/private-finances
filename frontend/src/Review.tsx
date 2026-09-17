@@ -321,11 +321,7 @@ export default function Review() {
                 options={whoOptions}
               />
             </Field>
-            <Field
-              label="Find a merchant or recipient"
-              htmlFor="review-search"
-              className="sm:flex-1"
-            >
+            <Field label="Search" htmlFor="review-search" className="sm:flex-1">
               <Input
                 id="review-search"
                 value={draft}
@@ -379,6 +375,7 @@ export default function Review() {
                 context={context}
                 displayCurrency={displayCurrency}
                 showKind={false}
+                href={`/review?id=${encodeURIComponent(t.id)}&display=${displayCurrency}`}
                 action={
                   <Button
                     size="sm"
