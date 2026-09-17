@@ -48,6 +48,19 @@ reply to the other member, a reply to a report or to one of these notes is
 their own conversation: it is recorded and left alone, and a plain message is
 not logged as a discarded reply either.
 
+The model step can fail too, and that used to be the last silent path: on
+17 September 2026 the owner answered the Facebook question twice with
+"business, for advertising", the model answered non-personal *with* a
+category, the validator rejected the pair as invalid output, and the workflow
+row went `failed` with no log line and nothing in the chat. A category beside a
+non-personal kind is now dropped rather than refused — the kind is the
+decision, and the schema had always allowed the pair — and the instructions
+ask for null there. When the model step still fails, the worker logs
+`telegram_reply_failed` with one of the classifier's own codes (never the
+answer or the provider's text) and the person is told under their message to
+decide the payment themselves, with the link. A failed answer is not retried;
+answering again starts a fresh one.
+
 Still open: each receiver takes the update number itself, so "match before
 consume" is an invariant every receiver must uphold separately and the
 clarification consumer is safe only because it runs last. Recording the update

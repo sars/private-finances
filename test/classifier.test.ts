@@ -242,7 +242,9 @@ test('malformed, refused, incomplete and tool outputs cannot become proposals', 
         status: 'completed',
         output: [{ type: 'function_call', name: 'shell' }],
       },
-      response({ ...proposal, kind: 'unresolved' }),
+      // A personal expense with no category; a category beside another kind
+      // is no longer malformed, it is dropped (see the last test).
+      response({ ...proposal, category: null }),
     ];
     for (let i = 0; i < outputs.length; i++) {
       await repo.importBatch([{ ...transaction, sourceId: `bad-${i}` }]);
@@ -501,6 +503,39 @@ test('with no tags of their own, the proposal keeps its previous shape', async (
       result.status === 'proposed' ? result.proposal.tags : null,
       [],
     );
+  } finally {
+    await db.close();
+  }
+});
+
+test('a category beside a non-personal kind is dropped, not a failure', async () => {
+  const { db, rows } = await setup();
+  try {
+    // "Business, for advertising" had the model answer non_personal with a
+    // category; the schema allows it, and the answer was lost as invalid.
+    const classifier = new Classifier(db, config, async () =>
+      response({
+        ...proposal,
+        kind: 'non_personal',
+        category: 'Food / Groceries',
+      }),
+    );
+    const result = await classifier.propose(rows[0]!.id, 0, 'rodion');
+    assert.equal(result.status, 'proposed');
+    if (result.status === 'proposed') {
+      assert.equal(result.proposal.kind, 'non_personal');
+      assert.equal(result.proposal.category, null);
+    }
+    // And a failure says which of this module's own codes it was.
+    const broken = new Classifier(
+      db,
+      { ...config, maxRequestsPerDay: 5 },
+      async () => response({ ...proposal, kind: 'gift' }),
+    );
+    assert.deepEqual(await broken.propose(rows[1]!.id, 0, 'rodion'), {
+      status: 'failed',
+      reason: 'classifier_invalid_output',
+    });
   } finally {
     await db.close();
   }
