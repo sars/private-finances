@@ -203,10 +203,24 @@ test('admin settings routes enforce ownership and CSRF; shared defaults and dire
         assert.equal(result.reporting.rows[0].convertedAmountMinor, '-100');
     }
     assert.equal((await request('/api/review?display=INVALID')).status, 400);
-    const denied = await (
+    // Either member may open the other's payment; it is read under its own
+    // owner and stays on their account.
+    const other = await (
       await request('/api/review?detailOnly=1&id=' + foreign.id)
     ).json();
-    assert.equal(denied.transactions.length, 0);
+    assert.deepEqual(
+      other.transactions.map((t: { id: string; owner: string }) => [
+        t.id,
+        t.owner,
+      ]),
+      [[foreign.id, 'katya']],
+    );
+    const missing = await (
+      await request(
+        '/api/review?detailOnly=1&id=00000000-0000-4000-8000-000000000000',
+      )
+    ).json();
+    assert.equal(missing.transactions.length, 0);
     assert.equal(
       (await request('/api/settings', 'rodion', { ...form, csrf: rb.csrf }))
         .status,

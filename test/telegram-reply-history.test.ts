@@ -6,7 +6,7 @@ import { Repository } from '../src/repository.js';
 import { TelegramClarifications } from '../src/telegram.js';
 import { web } from '../src/web.js';
 
-test('saved replies survive confirmation/rejection and remain owner-scoped in list and payment detail', async () => {
+test("saved replies survive confirmation/rejection; the list is the signed-in member's and a payment detail is its own owner's", async () => {
   const db = memoryDatabase();
   await migrate(db);
   const repo = new Repository(db);
@@ -132,9 +132,14 @@ test('saved replies survive confirmation/rejection and remain owner-scoped in li
       'confirmed',
     );
     assert.equal(detail.replies[0].transaction_description, own.description);
-    assert.deepEqual(
-      (await get(`/api/review?detailOnly=1&id=${foreign.id}`)).replies,
-      [],
+    // Either member may open the other's payment, and what was said about it
+    // comes with it rather than being hidden from the member reading it.
+    const otherDetail = await get(`/api/review?detailOnly=1&id=${foreign.id}`);
+    assert.equal(otherDetail.replies.length, 3);
+    assert.ok(
+      otherDetail.replies.every((r: { input_text: string }) =>
+        r.input_text.startsWith('katya'),
+      ),
     );
     assert.deepEqual((await get('/api/review?detailOnly=1')).replies, []);
   } finally {

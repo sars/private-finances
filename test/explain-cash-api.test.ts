@@ -99,19 +99,20 @@ test('cash and saved explanations share authenticated review, exact accounting a
           f.label === 'Purchase date (day only)' && f.value === form.date,
       ),
     );
+    // Either member may explain the other's payment. The explanation belongs
+    // to the payment's owner and says which of them wrote it.
     const kate = await (await request('/api/bootstrap', 'katya')).json();
-    assert.equal(
-      (
-        await request('/api/payment-explanations', 'katya', {
-          csrf: kate.csrf,
-          id: created.transactionId,
-          revision: '0',
-          text: 'Foreign input',
-          requestId: randomUUID(),
-        })
-      ).status,
-      400,
-    );
+    const byKate = await request('/api/payment-explanations', 'katya', {
+      csrf: kate.csrf,
+      id: created.transactionId,
+      revision: '0',
+      text: 'Kate knows what this was',
+      requestId: randomUUID(),
+    });
+    assert.equal(byKate.status, 200);
+    const kateExplanation = (await byKate.json()).explanation;
+    assert.equal(kateExplanation.owner, 'rodion');
+    assert.equal(kateExplanation.answered_by, 'katya');
     assert.deepEqual(
       (
         await (
@@ -120,8 +121,21 @@ test('cash and saved explanations share authenticated review, exact accounting a
             'katya',
           )
         ).json()
-      ).replies,
-      [],
+      ).replies.map((r: { answered_by: string }) => r.answered_by),
+      ['katya', 'rodion'],
+    );
+    // A payment that does not exist is still not found.
+    assert.equal(
+      (
+        await request('/api/payment-explanations', 'katya', {
+          csrf: kate.csrf,
+          id: '00000000-0000-4000-8000-000000000000',
+          revision: '0',
+          text: 'No such payment',
+          requestId: randomUUID(),
+        })
+      ).status,
+      400,
     );
     const explanation = detail.replies[0];
     // Explicit cash review must not generate unrelated automatic model requests.
@@ -177,8 +191,11 @@ test('cash and saved explanations share authenticated review, exact accounting a
     const history = await (
       await request('/api/review?detailOnly=1&id=' + created.transactionId)
     ).json();
-    assert.equal(history.replies[0].status, 'confirmed');
-    assert.equal(history.replies[0].input_text, form.description);
+    const confirmed = history.replies.find(
+      (r: { id: string }) => r.id === explanation.id,
+    );
+    assert.equal(confirmed.status, 'confirmed');
+    assert.equal(confirmed.input_text, form.description);
     const summary = await (await request('/api/summary')).json();
     assert.ok(JSON.stringify(summary).includes('1235'));
   } finally {

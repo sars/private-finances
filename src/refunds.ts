@@ -687,15 +687,21 @@ export async function attachRefunds<
   });
 }
 
-/** Refund links are changed only by explicit owner confirmation. */
+/** Refund links are changed only by a household member's explicit confirmation. */
 export class Refunds {
   constructor(readonly db: Database) {}
+  /**
+   * `owner` is the member whose account both payments sit on; `actor` is the
+   * member confirming the link, and defaults to the owner. Either member may
+   * link the other's refund, so the audit event records who actually did.
+   */
   async link(input: {
     debitId: string;
     creditId: string;
     expectedDebitRevision: number;
     expectedCreditRevision: number;
     owner: Owner;
+    actor?: Owner;
     reason: string;
     origin?: RefundOrigin;
     rule?: string;
@@ -710,8 +716,10 @@ export class Refunds {
       owner,
       reason,
     } = input;
+    const decidedBy = input.actor ?? owner;
     const origin = input.origin ?? 'manual';
     ownerCheck(owner);
+    ownerCheck(decidedBy);
     idCheck(debitId);
     idCheck(creditId);
     revisionCheck(expectedDebitRevision);
@@ -864,9 +872,10 @@ export class Refunds {
       ).rows[0]!;
       // The purchase is untouched: it keeps the amount the bank recorded and its
       // own classification, and carries the reduction beside it.
-      // The actor is who decided: the matcher when it matched, the owner when
-      // they confirmed. Reading the history later depends on that difference.
-      const actor = origin === 'automatic' ? 'matcher' : owner;
+      // The actor is who decided: the matcher when it matched, the member who
+      // confirmed it otherwise — either of them may confirm the household's
+      // link. Reading the history later depends on that difference.
+      const actor = origin === 'automatic' ? 'matcher' : decidedBy;
       await audit(
         tx,
         String(debit.id),
@@ -914,13 +923,18 @@ export class Refunds {
     };
     return input.tx ? run(input.tx) : this.db.transaction(run);
   }
+  /**
+   * `actor` is the member undoing the link. The link belongs to whichever
+   * member's account the two payments sit on, and either member may undo the
+   * other's, so the owner is read from the link and the audit records the actor.
+   */
   async unlink(
     linkId: string,
     expectedLinkRevision: number,
-    owner: Owner,
+    actor: Owner,
     reason: string,
   ): Promise<RefundLink> {
-    ownerCheck(owner);
+    ownerCheck(actor);
     idCheck(linkId);
     revisionCheck(expectedLinkRevision);
     reasonCheck(reason);
@@ -930,7 +944,8 @@ export class Refunds {
           linkId,
         ])
       ).rows[0];
-      if (!stored || stored.owner !== owner) throw new Error('not_found');
+      if (!stored) throw new Error('not_found');
+      const owner = String(stored.owner) as Owner;
       if (Number(stored.revision) !== expectedLinkRevision)
         throw new Conflict('stale_refund_revision');
       if (stored.state !== 'active') throw new Conflict('refund_not_active');
@@ -946,7 +961,7 @@ export class Refunds {
       await audit(
         tx,
         String(credit.id),
-        owner,
+        actor,
         'refund_unlinked',
         {
           ...classification(credit),
@@ -973,7 +988,7 @@ export class Refunds {
       await audit(
         tx,
         String(debit.id),
-        owner,
+        actor,
         'refund_unlinked',
         {
           amountMinor: String(debit.amount_minor),

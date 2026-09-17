@@ -71,9 +71,20 @@ test('spending HTTP controls enforce CSRF, owner boundaries and stale revisions'
       reason: 'Owner confirms',
     };
     assert.equal((await post('/spending-pattern', fields)).status, 403);
+    // Either member may label the other's payment; the annotation stays on the
+    // owner's account and only a payment that does not exist is refused.
     assert.equal(
-      (await post('/spending-pattern', { ...fields, csrf: kateCsrf }, 'katya'))
-        .status,
+      (
+        await post(
+          '/spending-pattern',
+          {
+            ...fields,
+            id: '00000000-0000-4000-8000-000000000000',
+            csrf: kateCsrf,
+          },
+          'katya',
+        )
+      ).status,
       400,
     );
     assert.equal(
@@ -92,9 +103,14 @@ test('spending HTTP controls enforce CSRF, owner boundaries and stale revisions'
         .candidates.length,
       1,
     );
+    // Either member sees the same candidates for the household's credit.
     assert.equal(
-      (await get(`/api/refund-candidates?id=${credit.id}`, 'katya')).status,
-      400,
+      (
+        await (
+          await get(`/api/refund-candidates?id=${credit.id}`, 'katya')
+        ).json()
+      ).candidates.length,
+      1,
     );
     const linkFields = {
       csrf,
@@ -109,8 +125,17 @@ test('spending HTTP controls enforce CSRF, owner boundaries and stale revisions'
       403,
     );
     assert.equal(
-      (await post('/refund/link', { ...linkFields, csrf: kateCsrf }, 'katya'))
-        .status,
+      (
+        await post(
+          '/refund/link',
+          {
+            ...linkFields,
+            debitId: '00000000-0000-4000-8000-000000000000',
+            csrf: kateCsrf,
+          },
+          'katya',
+        )
+      ).status,
       400,
     );
     assert.equal((await post('/refund/link', linkFields)).status, 303);

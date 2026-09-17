@@ -92,11 +92,21 @@ test('overview combines account currencies, preserves source rows, uses Riga mon
     );
     assert.equal(detail.status, 200);
     assert.ok((await detail.json()).details);
+    // Either member may read the other's payment; a payment that does not
+    // exist is still not found.
     const foreign = (await repo.list('katya'))[0]!;
     assert.equal(
       (
         await fetch(
           `http://127.0.0.1:${address.port}/api/transaction-details?id=${foreign.id}`,
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await fetch(
+          `http://127.0.0.1:${address.port}/api/transaction-details?id=00000000-0000-4000-8000-000000000000`,
         )
       ).status,
       404,

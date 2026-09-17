@@ -12,6 +12,7 @@ export async function initializePaymentExplanations(tx: Executor) {
  status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','rejected')),
  workflow_state text NOT NULL DEFAULT 'processing' CHECK(workflow_state IN ('processing','ready','disabled','budget_exhausted','failed','stale','confirmed')),
  proposal_id uuid REFERENCES classifier_proposals(id), created_at timestamptz NOT NULL DEFAULT now(),
+ answered_by text CHECK(answered_by IN ('rodion','katya')),
  UNIQUE(owner,request_id))`);
 }
 function actorCheck(actor: Owner) {
@@ -27,8 +28,13 @@ function uuid(value: string) {
 }
 export class PaymentExplanations {
   constructor(readonly db: Database) {}
+  /**
+   * `owner` is the member whose account the payment sits on; `actor` is the
+   * member who typed the explanation. Either may explain the other's payment,
+   * so the row keeps both and `answered_by` says who wrote it.
+   */
   async saveAndPropose(
-    actor: Owner,
+    owner: Owner,
     input: {
       transactionId: string;
       revision: number;
@@ -36,7 +42,9 @@ export class PaymentExplanations {
       requestId: string;
     },
     classifier?: Pick<Classifier, 'propose'>,
+    actor: Owner = owner,
   ): Promise<Row> {
+    actorCheck(owner);
     actorCheck(actor);
     const transactionId = uuid(input.transactionId),
       requestId = uuid(input.requestId);
@@ -53,7 +61,7 @@ export class PaymentExplanations {
       const prior = (
         await tx.query(
           'SELECT * FROM transaction_explanations WHERE owner=$1 AND request_id=$2',
-          [actor, requestId],
+          [owner, requestId],
         )
       ).rows[0];
       if (prior) {
@@ -71,22 +79,30 @@ export class PaymentExplanations {
           [transactionId],
         )
       ).rows[0];
-      if (!transaction || transaction.owner !== actor)
+      if (!transaction || transaction.owner !== owner)
         throw new Error('not_found');
       if (Number(transaction.revision) !== input.revision)
         throw new Conflict('stale_revision');
       const inserted = (
         await tx.query(
-          `INSERT INTO transaction_explanations(id,owner,request_id,transaction_id,revision,input_text)
-     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(owner,request_id) DO NOTHING RETURNING *`,
-          [randomUUID(), actor, requestId, transactionId, input.revision, text],
+          `INSERT INTO transaction_explanations(id,owner,request_id,transaction_id,revision,input_text,answered_by)
+     VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(owner,request_id) DO NOTHING RETURNING *`,
+          [
+            randomUUID(),
+            owner,
+            requestId,
+            transactionId,
+            input.revision,
+            text,
+            actor,
+          ],
         )
       ).rows[0];
       if (inserted) return { row: inserted, created: true };
       const existing = (
         await tx.query(
           'SELECT * FROM transaction_explanations WHERE owner=$1 AND request_id=$2',
-          [actor, requestId],
+          [owner, requestId],
         )
       ).rows[0]!;
       if (
@@ -104,7 +120,7 @@ export class PaymentExplanations {
           result = await classifier.propose(
             transactionId,
             input.revision,
-            actor,
+            owner,
             text,
             'app:' + saved.row.id,
           );
@@ -123,12 +139,13 @@ export class PaymentExplanations {
         [state, proposalId, saved.row.id],
       );
     }
-    return (await this.list(actor, transactionId)).find(
+    return (await this.list(owner, transactionId)).find(
       (row) => row.id === saved.row.id,
     )!;
   }
+  /** `owner` owns the payment; `actor` is the member confirming the decision. */
   async confirm(
-    actor: Owner,
+    owner: Owner,
     input: {
       explanationId: string;
       transactionId: string;
@@ -137,7 +154,9 @@ export class PaymentExplanations {
       category: string | null;
       reason: string;
     },
+    actor: Owner = owner,
   ): Promise<void> {
+    actorCheck(owner);
     actorCheck(actor);
     const explanationId = uuid(input.explanationId),
       transactionId = uuid(input.transactionId);
@@ -147,7 +166,7 @@ export class PaymentExplanations {
       const explanation = (
         await tx.query(
           'SELECT * FROM transaction_explanations WHERE id=$1 AND owner=$2 FOR UPDATE',
-          [explanationId, actor],
+          [explanationId, owner],
         )
       ).rows[0];
       if (!explanation || explanation.transaction_id !== transactionId)
@@ -167,6 +186,7 @@ export class PaymentExplanations {
         input.revision,
         { kind: input.kind, category: input.category, reason: input.reason },
         actor,
+        owner,
       );
       await tx.query(
         "UPDATE transaction_explanations SET status='confirmed',workflow_state='confirmed' WHERE id=$1",
@@ -174,18 +194,19 @@ export class PaymentExplanations {
       );
     });
   }
-  async list(actor: Owner, transactionId?: string): Promise<Row[]> {
-    actorCheck(actor);
+  /** Everything explained about one member's payments, whoever wrote it. */
+  async list(owner: Owner, transactionId?: string): Promise<Row[]> {
+    actorCheck(owner);
     if (transactionId !== undefined) transactionId = uuid(transactionId);
     return (
       await this.db.query(
-        `SELECT e.id,e.owner,e.input_text,e.status,e.created_at,e.transaction_id,e.revision,
+        `SELECT e.id,e.owner,COALESCE(e.answered_by,e.owner) AS answered_by,e.input_text,e.status,e.created_at,e.transaction_id,e.revision,
     CASE WHEN e.status='confirmed' THEN 'confirmed' WHEN t.revision<>e.revision THEN 'stale' WHEN p.state='proposed' THEN 'ready' WHEN p.state IN ('failed','stale') THEN p.state ELSE e.workflow_state END AS workflow_state,
     'app' AS source,t.description AS transaction_description,p.id AS proposal_id,p.proposal,
     e.request_id FROM transaction_explanations e JOIN transactions t ON t.id=e.transaction_id AND t.owner=e.owner
     LEFT JOIN classifier_proposals p ON p.transaction_id=e.transaction_id AND p.owner=e.owner AND p.revision=e.revision AND p.request_key='app:'||e.id::text
     WHERE e.owner=$1 AND ($2::uuid IS NULL OR e.transaction_id=$2) ORDER BY e.created_at DESC,e.id`,
-        [actor, transactionId ?? null],
+        [owner, transactionId ?? null],
       )
     ).rows;
   }

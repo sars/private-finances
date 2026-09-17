@@ -371,13 +371,16 @@ export class TelegramClarifications {
   ) {
     this.settings = validateTelegramConfig(settings);
   }
+  /** `payer` is the member whose account the payment sits on and who the
+   * question is addressed to; either member may send it and either may answer
+   * (migration 44), and the reply records which of them did. */
   async queue(
     transactionId: string,
     revision: number,
     prompt: string,
-    actor: Owner,
+    payer: Owner,
   ): Promise<string> {
-    owner(actor);
+    owner(payer);
     if (!Number.isSafeInteger(revision) || revision < 0)
       throw new Error('invalid_revision');
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 4000)
@@ -388,7 +391,7 @@ export class TelegramClarifications {
           transactionId,
         ])
       ).rows[0];
-      if (!row || row.owner !== actor) throw new Error('not_found');
+      if (!row || row.owner !== payer) throw new Error('not_found');
       if (Number(row.revision) !== revision) throw new Error('stale_revision');
       const active = await activeQuestionForPayment(tx, row);
       if (active) return active;
@@ -399,7 +402,7 @@ export class TelegramClarifications {
           randomUUID(),
           transactionId,
           revision,
-          actor,
+          payer,
           this.settings.chatId,
           prompt,
           JSON.stringify(paymentSnapshot(row)),

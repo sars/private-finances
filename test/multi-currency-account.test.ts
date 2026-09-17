@@ -163,3 +163,40 @@ test('the migration renames an account already registered as XXX, and nothing el
     await db.close?.();
   }
 });
+
+test('the household calls its Swedbank account Swedbank, not a description', async () => {
+  const { memoryDatabase, migrate } = await import('../src/database.js');
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    for (const [id, label] of [
+      ['swedbank-current', 'Swedbank current account'],
+      ['owner-written', 'Swedbank current account of mine'],
+    ] as [string, string][])
+      await db.query(
+        `INSERT INTO own_accounts(source,account_id,owner,label,purpose)
+         VALUES('enablebanking',$1,'rodion',$2,'personal')`,
+        [id, label],
+      );
+    await db.query('DELETE FROM schema_versions WHERE version=46');
+    await migrate(db);
+    assert.deepEqual(
+      (
+        await db.query<{ account_id: string; label: string }>(
+          'SELECT account_id, label FROM own_accounts ORDER BY account_id',
+        )
+      ).rows.map((r: { account_id: string; label: string }) => [
+        r.account_id,
+        r.label,
+      ]),
+      [
+        ['owner-written', 'Swedbank current account of mine'],
+        ['swedbank-current', 'Swedbank'],
+      ],
+    );
+    // test/account-visuals.test.ts pins the other half: the badge still reads
+    // the bank out of the label "Swedbank".
+  } finally {
+    await db.close?.();
+  }
+});

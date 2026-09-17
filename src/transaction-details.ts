@@ -324,9 +324,11 @@ export function projectTransactionDetails(
     cardReferenceAvailable: Boolean(card),
   };
 }
+/** `owner` is the member whose account the payment sits on; either member may
+ * read the other's, so the caller resolves the owner from the payment. */
 export async function transactionDetails(
   db: Executor,
-  actor: Owner,
+  owner: Owner,
   id: string,
 ): Promise<TransactionDetails | null> {
   if (
@@ -338,7 +340,7 @@ export async function transactionDetails(
       `SELECT t.id,t.source,t.amount_minor,t.currency,t.status,t.description,t.booked_at,t.source_details,a.label AS account_label
     FROM transactions t LEFT JOIN own_accounts a ON a.source=t.source AND a.account_id=t.account_id AND a.owner=t.owner
     WHERE t.id=$1 AND t.owner=$2`,
-      [id, actor],
+      [id, owner],
     )
   ).rows[0];
   if (!row) return null;

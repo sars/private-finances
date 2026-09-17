@@ -713,6 +713,35 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (45)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=46'))
+        .rows.length
+    ) {
+      // Version 41 turned "Swedbank XXX · CURRENT" into "Swedbank current
+      // account", which reads like a description rather than a name. The
+      // household has one Swedbank account and calls it Swedbank.
+      await tx.query(
+        "UPDATE own_accounts SET label='Swedbank', revision=revision+1 WHERE label='Swedbank current account'",
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (46)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=47'))
+        .rows.length
+    ) {
+      // Either member may now explain the other's payment in the application,
+      // exactly as either may answer for the other in Telegram, so the row has
+      // to say which of them wrote it — `owner` is the member whose account the
+      // payment sits on. Rows written before this were written by the owner of
+      // the payment, which is what the old rule guaranteed.
+      // `initializePaymentExplanations` adds the column to a fresh database but
+      // is gated behind version 18.
+      await tx.query(
+        `ALTER TABLE transaction_explanations ADD COLUMN IF NOT EXISTS answered_by text
+         CHECK(answered_by IN ('rodion','katya'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (47)');
+    }
   });
 }
 

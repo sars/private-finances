@@ -305,6 +305,32 @@ async function databaseWithoutTelegramMessageId(): Promise<Database> {
   return db;
 }
 
+test('an already deployed database gains the column that says who explained a payment', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    await db.query(
+      'ALTER TABLE transaction_explanations DROP COLUMN answered_by',
+    );
+    await db.query('DELETE FROM schema_versions WHERE version=47');
+    const column = async () =>
+      (
+        await db.query(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_name='transaction_explanations' AND column_name='answered_by'`,
+        )
+      ).rows.length;
+    assert.equal(await column(), 0);
+    await migrate(db);
+    assert.equal(await column(), 1);
+    // Migrating again is a no-op rather than an error.
+    await migrate(db);
+    assert.equal(await column(), 1);
+  } finally {
+    await db.close();
+  }
+});
+
 test('an already deployed database gains the column that records the owner’s message', async () => {
   const db = await databaseWithoutTelegramMessageId();
   try {

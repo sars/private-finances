@@ -36,6 +36,12 @@ the magnitude of what a payment finally cost after refunds, and the household
 visibility overrides `includeNonPersonal`, `includeTransfers`, `includeRefunds`
 and `includeZeroAmount`.
 
+`refunds=with` lists purchases that carry an active refund link, and not the
+money-in credits that gave the money back: someone filtering for refunds is
+looking for what they bought, not for the repayment beside it.
+`refunds=without` excludes both sides, so no credit appears under either half
+of the filter.
+
 Two predicates keep their single implementation in code rather than being
 rewritten in SQL: a linked refund credit is hidden unless a link disagrees with a
 later correction, and a purchase is hidden as having come to nothing only when

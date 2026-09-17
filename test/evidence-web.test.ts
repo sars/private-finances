@@ -49,8 +49,19 @@ test('family receipt routes preserve CSRF and generic transaction ownership; cor
       new Set(candidates.map((t: { owner: string }) => t.owner)),
       new Set(['rodion', 'katya']),
     );
+    // Either member may read the other's payment; only a payment that does
+    // not exist is refused.
     assert.equal(
       (await fetch(base + '/api/transaction-details?id=' + other.id)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await fetch(
+          base +
+            '/api/transaction-details?id=00000000-0000-4000-8000-000000000000',
+        )
+      ).status,
       404,
     );
     assert.equal(

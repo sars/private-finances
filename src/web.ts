@@ -65,6 +65,7 @@ export type WebConfig = {
     >;
   };
 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const escape = (v: unknown) =>
   String(v).replace(
     /[&<>"']/g,
@@ -219,6 +220,21 @@ export function web(
     rodion: randomBytes(32).toString('hex'),
     katya: randomBytes(32).toString('hex'),
   };
+  /**
+   * The member whose account a payment sits on, or null when no such payment
+   * exists. Either member may read and decide the other's payment in the
+   * application, exactly as either may answer for the other in Telegram, so a
+   * request that names a payment hands the services the owner stored on the
+   * row and keeps the signed-in member as the actor the audit records. Both
+   * members are one household; there is no third party to widen this to.
+   */
+  const paymentOwner = async (id: string | null): Promise<Owner | null> => {
+    if (!id || !UUID.test(id)) return null;
+    const row = (
+      await repo.db.query('SELECT owner FROM transactions WHERE id=$1', [id])
+    ).rows[0];
+    return row ? (String(row.owner) as Owner) : null;
+  };
   return createServer(async (req, res) => {
     const requestId = randomUUID(),
       start = Date.now();
@@ -361,21 +377,22 @@ export function web(
       }
       if (req.method === 'GET' && route === '/api/refund-candidates') {
         const id = url.searchParams.get('id') ?? '';
+        const owner = (await paymentOwner(id)) ?? actor;
         const service = new Refunds(repo.db);
         json(200, {
-          candidates: await service.candidates(actor, id),
-          links: (await service.list(actor)).filter(
+          candidates: await service.candidates(owner, id),
+          links: (await service.list(owner)).filter(
             (link) => link.debitId === id || link.creditId === id,
           ),
         });
         return;
       }
       if (req.method === 'GET' && route === '/api/transaction-details') {
-        const details = await transactionDetails(
-          repo.db,
-          actor,
-          url.searchParams.get('id') ?? '',
-        );
+        const id = url.searchParams.get('id') ?? '';
+        const owner = await paymentOwner(id);
+        const details = owner
+          ? await transactionDetails(repo.db, owner, id)
+          : null;
         if (!details) {
           json(404, { error: 'not_found', requestId });
           return;
@@ -450,7 +467,14 @@ export function web(
           url.searchParams,
         );
         const directId = url.searchParams.get('id');
-        const listed = await repo.list(actor);
+        const detailOnly = url.searchParams.get('detailOnly') === '1';
+        // Either member may read and decide the other's payment, so a request
+        // that names one reads it under the payment's own owner: its triage,
+        // proposals and replies are listed per owner too. The review queue
+        // itself still lists the signed-in member's own payments.
+        const subject = detailOnly ? await paymentOwner(directId) : null;
+        const scope = subject ?? actor;
+        const listed = detailOnly && !subject ? [] : await repo.list(scope);
         // A credit linked to a purchase is already counted through that purchase,
         // so listing it would show the same money twice. The purchase keeps its
         // category and still shows what it finally cost; whether it is listed is
@@ -473,7 +497,7 @@ export function web(
         const transactions = listed.filter(
           (t) =>
             t.id === directId ||
-            (url.searchParams.get('detailOnly') !== '1' &&
+            (!detailOnly &&
               !hiddenByReviewPreferences(t, preferences) &&
               !hiddenRefunds.has(t.id) &&
               (url.searchParams.get('all') === '1' ||
@@ -491,14 +515,14 @@ export function web(
         const scopeRecords = <T extends Record<string, unknown>>(
           records: T[],
         ) =>
-          url.searchParams.get('detailOnly') === '1'
+          detailOnly
             ? records.filter((r) =>
                 transactions.some((t) => t.id === r.transaction_id),
               )
             : records;
         const service = new Categories(repo.db);
         const { suggestions, tags } = await service.reviewContext(
-          actor,
+          scope,
           transactions.map((t) => t.id),
         );
         json(200, {
@@ -522,25 +546,25 @@ export function web(
             await historicalReporting(repo, transactions, uah)
           ).rows,
           triage: scopeRecords(
-            await new TransactionTriage(repo.db, () => undefined).list(actor),
+            await new TransactionTriage(repo.db, () => undefined).list(scope),
           ),
           suggestions,
           tags,
           proposals: config.classifierFor
             ? scopeRecords(
-                await (await config.classifierFor(actor)).list(actor),
+                await (await config.classifierFor(scope)).list(scope),
               )
             : [],
           replies: scopeRecords(
             [
               ...(config.telegram
-                ? (await config.telegram.history(actor)).map((r) => ({
+                ? (await config.telegram.history(scope)).map((r) => ({
                     ...r,
                     source: 'telegram',
                     created_at: r.created_at,
                   }))
                 : []),
-              ...(await new PaymentExplanations(repo.db).list(actor)),
+              ...(await new PaymentExplanations(repo.db).list(scope)),
             ].sort(
               (a, b) =>
                 new Date(String(b.created_at)).getTime() -
@@ -816,6 +840,12 @@ export function web(
           let id = form.id!;
           let revision = Number(form.revision);
           let text = form.text!;
+          // A cash entry is the actor's own; an explanation belongs to whoever
+          // the payment belongs to, and the row records who wrote it.
+          const owner =
+            route === '/api/cash-transactions'
+              ? actor
+              : ((await paymentOwner(form.id ?? null)) ?? actor);
           if (route === '/api/cash-transactions') {
             const created = await new CashTransactions(repo.db).create(actor, {
               requestId: form.requestId!,
@@ -825,12 +855,12 @@ export function web(
               description: form.description!,
             });
             id = created.id;
-            const transaction = (await repo.list(actor)).find(
+            const transaction = (await repo.list(owner)).find(
               (row) => row.id === id,
             )!;
             revision = transaction.revision;
             text = form.description!;
-            const existing = (await explanations.list(actor, id)).find(
+            const existing = (await explanations.list(owner, id)).find(
               (row) => row.request_id === form.requestId,
             );
             if (existing) {
@@ -843,12 +873,12 @@ export function web(
           }
           let classifier: Classifier | undefined;
           try {
-            classifier = await config.classifierFor?.(actor);
+            classifier = await config.classifierFor?.(owner);
           } catch {
             /* Save the owner's explanation even if AI configuration is unavailable. */
           }
           const saved = await explanations.saveAndPropose(
-            actor,
+            owner,
             {
               transactionId: id,
               revision,
@@ -856,6 +886,7 @@ export function web(
               requestId: form.requestId!,
             },
             classifier,
+            actor,
           );
           json(
             200,
@@ -933,7 +964,8 @@ export function web(
             creditId: form.creditId!,
             expectedDebitRevision: Number(form.debitRevision),
             expectedCreditRevision: Number(form.creditRevision),
-            owner: actor,
+            owner: (await paymentOwner(form.debitId ?? null)) ?? actor,
+            actor,
             reason: form.reason!,
           });
           res.writeHead(303, { Location: '/review?all=1' });
@@ -961,10 +993,11 @@ export function web(
           await new SpendingPatterns(repo.db).set(
             form.id!,
             Number(form.revision),
-            actor,
+            (await paymentOwner(form.id ?? null)) ?? actor,
             form.pattern as 'routine' | 'exceptional' | 'unreviewed',
             form.reason!,
             Number(form.annotationRevision),
+            actor,
           );
           res.writeHead(303, { Location: '/review?all=1' });
           res.end();
@@ -972,13 +1005,17 @@ export function web(
         }
         if (route === '/telegram/queue') {
           if (!config.telegram) throw new Error('telegram_not_configured');
-          const row = (await repo.list(actor)).find((t) => t.id === form.id);
+          // The question is addressed to whoever's card was used, whichever of
+          // them sends it; either may answer, and the reply records which did.
+          const owner = await paymentOwner(form.id ?? null);
+          const row =
+            owner && (await repo.list(owner)).find((t) => t.id === form.id);
           if (!row) throw new Error('not_found');
           await config.telegram.queue(
             row.id,
             Number(form.revision),
-            `${actor}: ${row.description} (${row.amountMinor} minor units ${row.currency}, ${row.bookedAt.slice(0, 10)}). What was this payment for? Reply to this message.`,
-            actor,
+            `${row.owner}: ${row.description} (${row.amountMinor} minor units ${row.currency}, ${row.bookedAt.slice(0, 10)}). What was this payment for? Reply to this message.`,
+            row.owner,
           );
           res.writeHead(303, { Location: '/review' });
           res.end();
@@ -986,12 +1023,13 @@ export function web(
         }
         if (route === '/tags') {
           const service = new Categories(repo.db);
-          const current = await service.tags(actor, form.id!);
+          const owner = (await paymentOwner(form.id ?? null)) ?? actor;
+          const current = await service.tags(owner, form.id!);
           // `tagIds` replaces the whole set, which is what a multi-select
           // editor means by saving; `tagId` keeps adding one, as the plain
           // HTML form does.
           await service.setTags(
-            actor,
+            owner,
             form.id!,
             form.tagIds === undefined
               ? [...new Set([...current.map((t) => t.id), form.tagId!])]
@@ -1156,20 +1194,24 @@ export function web(
         } else if (route === '/classify') {
           if (!/^[0-9a-f-]{36}$/.test(form.id ?? ''))
             throw new Error('invalid_id');
-          const owner =
-            config.mode === 'demo' &&
-            (form.owner === 'rodion' || form.owner === 'katya')
-              ? form.owner
-              : actor;
+          // The payment's own row says whose it is, so `form.owner` is not
+          // read: an older form posts the actor there and the current one the
+          // payment's owner, and both are already known here. Demo mode, where
+          // everyone signs in as rodion, is covered by the same lookup.
+          const owner = (await paymentOwner(form.id!)) ?? actor;
           if (form.explanationId) {
-            await new PaymentExplanations(repo.db).confirm(owner, {
-              explanationId: form.explanationId,
-              transactionId: form.id!,
-              revision: Number(form.revision),
-              kind: form.kind as Kind,
-              category: form.category?.trim() || null,
-              reason: form.reason!,
-            });
+            await new PaymentExplanations(repo.db).confirm(
+              owner,
+              {
+                explanationId: form.explanationId,
+                transactionId: form.id!,
+                revision: Number(form.revision),
+                kind: form.kind as Kind,
+                category: form.category?.trim() || null,
+                reason: form.reason!,
+              },
+              actor,
+            );
           } else {
             await repo.classify(
               form.id!,
@@ -1179,6 +1221,7 @@ export function web(
                 category: form.category?.trim() || null,
                 reason: form.reason,
               },
+              actor,
               owner,
             );
           }
