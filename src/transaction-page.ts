@@ -220,10 +220,14 @@ export async function pageClause(
     c.add(() =>
       query.receipts === 'with' ? HAS_RECEIPT : `NOT ${HAS_RECEIPT}`,
     );
+  // "With refunds" means a purchase that was partly or wholly given back, not
+  // the money-in credit that gave it back: the owner is looking for what they
+  // bought. "Without" still excludes both sides, so the two halves of the
+  // filter never show the same credit.
   if (query.refunds)
     c.add(() =>
       query.refunds === 'with'
-        ? `(${LINKED_DEBIT} OR ${LINKED_CREDIT})`
+        ? LINKED_DEBIT
         : `NOT (${LINKED_DEBIT} OR ${LINKED_CREDIT})`,
     );
   if (query.review)

@@ -294,6 +294,8 @@ test('every page of the SQL list agrees with the in-memory filters, in order', a
       withReceipt,
       all.filter((t) => t.description === 'Late Rimi').map((t) => t.id),
     );
+    // "With refunds" is the purchases that were given back, not the credits
+    // that gave the money back.
     const withRefund = (
       await paged(repo, 'refunds=with&includeRefunds=1&includeZeroAmount=1', 50)
     ).ids;
@@ -301,13 +303,27 @@ test('every page of the SQL list agrees with the in-memory filters, in order', a
       new Set(
         all.filter((t) => withRefund.includes(t.id)).map((t) => t.description),
       ),
-      new Set([
-        'Katya IKEA',
-        'IKEA refund',
-        'Fully refunded jacket',
-        'Jacket refund',
-      ]),
+      new Set(['Katya IKEA', 'Fully refunded jacket']),
     );
+    const withoutRefund = (
+      await paged(
+        repo,
+        'refunds=without&includeRefunds=1&includeZeroAmount=1',
+        50,
+      )
+    ).ids;
+    for (const description of [
+      'Katya IKEA',
+      'IKEA refund',
+      'Fully refunded jacket',
+      'Jacket refund',
+    ])
+      assert.ok(
+        !all
+          .filter((t) => withoutRefund.includes(t.id))
+          .some((t) => t.description === description),
+        `${description} is not listed as having no refund`,
+      );
     // The household default hides the credit and the purchase that came to nothing.
     const defaults = (await paged(repo, '', 50)).ids;
     for (const hidden of [
