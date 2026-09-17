@@ -54,7 +54,8 @@ See [assets](assets.md) for the model and the plan.
 - [x] **PF-020 / AS-4: feeds.** IBKR Flex Web Service, Binance Spot read-only,
       BTC and ETH wallets by address with the exchange's open prices. Deployed
       September 18, 2026; both credentials verified, positions, exchange total
-      and wallets filled. Open: the broker's cash row, see STATUS.
+      and wallets filled, the broker's cash from the base-currency summary
+      (b22a37a). Only LHV awaits its first stated balance.
 
 ## 2. Finish smooth frontend behavior
 
