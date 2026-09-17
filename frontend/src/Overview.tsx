@@ -1,10 +1,5 @@
 import { useUrlField, useSearchPatch } from './lib/navigation';
 import { useSession } from './lib/query';
-import {
-  historicalEstimateBreakdown,
-  type HistoricalProjectionRow,
-  type EstimateGroup,
-} from './lib/historical-estimate-breakdown';
 import { periodRange } from './lib/spending-period';
 import { useDisplayCurrency } from './lib/display-currency';
 import LlmBudget from './LlmBudget';
@@ -64,14 +59,6 @@ type Transaction = {
 };
 type Reporting = {
   currency: string;
-  historicalEstimates?: {
-    estimatedMinor: string;
-    unknownMinor: string;
-    estimatedCount: number;
-    unknownCount: number;
-    missing: number;
-    rows?: HistoricalProjectionRow[];
-  };
   confirmedMinor: string;
   unresolvedMinor: string;
   pendingMinor: string;
@@ -149,16 +136,12 @@ const rigaDay = (iso: string) =>
     day: '2-digit',
   }).format(new Date(iso));
 
-export default function Overview({
-  analytics = false,
-}: {
-  analytics?: boolean;
-}) {
+export default function Overview() {
   const patch = useSearchPatch();
   const actor = useSession().data?.actor;
   const isMobile = useIsMobile();
   const [owner, setOwner] = useUrlField('owner', 'all');
-  const defaultRange = periodRange(analytics ? 'year' : 'month');
+  const defaultRange = periodRange('month');
   const [from] = useUrlField('from', defaultRange[0]!);
   const [to] = useUrlField('to', defaultRange[1]!);
   const period = { from, to };
@@ -168,8 +151,7 @@ export default function Overview({
   const [scope, setScope] = useUrlField('scope', 'all');
   const [knownCategories, setKnownCategories] = useState<string[]>([]);
   const { currency: focusCurrency } = useDisplayCurrency();
-  const [showEstimates, setShowEstimates] = useState(false);
-  const [granularity, setGranularity] = useState(analytics ? 'month' : 'day');
+  const [granularity, setGranularity] = useState('day');
   const [knownCurrencies, setKnownCurrencies] = useState<string[]>([]);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [reporting, setReporting] = useState<Reporting | null>(null);
@@ -360,12 +342,8 @@ export default function Overview({
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
       <PageHeader
-        title={analytics ? 'Spending analytics' : 'Home'}
-        description={
-          analytics
-            ? 'Explore categories, habits and exceptional purchases.'
-            : 'Household spending for the period, and what still needs a decision.'
-        }
+        title="Home"
+        description="Household spending for the period, and what still needs a decision."
         actions={
           <Button
             variant="outline"
@@ -402,13 +380,9 @@ export default function Overview({
         </p>
         <a
           className="font-medium text-primary"
-          href={
-            analytics
-              ? `/?${query}&display=${focusCurrency}`
-              : `/analytics?display=${focusCurrency}`
-          }
+          href={`/analytics?display=${focusCurrency}`}
         >
-          {analytics ? 'Back to home' : 'Explore spending analytics'} →
+          Explore spending analytics →
         </a>
       </div>
       {filtersExpanded && (
@@ -604,77 +578,6 @@ export default function Overview({
                 </a>
               </p>
             )}
-          {analytics && reporting?.historicalEstimates && (
-            <section
-              className="rounded-lg border bg-card p-4"
-              aria-label="Historical estimates"
-            >
-              <label className="flex cursor-pointer items-center gap-3 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  checked={showEstimates}
-                  onChange={(e) => setShowEstimates(e.target.checked)}
-                  className="size-4 accent-[var(--primary)]"
-                />
-                Show historical estimates
-              </label>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                Older payments can use tentative merchant or MCC categories.
-                Estimates remain separate from confirmed spending and do not
-                change the bank records.
-              </p>
-              {showEstimates && (
-                <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Additional estimated spending
-                    </p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums">
-                      {money(
-                        reporting.historicalEstimates.estimatedMinor,
-                        activeCurrency,
-                      )}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {reporting.historicalEstimates.estimatedCount} tentative
-                      payments
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Still unexplained
-                    </p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums">
-                      {money(
-                        reporting.historicalEstimates.unknownMinor,
-                        activeCurrency,
-                      )}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {reporting.historicalEstimates.unknownCount} payments need
-                      context
-                    </p>
-                  </div>
-                  {reporting.historicalEstimates.missing > 0 && (
-                    <p className="text-xs text-warning sm:col-span-2">
-                      {reporting.historicalEstimates.missing} payments have no
-                      conversion rate and are omitted from these amounts.
-                    </p>
-                  )}
-                  <HistoricalEstimateTables
-                    transactions={rows}
-                    reporting={reporting}
-                  />
-                  <a
-                    href="/review?all=0&window=historical"
-                    className="text-xs font-medium text-primary sm:col-span-2"
-                  >
-                    Inspect estimates and unclear payments →
-                  </a>
-                </div>
-              )}
-            </section>
-          )}
           {reporting && (
             <section aria-label="Spending summary" className="space-y-3">
               <p className="text-xs text-muted-foreground">
@@ -785,13 +688,12 @@ export default function Overview({
                 {categories.length ? (
                   <div className="space-y-4">
                     <BarList
-                      rows={categories.slice(0, analytics ? 15 : 6)}
+                      rows={categories.slice(0, 6)}
                       currency={activeCurrency}
                     />
-                    {categories.length > (analytics ? 15 : 6) && (
+                    {categories.length > 6 && (
                       <p className="text-xs text-muted-foreground">
-                        The {analytics ? 15 : 6} largest of {categories.length}{' '}
-                        categories.
+                        The 6 largest of {categories.length} categories.
                       </p>
                     )}
                     <a
@@ -813,54 +715,28 @@ export default function Overview({
               </CardContent>
             </Card>
           </div>
-          {analytics && (
-            <div className="grid gap-5 md:grid-cols-2">
-              <Breakdown
-                title="By person"
-                rows={confirmed}
-                currency={activeCurrency}
-                group={(r) => (r.owner === 'rodion' ? 'Rodion' : 'Katya')}
-              />
-              <Breakdown
-                title="Everyday or exceptional"
-                rows={confirmed}
-                currency={activeCurrency}
-                group={(r) =>
-                  r.spendingPattern?.pattern === 'routine'
-                    ? 'Routine'
-                    : r.spendingPattern?.pattern === 'exceptional'
-                      ? 'Exceptional'
-                      : 'Pattern not reviewed'
-                }
-              />
-            </div>
-          )}
-          {!analytics && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <a
-                className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
-                href="/review?all=0&window=previous_month"
-              >
-                <p className="text-sm font-medium">
-                  Finish last month’s review →
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Resolve recent payments in manageable groups.
-                </p>
-              </a>
-              <a
-                className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
-                href="/review?all=0&window=historical"
-              >
-                <p className="text-sm font-medium">
-                  Check historical spending →
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Start with unclear large payments and inspect estimates.
-                </p>
-              </a>
-            </div>
-          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <a
+              className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
+              href="/review?all=0&window=previous_month"
+            >
+              <p className="text-sm font-medium">
+                Finish last month’s review →
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Resolve recent payments in manageable groups.
+              </p>
+            </a>
+            <a
+              className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
+              href="/review?all=0&window=historical"
+            >
+              <p className="text-sm font-medium">Check historical spending →</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Start with unclear large payments and inspect estimates.
+              </p>
+            </a>
+          </div>
           <Card className="overflow-hidden shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <div>
@@ -999,7 +875,7 @@ export default function Overview({
               )}
             </CardContent>
           </Card>
-          {!analytics && <LlmBudget compact refresh={refresh} />}
+          <LlmBudget compact refresh={refresh} />
           <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground">
             <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
             Based on imported records. Bank coverage may be incomplete.
@@ -1007,142 +883,6 @@ export default function Overview({
             personal spending.
           </p>
         </>
-      )}
-    </div>
-  );
-}
-
-function Breakdown({
-  title,
-  rows,
-  currency,
-  group,
-}: {
-  title: string;
-  rows: Transaction[];
-  currency: string;
-  group: (row: Transaction) => string;
-}) {
-  const totals = new Map<string, bigint>();
-  for (const row of rows) {
-    const key = group(row);
-    totals.set(key, (totals.get(key) ?? 0n) - BigInt(row.amountMinor));
-  }
-  const list = [...totals]
-    .sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : 0))
-    .map(([name, minor]) => ({ name, minor: minor.toString() }));
-  return (
-    <Card className="shadow-xs">
-      <CardHeader>
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Confirmed spending in the selected period
-        </p>
-      </CardHeader>
-      <CardContent>
-        {list.length ? (
-          <BarList rows={list} currency={currency} />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No confirmed spending in this period.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function HistoricalEstimateTables({
-  transactions,
-  reporting,
-}: {
-  transactions: Transaction[];
-  reporting: Reporting;
-}) {
-  const groups = historicalEstimateBreakdown(
-    transactions,
-    reporting.rows,
-    reporting.historicalEstimates?.rows ?? [],
-  );
-  return (
-    <div className="space-y-3 sm:col-span-2">
-      <p className="text-xs text-muted-foreground">
-        Tentative breakdowns only · confirmed spending remains in the charts
-        below. Missing conversions are omitted.
-      </p>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <EstimateTable
-          title="Tentative spending by month"
-          label="Month"
-          rows={groups.months}
-          currency={reporting.currency}
-        />
-        <EstimateTable
-          title="Tentative spending by category"
-          label="Category"
-          rows={groups.categories}
-          currency={reporting.currency}
-        />
-      </div>
-      {groups.missing > 0 && (
-        <p className="text-xs text-warning">
-          {groups.missing} tentative payments are missing a display-currency
-          rate.
-        </p>
-      )}
-    </div>
-  );
-}
-function EstimateTable({
-  title,
-  label,
-  rows,
-  currency,
-}: {
-  title: string;
-  label: string;
-  rows: EstimateGroup[];
-  currency: string;
-}) {
-  return (
-    <div className="min-w-0 overflow-hidden rounded-lg border">
-      <h3 className="border-b bg-muted/30 px-3 py-2.5 text-xs font-medium">
-        {title}
-      </h3>
-      {rows.length ? (
-        <div className="max-h-72 overflow-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-card text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-normal">{label}</th>
-                <th className="px-3 py-2 text-right font-normal">Payments</th>
-                <th className="px-3 py-2 text-right font-normal">Estimate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((row) => (
-                <tr key={row.label}>
-                  <th
-                    scope="row"
-                    className="max-w-44 break-words px-3 py-2.5 font-normal"
-                  >
-                    {row.label}
-                  </th>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                    {row.count}
-                  </td>
-                  <td className="break-words px-3 py-2.5 text-right tabular-nums">
-                    {money(row.minor, currency)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="px-3 py-4 text-xs text-muted-foreground">
-          No converted tentative spending in this period.
-        </p>
       )}
     </div>
   );

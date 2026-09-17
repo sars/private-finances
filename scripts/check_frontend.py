@@ -37,6 +37,8 @@ def source_rules() -> list[str]:
             errors.append(f"{rel}: recharts may only be imported inside components/charts/")
         if "components/ui/select'" in text and FINANCE not in path.parents:
             errors.append(f"{rel}: pick from a list with Choice (components/finance), not a raw Select")
+        if "<table" in text and (SRC / "components" / "ui") not in path.parents:
+            errors.append(f"{rel}: raw <table>; use the Table primitive or card rows")
     return errors
 
 

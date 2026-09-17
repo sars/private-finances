@@ -17,7 +17,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice, PageHeader } from '@/components/finance';
+import {
+  Choice,
+  Field,
+  FilterBar,
+  PageHeader,
+  PeriodPicker,
+} from '@/components/finance';
 
 type ConversionRow = {
   id: string;
@@ -63,6 +69,7 @@ function bucket(row: ConversionRow) {
 export default function Fx() {
   const patch = useSearchPatch();
   const { currency: target } = useDisplayCurrency();
+  const patchSearch = useSearchPatch();
   const [owner, setOwner] = useUrlField('owner', 'all');
   const [from, setFrom] = useUrlField('from', '2026-01-01');
   const [to, setTo] = useUrlField('to', '');
@@ -256,14 +263,8 @@ export default function Fx() {
           </Button>
         }
       />
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            htmlFor="fx-owner"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            Account owner
-          </label>
+      <FilterBar>
+        <Field label="Account owner" htmlFor="fx-owner">
           <Choice
             id="fx-owner"
             className="w-full sm:w-40"
@@ -275,39 +276,13 @@ export default function Fx() {
               { value: 'katya', label: 'Katya' },
             ]}
           />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            htmlFor="fx-from"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            From (Europe/Riga)
-          </label>
-          <Input
-            id="fx-from"
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFrom(e.target.value)}
-            className="sm:w-40"
+        </Field>
+        <Field label="Period" className="sm:flex-1">
+          <PeriodPicker
+            value={{ from, to }}
+            onChange={(next) => patchSearch({ from: next.from, to: next.to })}
           />
-        </div>
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            htmlFor="fx-to"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            Through (Europe/Riga)
-          </label>
-          <Input
-            id="fx-to"
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setTo(e.target.value)}
-            className="sm:w-40"
-          />
-        </div>
+        </Field>
         <Button variant="ghost" size="sm" onClick={reset}>
           Reset filters
         </Button>
@@ -318,14 +293,8 @@ export default function Fx() {
               ? ' · active'
               : ''}
           </summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="fx-pattern"
-                className="mb-1.5 block text-xs font-medium text-muted-foreground"
-              >
-                Spending pattern
-              </label>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <Field label="Spending pattern" htmlFor="fx-pattern">
               <Choice
                 id="fx-pattern"
                 className="w-full"
@@ -338,14 +307,8 @@ export default function Fx() {
                   { value: 'unreviewed', label: 'Unreviewed' },
                 ]}
               />
-            </div>
-            <div>
-              <label
-                htmlFor="fx-scope"
-                className="mb-1.5 block text-xs font-medium text-muted-foreground"
-              >
-                Payment group
-              </label>
+            </Field>
+            <Field label="Payment group" htmlFor="fx-scope">
               <Choice
                 id="fx-scope"
                 className="w-full"
@@ -361,14 +324,11 @@ export default function Fx() {
                   },
                 ]}
               />
-            </div>
-            <div>
-              <label
-                htmlFor="fx-source-currency"
-                className="mb-1.5 block text-xs font-medium text-muted-foreground"
-              >
-                Filter by original currency
-              </label>
+            </Field>
+            <Field
+              label="Filter by original currency"
+              htmlFor="fx-source-currency"
+            >
               <Input
                 id="fx-source-currency"
                 value={currency}
@@ -383,14 +343,8 @@ export default function Fx() {
               >
                 Leave blank or enter a three-letter code such as EUR.
               </p>
-            </div>
-            <div>
-              <label
-                htmlFor="fx-category"
-                className="mb-1.5 block text-xs font-medium text-muted-foreground"
-              >
-                Category
-              </label>
+            </Field>
+            <Field label="Category" htmlFor="fx-category">
               <Input
                 id="fx-category"
                 value={category}
@@ -401,10 +355,10 @@ export default function Fx() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Includes matching subcategories.
               </p>
-            </div>
+            </Field>
           </div>
         </details>
-      </div>
+      </FilterBar>
       <p className="text-xs leading-relaxed text-muted-foreground">
         Changing the display currency keeps your transactions and filters.
         Bank-recorded equivalents may exclude separate fees; daily estimates are

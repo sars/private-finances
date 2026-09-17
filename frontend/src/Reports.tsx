@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice, PageHeader } from '@/components/finance';
+import { Choice, Field, PageHeader } from '@/components/finance';
 import type { ReportSnapshot } from '../../src/reports';
 
 type Scope = 'all' | 'rodion' | 'katya';
@@ -129,13 +129,7 @@ export default function Reports() {
         onSubmit={create}
         className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4"
       >
-        <div className="min-w-36 flex-1 sm:flex-none">
-          <label
-            htmlFor="report-owner"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            Account owner
-          </label>
+        <Field label="Account owner" htmlFor="report-owner">
           <Choice
             id="report-owner"
             className="w-full sm:w-40"
@@ -151,14 +145,8 @@ export default function Reports() {
             placeholder="Loading owner…"
             disabled={saving || !csrf}
           />
-        </div>
-        <div className="min-w-44 flex-1 sm:flex-none">
-          <label
-            htmlFor="report-period"
-            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-          >
-            Create or refresh
-          </label>
+        </Field>
+        <Field label="Create or refresh" htmlFor="report-period">
           <Choice
             id="report-period"
             className="w-full sm:w-52"
@@ -170,13 +158,13 @@ export default function Reports() {
             ]}
             disabled={saving}
           />
-        </div>
+        </Field>
         <Button
           type="submit"
           className="w-full sm:w-auto"
           disabled={!csrf || !scope || saving}
         >
-          <Plus className="mr-2 size-4" />
+          <Plus />
           {saving ? 'Creating…' : 'Create report'}
         </Button>
       </form>

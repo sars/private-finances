@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice, PageHeader } from '@/components/finance';
+import { Choice, Field, PageHeader } from '@/components/finance';
 
 type Connection = {
   bank: string;
@@ -219,13 +219,7 @@ export default function Connections() {
                         bank. Keep Tailscale connected when you return.
                       </p>
                       <form onSubmit={connect} className="space-y-4">
-                        <div>
-                          <label
-                            htmlFor="connection-bank"
-                            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-                          >
-                            Bank
-                          </label>
+                        <Field label="Bank" htmlFor="connection-bank">
                           <Choice
                             id="connection-bank"
                             className="w-full"
@@ -236,14 +230,11 @@ export default function Connections() {
                             )}
                             disabled={starting}
                           />
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="connection-country"
-                            className="mb-1.5 block text-xs font-medium text-muted-foreground"
-                          >
-                            Country of your bank connection
-                          </label>
+                        </Field>
+                        <Field
+                          label="Country of your bank connection"
+                          htmlFor="connection-country"
+                        >
                           <Input
                             id="connection-country"
                             value={country}
@@ -265,7 +256,7 @@ export default function Connections() {
                           >
                             Two-letter country code, for example LV for Latvia.
                           </p>
-                        </div>
+                        </Field>
                         <Button
                           className="w-full sm:w-auto"
                           type="submit"

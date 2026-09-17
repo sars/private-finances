@@ -23,6 +23,7 @@ import {
   previousPeriod,
 } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { HistoricalEstimates } from '@/components/historical-estimates';
 const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 
 type Sum = { netMinor: string; count: number; missingFx: number };
@@ -448,6 +449,12 @@ export default function Analytics() {
               />
             </CardContent>
           </Card>
+          <HistoricalEstimates
+            from={from}
+            to={to}
+            owner={owner}
+            display={display}
+          />
         </>
       ) : null}
     </div>
