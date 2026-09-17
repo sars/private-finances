@@ -205,3 +205,8 @@ Recharts leaves the entry chunk.
   payments by design, so Home is the screen whose totals can match.
   Categories and Accounts already compose from `Label`, `Input` and `Choice`
   and needed nothing.
+- Closing fix, deployed as `7a78a80` on September 17: the fifty-one warning
+  colours still written as Tailwind amber classes moved to the `warning`
+  token, the account chip's tones onto the neutrals and chart series, and
+  `check_frontend.py` refuses any palette class outside `components/ui` so the
+  colour rule is enforced rather than remembered. The plan is complete.
