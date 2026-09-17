@@ -4,6 +4,7 @@ import {
   BANKS,
   BANK_NAMES,
   BANK_SLUGS,
+  bankCountry,
   bankLabel,
   bankName,
   bankSlug,
@@ -60,6 +61,12 @@ test('a bank the provider registers under a longer name is still named as the ow
   );
   assert.equal(accountLabel('lhv', 'XXX'), 'LHV multi-currency');
   for (const bank of BANKS) assert.ok(bank.label.length <= bank.name.length);
+});
+
+test('every bank names the country the provider lists it under, and LHV is Estonian', () => {
+  for (const bank of BANKS) assert.match(bank.country, /^[A-Z]{2}$/);
+  assert.equal(bankCountry('LHV Pank'), 'EE');
+  assert.equal(bankCountry('Swedbank'), 'LV');
 });
 
 test('every supported bank can be scheduled', () => {

@@ -12,10 +12,19 @@ the private Tailscale hostname recorded in
 The original example.com callback must be replaced. Keep Tailscale connected on
 the device completing bank approval. No public endpoint is required for this
 browser redirect. The Bank connections page offers the banks listed in
-`src/connectors/banks.ts` — Wise, Revolut, Swedbank and LHV — and asks for the
-appropriate country code (LHV is `EE`), then links to the provider's approval
-page. The page shows each bank by the name the owner uses; the form sends the
-provider's registered name, and that is what `bank_consents.bank` stores.
+`src/connectors/banks.ts` — Wise, Revolut, Swedbank and LHV — with the country
+the provider lists each under filled in when the bank is chosen (LHV is `EE`,
+the others `LV`), then links to the provider's approval page. The country stays
+editable; left blank on the plain form it means the bank's own. The page shows
+each bank by the name the owner uses; the form sends the provider's registered
+name, and that is what `bank_consents.bank` stores.
+
+Starting an approval for a bank that already has a live one — by mistake, or to
+renew — records only the attempt (its state, country and requested bound in
+`requested_expires_at`). The row stays `authorized` with its real expiry until
+the callback succeeds, and a refused or failed attempt puts it back exactly as
+it was, so the expiry reminders keep watching the approval that is actually in
+force. Only a bank with nothing to fall back on reads `failed`.
 
 A sync timer may be enabled before its bank has been approved. Until the
 approval writes the session file, each run ends as `consent_pending`: no

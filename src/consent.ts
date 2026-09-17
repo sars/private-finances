@@ -144,10 +144,18 @@ export class ConsentService {
     // A bounded initial consent; provider may shorten this further.
     const expiry = new Date(Date.now() + 10 * 86400000).toISOString();
     try {
+      // An approval that is live stays live: the owner starting another
+      // attempt for the same bank — by mistake, or to renew — must not turn
+      // it into "pending" before anything has been approved, or its expiry
+      // reminders stop and the page shows a fiction. Only the attempt itself
+      // (state, country, requested bound) is recorded until the callback.
       const inserted = await this.config.db.query(
-        `INSERT INTO bank_consents(owner,bank,country,state_hash,state_expires_at,expires_at,status)
-        VALUES($1,$2,$3,$4,now()+interval '15 minutes',$5,'pending')
-        ON CONFLICT(owner,bank) DO UPDATE SET country=$3,state_hash=$4,state_expires_at=now()+interval '15 minutes',expires_at=$5,status='pending'
+        `INSERT INTO bank_consents(owner,bank,country,state_hash,state_expires_at,expires_at,requested_expires_at,status)
+        VALUES($1,$2,$3,$4,now()+interval '15 minutes',$5,$5,'pending')
+        ON CONFLICT(owner,bank) DO UPDATE SET country=$3,state_hash=$4,state_expires_at=now()+interval '15 minutes',
+          requested_expires_at=$5,
+          expires_at=CASE WHEN bank_consents.status='authorized' THEN bank_consents.expires_at ELSE $5 END,
+          status=CASE WHEN bank_consents.status='authorized' THEN 'authorized' ELSE 'pending' END
         WHERE bank_consents.status != 'processing' RETURNING owner`,
         [owner, bank, country, digest, expiry],
       );
@@ -179,12 +187,27 @@ export class ConsentService {
       throw new ConsentError();
     }
   }
-  private async fail(owner: Owner, digest: string): Promise<void> {
+  /**
+   * Mark an attempt failed. A row that was authorised before the attempt goes
+   * back to being authorised, with the expiry it had; only an attempt that
+   * had nothing to fall back on reads "failed".
+   */
+  private async fail(
+    owner: Owner,
+    digest: string,
+    before?: { status: string; expiresAt: string },
+  ): Promise<void> {
     try {
-      await this.config.db.query(
-        "UPDATE bank_consents SET status='failed' WHERE owner=$1 AND state_hash=$2",
-        [owner, digest],
-      );
+      if (before?.status === 'authorized')
+        await this.config.db.query(
+          "UPDATE bank_consents SET status='authorized',expires_at=$3 WHERE owner=$1 AND state_hash=$2",
+          [owner, digest, before.expiresAt],
+        );
+      else
+        await this.config.db.query(
+          "UPDATE bank_consents SET status='failed' WHERE owner=$1 AND state_hash=$2 AND status<>'authorized'",
+          [owner, digest],
+        );
     } catch {
       throw new ConsentError();
     }
@@ -202,19 +225,33 @@ export class ConsentService {
       throw new ConsentError();
     const digest = hash(state);
     let claimed = false;
+    let before: { status: string; expiresAt: string } | undefined;
     let temporary: string | undefined;
     let installed: string | undefined;
     try {
       // Atomic claim commits before any network operation. Never retry a claimed code.
+      // The row's state before the claim is kept so a failed renewal can put
+      // a live approval back exactly as it was.
       const result = await this.config.db.query(
         `UPDATE bank_consents SET status='processing'
-        WHERE owner=$1 AND state_hash=$2 AND status='pending' AND state_expires_at>now()
-        RETURNING owner,bank,country,expires_at`,
+        FROM (SELECT owner AS o, bank AS b, status AS previous_status, expires_at AS previous_expires_at
+              FROM bank_consents WHERE owner=$1 AND state_hash=$2 FOR UPDATE) AS was
+        WHERE bank_consents.owner=was.o AND bank_consents.bank=was.b
+          AND was.previous_status IN ('pending','authorized') AND bank_consents.state_expires_at>now()
+        RETURNING bank_consents.owner,bank_consents.bank,bank_consents.country,
+          COALESCE(bank_consents.requested_expires_at,bank_consents.expires_at) AS expires_at,
+          was.previous_status,was.previous_expires_at`,
         [owner, digest],
       );
       const row = result.rows[0];
       if (!row) throw new ConsentError();
       claimed = true;
+      before = {
+        status: String(row.previous_status),
+        expiresAt: new Date(
+          row.previous_expires_at as string | Date,
+        ).toISOString(),
+      };
       const credentials = this.credentials(row.owner as Owner);
       const session = await this.post(credentials, '/sessions', { code });
       const aspsp = object(session.aspsp);
@@ -269,7 +306,7 @@ export class ConsentService {
         // Cleanup errors must not leak paths or mask the permanently consumed state.
         throw new ConsentError();
       } finally {
-        if (claimed) await this.fail(owner, digest);
+        if (claimed) await this.fail(owner, digest, before);
       }
       throw new ConsentError();
     }

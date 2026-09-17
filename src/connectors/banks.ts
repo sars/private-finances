@@ -16,12 +16,18 @@
  * shorter name than the provider publishes: the provider says "LHV Pank",
  * the owner says "LHV", and an account called "LHV Pank EUR" would read as a
  * stranger's. Keeping all three on one row is what stops them drifting apart.
+ *
+ * The country is where the provider lists the bank for this household. The
+ * approval form once asked for it with "LV" pre-filled, and the first LHV
+ * attempt went out as "LHV Pank in Latvia", which the provider does not have.
+ * Now the form follows the bank; the field stays editable for a bank that
+ * lists the household's account under another country.
  */
 export const BANKS = [
-  { slug: 'wise', name: 'Wise', label: 'Wise' },
-  { slug: 'revolut', name: 'Revolut', label: 'Revolut' },
-  { slug: 'swedbank', name: 'Swedbank', label: 'Swedbank' },
-  { slug: 'lhv', name: 'LHV Pank', label: 'LHV' },
+  { slug: 'wise', name: 'Wise', label: 'Wise', country: 'LV' },
+  { slug: 'revolut', name: 'Revolut', label: 'Revolut', country: 'LV' },
+  { slug: 'swedbank', name: 'Swedbank', label: 'Swedbank', country: 'LV' },
+  { slug: 'lhv', name: 'LHV Pank', label: 'LHV', country: 'EE' },
 ] as const;
 
 /** Ours: session files, systemd instances, the `enablebanking:<owner>:<bank>` key. */
@@ -53,6 +59,13 @@ export function bankLabel(slug: BankSlug): string {
   const found = BANKS.find((b) => b.slug === slug);
   if (!found) throw new Error('unknown_bank');
   return found.label;
+}
+
+/** The country the provider lists this bank under for the household. */
+export function bankCountry(name: BankName): string {
+  const found = BANKS.find((b) => b.name === name);
+  if (!found) throw new Error('unknown_bank');
+  return found.country;
 }
 
 /**
