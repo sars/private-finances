@@ -27,7 +27,10 @@ State of the imports at this release, checked instance by instance:
   and two payments; the bank serves history between two and six months only
   (a window from March 2026 is refused with 422) and enforces the PSD2
   allowance on unattended calls, so the `half-hourly` marker was removed and
-  LHV runs every six hours. A one-shot backfill of 19 June to 17 August 2026 is
+  LHV runs every six hours. Measuring that window used up the day's allowance:
+  the 19:23 Riga run answered `rate_limit`, which set the sticky conservative
+  marker and a 24-hour cooldown, so the next LHV import is on September 18
+  after 19:23 Riga. A one-shot backfill of 19 June to 17 August 2026 is
   scheduled on the server as the transient timer `pf-backfill-lhv-once` for
   September 18 at 19:45 Riga, after the regular import's cooldown; it stops
   the LHV timer, runs `backfill-cli`, and starts the timer again.
