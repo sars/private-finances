@@ -132,8 +132,15 @@ test('a refund reduces the purchase, leaves both records alone, and can be undon
       refunds.unlink(saved.id, 0, 'rodion', 'Stale view'),
       /stale_refund_revision/,
     );
+    // Either member may undo the household's link, so the link's owner is
+    // read from the link itself; only a link that does not exist is refused.
     await assert.rejects(
-      refunds.unlink(saved.id, 1, 'katya', 'Wrong owner'),
+      refunds.unlink(
+        '00000000-0000-4000-8000-000000000000',
+        1,
+        'katya',
+        'No such link',
+      ),
       /not_found/,
     );
     const unlinked = await refunds.unlink(

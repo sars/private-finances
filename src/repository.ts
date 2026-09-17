@@ -405,11 +405,18 @@ export class Repository {
     }
     return changed;
   }
+  /**
+   * `actor` is the member who decided; `owner` is the member whose account the
+   * payment sits on, and defaults to the actor. They differ when one member
+   * decides the other's payment, which the household allows: the audit event
+   * then records who actually decided.
+   */
   async classify(
     id: string,
     revision: number,
     input: unknown,
     actor: Owner,
+    owner: Owner = actor,
   ): Promise<void> {
     const c = validateClassification(input);
     if (!Number.isSafeInteger(revision) || revision < 0)
@@ -420,7 +427,7 @@ export class Repository {
         [id],
       );
       const row = result.rows[0];
-      if (!row || row.owner !== actor) throw new Error('not_found');
+      if (!row || row.owner !== owner) throw new Error('not_found');
       if (Number(row.revision) !== revision)
         throw new Conflict('stale_revision');
       if (

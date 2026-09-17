@@ -50,6 +50,13 @@ payment was routine or exceptional, and the reason. **Ask in Telegram** sits
 beside the explanation box, because that is the other way to answer the same
 question.
 
+Either member may open and decide the other's payment here, exactly as either
+may answer a Telegram question addressed to the other. The payment stays on the
+account it belongs to — the totals never move — and the record says who
+actually decided: the audit event, the spending-pattern annotation, the refund
+link and the explanation each carry the member who signed in, beside the member
+whose payment it is.
+
 The category and tag fields are type-to-search pickers built on Popover and
 `cmdk`, grouped by top-level parent and showing the full path. They replace a
 plain text input with an HTML `datalist`, which browsers render inconsistently

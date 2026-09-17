@@ -271,20 +271,35 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     assert.equal(finishes, 1);
 
     const katya = (await repo.list('katya'))[0]!;
+    // Either member may decide the other's payment. It stays on katya's
+    // account and the audit event names rodion as the member who decided.
     const response = await fetch(base + '/classify', {
       method: 'POST',
       headers: { authorization },
+      redirect: 'manual',
       body: new URLSearchParams({
         csrf,
         id: katya.id,
         revision: '0',
         owner: 'katya',
         kind: 'non_personal',
-        reason: 'forged owner',
+        reason: 'Decided for the household',
       }),
     });
-    assert.equal(response.status, 400);
-    assert.equal((await repo.list('katya'))[0]?.revision, 0);
+    assert.equal(response.status, 303);
+    const decided = (await repo.list('katya'))[0]!;
+    assert.equal(decided.revision, 1);
+    assert.equal(decided.owner, 'katya');
+    assert.equal(decided.kind, 'non_personal');
+    assert.deepEqual(
+      (
+        await db.query(
+          "SELECT actor FROM audit_events WHERE transaction_id=$1 AND event='classified'",
+          [katya.id],
+        )
+      ).rows,
+      [{ actor: 'rodion' }],
+    );
     const katyaAuth =
       'Basic ' +
       Buffer.from('katya:synthetic-katya-password').toString('base64');
@@ -294,7 +309,7 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
       body: new URLSearchParams({
         csrf,
         id: katya.id,
-        revision: '0',
+        revision: '1',
         kind: 'non_personal',
         reason: 'Other owner token',
       }),
@@ -312,13 +327,13 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
       body: new URLSearchParams({
         csrf: katyaCsrf,
         id: katya.id,
-        revision: '0',
+        revision: '1',
         kind: 'non_personal',
         reason: 'Own confirmed decision',
       }),
     });
     assert.equal(allowed.status, 303);
-    assert.equal((await repo.list('katya'))[0]?.revision, 1);
+    assert.equal((await repo.list('katya'))[0]?.revision, 2);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await db.close();

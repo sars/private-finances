@@ -69,7 +69,12 @@ function annotation(transaction: Row, stored?: Row): SpendingPatternAnnotation {
 export class SpendingPatterns {
   constructor(readonly db: Database) {}
 
-  /** Pass the returned annotation revision on later edits; omitted means first write. */
+  /**
+   * Pass the returned annotation revision on later edits; omitted means first
+   * write. `owner` is the member whose account the payment sits on; `actor` is
+   * the member labelling it, which the audit event records. Either member may
+   * label the other's payment.
+   */
   async set(
     transactionId: string,
     expectedTransactionRevision: number,
@@ -77,8 +82,10 @@ export class SpendingPatterns {
     pattern: SpendingPattern,
     reason: string,
     expectedAnnotationRevision = 0,
+    actor: Owner = owner,
   ): Promise<SpendingPatternAnnotation> {
     ownerCheck(owner);
+    ownerCheck(actor);
     idCheck(transactionId);
     revisionCheck(expectedTransactionRevision);
     revisionCheck(expectedAnnotationRevision);
@@ -128,7 +135,7 @@ export class SpendingPatterns {
         [
           randomUUID(),
           transactionId,
-          owner,
+          actor,
           JSON.stringify(annotation(transaction, previous)),
           JSON.stringify(result),
           reason,
