@@ -190,8 +190,18 @@ Recharts leaves the entry chunk.
   Decision history, Receipts, Settings — opens with the same `PageHeader`
   (one `text-lg` title line, one sentence, actions right) instead of its own
   eyebrow-and-3xl heading, and cards sit on the design scale (`rounded-lg`,
-  `shadow-xs`) throughout. Their bodies are unchanged: filter rows on
-  Currency and Reports still spell out their labels rather than using
-  `Field`, Categories and Accounts keep their own forms, and the estimate
-  tables on Analytics remain raw `<table>`s. That is the remaining Stage 5
-  work, screen by screen, each a small pull request.
+  `shadow-xs`) throughout.
+- Stage 5, second pass: built. The filter rows on Currency conversion,
+  Reports and Bank connections use `FilterBar`/`Field`, and Currency's two
+  date inputs became the `PeriodPicker`, so no screen writes a date input by
+  hand any more. Home lost its dead `analytics` branch — Analytics has been
+  its own screen since Stage 3 — which removed the last raw `<table>`s; the
+  historical-estimates toggle those tables served moved to the Analytics
+  screen as `components/historical-estimates.tsx`, on the `Table` primitive,
+  loading `/api/overview` only when switched on. `check_frontend.py` now
+  refuses a raw `<table>` outside `components/ui/`. Decided rather than
+  deferred: drill links from Analytics keep going to Home, because Analytics
+  shows the household while Transactions shows only the signed-in owner's
+  payments by design, so Home is the screen whose totals can match.
+  Categories and Accounts already compose from `Label`, `Input` and `Choice`
+  and needed nothing.

@@ -9,7 +9,11 @@ owner, kind), `depth` and `kinds` on top of the existing filter grammar and
 `owner`; the screen is `frontend/src/Analytics.tsx`. Not yet in the grammar:
 `account`, `tag`/`excludeTag`, `provisional` as a filter, and category node ids
 (categories are still path strings), so drill links go to Home's category and
-period filters rather than to Transactions. The build steps were B1–B3 of
+period filters rather than to Transactions — deliberately, since Analytics
+shows the household and Transactions only the signed-in owner. The
+"show historical estimates" toggle that used to live on the old Analytics alias
+of Home sits at the bottom of this screen and fetches `/api/overview` only when
+switched on. The build steps were B1–B3 of
 [the work plan](classification-work-plan.md).
 
 The owner considers this inseparable from classification: a good classification
