@@ -296,6 +296,61 @@ export async function initializeTelegram(tx: Executor): Promise<void> {
   await tx.query(
     'ALTER TABLE telegram_proposal_inputs ADD COLUMN IF NOT EXISTS message_id bigint',
   );
+  // A loose note to a household member, answering their own message: that an
+  // answer reached nothing and why. Until 17 September 2026 a lost answer was
+  // recorded and logged but never said in the chat, because the outbox holds
+  // a question about a payment and nothing else.
+  await tx.query(`CREATE TABLE IF NOT EXISTS telegram_notes (
+    id uuid PRIMARY KEY,chat_id text NOT NULL,message_id bigint NOT NULL,text text NOT NULL,
+    state text NOT NULL CHECK(state IN ('queued','sending','sent','uncertain')),
+    lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
+    reply_message_id bigint
+  )`);
+}
+
+/** Where a payment can be opened and decided; nothing when no origin is configured. */
+export function reviewLink(
+  settings: Pick<TelegramConfig, 'publicOrigin'>,
+  transactionId: string,
+): string {
+  return settings.publicOrigin
+    ? `\n${settings.publicOrigin}/review?id=${encodeURIComponent(transactionId)}`
+    : '';
+}
+
+/** The detail recorded for a plain message in the chat, which is the
+ * members' own conversation rather than an answer that reached nothing. */
+export const NOT_A_REPLY = 'the message is not a reply to a question';
+
+/** How a payment's account reads in a chat message: the household's own label,
+ * with the bank named when the label alone does not name it. */
+export function accountLine(
+  source: unknown,
+  label: unknown,
+): string | undefined {
+  if (typeof label !== 'string' || !label.trim()) return undefined;
+  const name = label
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .trim()
+    .slice(0, 80);
+  if (source === 'monobank' && !/mono/i.test(name)) return `${name} · Monobank`;
+  if (source === 'manual_cash') return `${name} · cash`;
+  return name;
+}
+
+/** Queue a note answering a household member's own message. Written inside the
+ * caller's transaction, so it exists exactly when the outcome it explains does. */
+export async function queueTelegramNote(
+  tx: Executor,
+  chatId: string,
+  messageId: number,
+  text: string,
+): Promise<void> {
+  if (!positiveId(messageId)) return;
+  await tx.query(
+    "INSERT INTO telegram_notes(id,chat_id,message_id,text,state) VALUES($1,$2,$3,$4,'queued')",
+    [randomUUID(), chatId, messageId, text.slice(0, 4000)],
+  );
 }
 
 function paymentSnapshot(row: Row): Record<string, unknown> {
@@ -555,11 +610,26 @@ export class TelegramClarifications {
   async receive(
     raw: unknown,
   ): Promise<'accepted' | 'ignored' | 'duplicate' | 'stale'> {
+    return (await this.receiveDetailed(raw)).outcome;
+  }
+  /**
+   * Consume one message a household member sent the shared chat. Every such
+   * message leaves a row in telegram_updates saying what became of it, and
+   * one that answered the bot without reaching a question is answered back
+   * with why, so a lost answer is never silent again. A message that is not
+   * addressed to us at all — another chat, a stranger, a bot, no text — is
+   * ignored without a trace.
+   */
+  async receiveDetailed(raw: unknown): Promise<{
+    outcome: 'accepted' | 'ignored' | 'duplicate' | 'stale';
+    detail?: string;
+  }> {
     const update = record(raw),
       message = record(update?.message),
       chat = record(message?.chat),
       from = record(message?.from),
-      reply = record(message?.reply_to_message);
+      reply = record(message?.reply_to_message),
+      repliedTo = record(reply?.from);
     if (
       !Number.isSafeInteger(update?.update_id) ||
       Number(update?.update_id) < 0 ||
@@ -567,34 +637,44 @@ export class TelegramClarifications {
       String(chat?.id) !== this.settings.chatId ||
       !positiveId(from?.id) ||
       from?.is_bot === true ||
-      !positiveId(reply?.message_id) ||
       typeof message?.text !== 'string' ||
       !message.text.trim() ||
       message.text.length > 4000
     )
-      return 'ignored';
+      return { outcome: 'ignored' };
     const actor = (['rodion', 'katya'] as const).find(
       (key) => this.settings.userIds[key] === String(from.id),
     );
-    if (!actor) return 'ignored';
+    if (!actor) return { outcome: 'ignored' };
+    const ownMessage = positiveId(message?.message_id)
+      ? message!.message_id
+      : null;
+    // Only a reply to one of our own messages was meant for us; a reply to the
+    // other member, or a plain message in the chat, is their conversation.
+    const answeredUs =
+      positiveId(reply?.message_id) && repliedTo?.is_bot === true;
     return this.db.transaction(async (tx) => {
       const inserted = await tx.query(
         'INSERT INTO telegram_updates(update_id) VALUES($1) ON CONFLICT DO NOTHING RETURNING update_id',
         [update!.update_id],
       );
-      if (!inserted.rows.length) return 'duplicate';
+      if (!inserted.rows.length) return { outcome: 'duplicate' as const };
       // Whatever happens below, say so on the row: an answer that reaches
       // nothing must not disappear leaving only its update number behind.
       const settle = async (
         outcome: 'accepted' | 'ignored' | 'stale',
         detail: string,
+        note?: string,
       ) => {
         await tx.query(
           'UPDATE telegram_updates SET outcome=$2,detail=$3 WHERE update_id=$1',
           [update!.update_id, outcome, detail],
         );
-        return outcome;
+        if (note && ownMessage)
+          await queueTelegramNote(tx, this.settings.chatId, ownMessage, note);
+        return { outcome, detail };
       };
+      if (!positiveId(reply?.message_id)) return settle('ignored', NOT_A_REPLY);
       // Any member of the household may answer any question in the shared chat;
       // the question is addressed to the card's owner but the other one may
       // well know what the payment was. Who answered is recorded rather than
@@ -606,22 +686,36 @@ export class TelegramClarifications {
         )
       ).rows[0];
       if (!row)
-        return settle(
-          'ignored',
-          'the message replied to is not an open question',
+        return this.unmatchedReply(
+          tx,
+          settle,
+          reply!.message_id,
+          actor,
+          answeredUs,
         );
       const current = (
         await tx.query('SELECT * FROM transactions WHERE id=$1 FOR UPDATE', [
           row.transaction_id,
         ])
       ).rows[0];
-      if (!current) return settle('stale', 'the payment no longer exists');
+      const movedOn = `This payment changed since I asked, so your answer was not applied. Open it and decide there.${reviewLink(this.settings, String(row.transaction_id))}`;
+      if (!current)
+        return settle(
+          'stale',
+          'the payment no longer exists',
+          'This payment is no longer in the ledger, so your answer was not applied.',
+        );
       if (current.owner !== row.owner)
-        return settle('stale', 'the question no longer matches the payment');
+        return settle(
+          'stale',
+          'the question no longer matches the payment',
+          movedOn,
+        );
       if (!(await rebasePendingQuestion(tx, row, current)))
         return settle(
           'stale',
           `the payment moved on from revision ${String(row.revision)} to ${String(current.revision)} before the answer arrived`,
+          movedOn,
         );
       await tx.query(
         'INSERT INTO telegram_proposal_inputs(id,outbox_id,update_id,owner,answered_by,input_text,message_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
@@ -632,7 +726,7 @@ export class TelegramClarifications {
           String(row.owner),
           actor,
           message!.text,
-          positiveId(message?.message_id) ? message!.message_id : null,
+          ownMessage,
         ],
       );
       return settle(
@@ -640,6 +734,121 @@ export class TelegramClarifications {
         `${actor} answered for ${String(row.owner)}; linked to payment ${String(row.transaction_id)}`,
       );
     });
+  }
+  /**
+   * A reply to one of our messages that is not an open question. What it was
+   * decides what is said: a report or an earlier note draws nothing, a refund
+   * question addressed to the other member or already closed says so, and
+   * anything else — a receipt, a closed question — is told it reached nothing.
+   */
+  private async unmatchedReply(
+    tx: Executor,
+    settle: (
+      outcome: 'accepted' | 'ignored' | 'stale',
+      detail: string,
+      note?: string,
+    ) => Promise<{
+      outcome: 'accepted' | 'ignored' | 'stale';
+      detail: string;
+    }>,
+    repliedTo: number,
+    actor: Owner,
+    answeredUs: boolean,
+  ) {
+    if (!answeredUs)
+      return settle(
+        'ignored',
+        'the message replied to is not an open question',
+      );
+    const args = [this.settings.chatId, repliedTo];
+    if (
+      (
+        await tx.query(
+          'SELECT 1 FROM report_delivery WHERE chat_id=$1 AND message_id=$2',
+          args,
+        )
+      ).rows.length
+    )
+      return settle('ignored', 'the message replied to is a report');
+    if (
+      (
+        await tx.query(
+          'SELECT 1 FROM telegram_notes WHERE chat_id=$1 AND reply_message_id=$2',
+          args,
+        )
+      ).rows.length
+    )
+      return settle('ignored', 'the message replied to is a note');
+    const refund = (
+      await tx.query(
+        'SELECT owner,state FROM refund_questions WHERE chat_id=$1 AND message_id=$2',
+        args,
+      )
+    ).rows[0];
+    if (refund && refund.state === 'sent' && refund.owner !== actor)
+      return settle(
+        'ignored',
+        `the message replied to is a refund question addressed to ${String(refund.owner)}`,
+        `This refund question is addressed to ${String(refund.owner) === 'rodion' ? 'Rodion' : 'Katya'}, and only they can answer it.`,
+      );
+    if (refund)
+      return settle(
+        'ignored',
+        'the message replied to is a refund question that is no longer open',
+        'This question is no longer open, so nothing was saved. Open the payment in Private Finances if it needs changing.',
+      );
+    return settle(
+      'ignored',
+      'the message replied to is not an open question',
+      'I could not link this to an open question about a payment, so nothing was saved. Reply directly to the question about that payment, or decide it in Private Finances.',
+    );
+  }
+  /** Send one queued note: a 👀 on the member's message, then the answer under
+   * it. The reaction is a courtesy and never blocks the note. */
+  async dispatchNoteOne(): Promise<'idle' | 'sent' | 'uncertain'> {
+    const item = await this.db.transaction(async (tx) => {
+      await tx.query(
+        "UPDATE telegram_notes SET state='uncertain',lease_until=NULL WHERE chat_id=$1 AND state='sending' AND lease_until<now()",
+        [this.settings.chatId],
+      );
+      const row = (
+        await tx.query(
+          "SELECT * FROM telegram_notes WHERE chat_id=$1 AND state='queued' ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",
+          [this.settings.chatId],
+        )
+      ).rows[0];
+      if (!row) return null;
+      await tx.query(
+        "UPDATE telegram_notes SET state='sending',lease_until=now()+interval '60 seconds' WHERE id=$1",
+        [row.id],
+      );
+      return row;
+    });
+    if (!item) return 'idle';
+    await this.transport
+      .react(this.settings.chatId, Number(item.message_id), '👀')
+      .catch(() => undefined);
+    try {
+      const sent = await this.transport.reply(
+        this.settings.chatId,
+        Number(item.message_id),
+        String(item.text),
+      );
+      // The note's own message is remembered so that a reply to it is
+      // recognised as such rather than answered with another note.
+      const saved = await this.db.query(
+        "UPDATE telegram_notes SET state='sent',lease_until=NULL,reply_message_id=$2 WHERE id=$1 AND state='sending' AND lease_until>=now() RETURNING id",
+        [item.id, positiveId(sent.messageId) ? sent.messageId : null],
+      );
+      if (saved.rows.length) return 'sent';
+    } catch {
+      /* An uncertain note must not be repeated automatically. */
+    }
+    await this.db.query(
+      "UPDATE telegram_notes SET state='uncertain',lease_until=NULL WHERE id=$1 AND state='sending'",
+      [item.id],
+    );
+    return 'uncertain';
   }
   async history(actor: Owner): Promise<Array<Record<string, unknown>>> {
     owner(actor);

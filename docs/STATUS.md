@@ -291,6 +291,24 @@ with no charge at all. What the matcher still will not decide is recorded in
 [refunds](refunds.md) rather than tracked here, so this section stays current
 rather than growing.
 
+### Implemented, not yet released
+
+A fix for lost Telegram answers, in a pull request from branch
+`worktree-fix+telegram-reply-feedback`, awaits review and release. On 17
+September 2026 three answers a household member gave the bot reached nothing:
+the refund-question receiver consumed each update before checking it was its
+own, so the clarification consumer saw a duplicate and dropped it unlogged. The
+receiver now consumes only what it matches; every household message leaves an
+outcome on its `telegram_updates` row and a log line; a reply the bot cannot
+link to an open question is answered under it with why (`telegram_notes`,
+schema 52); and each question and receipt names the payment's account and the
+bank's merchant category. Details in
+[the incident](incidents/2026-09-17-answers-taken-by-refund-flow.md) and
+[Telegram replies](telegram-replies.md). After release: the three questions
+from 17 September are still open in the chat and can be answered again; the
+owner named the two "Iнше" payments as the intercom fee, which also fits the
+bank's category for them.
+
 ## Live capabilities
 
 Private Tailscale HTTPS deployment with per-owner authentication. Bank imports run

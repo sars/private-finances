@@ -16,21 +16,56 @@ That is the path for an answer the application accepted. An answer it never
 accepted used to leave no trace at all. On 15 September 2026 two of Katya's
 replies were consumed by the poller a couple of hours after the questions went
 out; the cursor advanced, no proposal input was created, the two payments stayed
-unresolved, and she was never told. Afterwards nobody could say which check had
-rejected them, because the only thing kept was the update number.
+unresolved, and she was never told. On 17 September it happened again to three
+of her answers, and this time the cause was found: the worker offers every
+update to the refund questions, the receipts and the suggestion workflow before
+the clarification consumer, all inside the poller's one transaction, and the
+refund flow took the update number *before* checking whether the reply was to
+one of its questions. Its row stayed when it declined the message, so the
+clarification consumer saw its own insert refused and treated the answer as a
+duplicate — a result nothing logged. The write-up is
+[the incident of 17 September](incidents/2026-09-17-answers-taken-by-refund-flow.md).
 
-`telegram_updates` now carries the `outcome` and a short `detail` for every
-message a household member sends the bot, written inside the same transaction
-that consumes it: which payment an accepted answer was linked to, or why a
-discarded one reached nothing — that the message replied to is not an open
-question, that the person answered a question addressed to the other member, or
-that the payment moved on between the question and the answer. The poller also
-writes a `telegram_reply_discarded` line to its log, so a lost answer shows up in
+The refund flow now consumes an update only once a refund question matches it.
+And every message a household member sends the chat now leaves a trace:
+`telegram_updates` carries the `outcome` and a short `detail` for each one,
+written inside the same transaction that consumes it — which payment an
+accepted answer was linked to, or why a discarded one reached nothing: that it
+was not a reply at all, that the message replied to is not an open question,
+that a reply to a suggestion said something other than confirm or reject, or
+that the payment moved on between the question and the answer. The poller
+writes a `telegram_reply_discarded` line with that detail for every outcome
+other than accepted, duplicates included, so a lost answer shows up in
 `journalctl` rather than only under inspection.
 
-Telling the person in the chat that their answer did not land is still not
-implemented: the outbox holds a question about a payment and has no way to carry
-a loose note.
+The person is told as well. A reply aimed at one of the bot's own messages that
+reaches no open question, or whose payment has moved on, gets a 👀 on it and an
+answer under it saying so — with a link to the payment when there is one to
+link — through the `telegram_notes` queue (schema 52), sent by the worker in
+its next pass. A reply to a refund question addressed to the other member, or
+to one already closed, is told that instead. A plain message in the chat, a
+reply to the other member, a reply to a report or to one of these notes is
+their own conversation: it is recorded and left alone, and a plain message is
+not logged as a discarded reply either.
+
+Still open: each receiver takes the update number itself, so "match before
+consume" is an invariant every receiver must uphold separately and the
+clarification consumer is safe only because it runs last. Recording the update
+once in the poller and handing each receiver the result would remove that
+class of fault.
+
+## What a question says
+
+A question names the person, quotes the triage question or a generic one, and
+gives the date, the amount, whether the bank is still processing it, and the
+bank's description. Since 17 September 2026 it also names the account the
+payment left, by the household's own label — `Account: black · Monobank`,
+`Account: Wise EUR` — and, when the bank sent a merchant category code, what
+that code means: `Bank category: Utilities — electricity, gas, water and
+sanitation`. The reason is the pair of intercom fees whose only description
+from the bank was "Iнше" (other): the person had nothing to go on, while the
+code said utilities all along. The receipt that reports what was saved names
+the account too.
 
 ## Either member may answer, and the answer records who did
 
