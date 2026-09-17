@@ -48,6 +48,14 @@ def source_rules() -> list[str]:
             errors.append(f"{rel}: pick from a list with Choice (components/finance), not a raw Select")
         if "<table" in text and (SRC / "components" / "ui") not in path.parents:
             errors.append(f"{rel}: raw <table>; use the Table primitive or card rows")
+        # Base UI's Button renders type="button", so a form's Button submits
+        # nothing unless it says type="submit". The save-explanation button
+        # once did nothing at all for exactly this reason.
+        forms = text.count("<form")
+        if forms and text.count('type="submit"') < forms:
+            errors.append(
+                f"{rel}: {forms} <form> but fewer type=\"submit\" buttons; a Button submits only with type=\"submit\""
+            )
     return errors
 
 

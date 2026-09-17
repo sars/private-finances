@@ -372,6 +372,7 @@ export function DecisionCard({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
+            type="submit"
             className="flex-1"
             disabled={
               disabled ||
