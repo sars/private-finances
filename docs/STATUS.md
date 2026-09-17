@@ -9,9 +9,19 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**b947646947271a9fe9ea7aca51264b43640397b7**, live since September 17, 2026 at
-schema version 47, deployed with `deploy/release.sh` as the tenth release that
-day. Its two migrations (the Swedbank account is called `Swedbank`; an
+**46cdb02aef90831341cce4a2ea1c93a97568f6ae**, live since September 17, 2026 at
+schema version 48, deployed with `deploy/release.sh` as the eleventh release
+that day. It carries the Analytics rebuild (PR #40) and, from another session,
+LHV as a bank reachable through the provider (PR #39, migration 48). The full
+suite passed on the server first; the migration was rehearsed on a restored copy
+of the real database, reaching schema 48 in 39 milliseconds with 4,140
+transactions, 140 active refund links, no expense without a category and
+nothing filed on a heading. After the switch both services were active and the
+log shows no error. See the entry below.
+
+The release before it, **b947646947271a9fe9ea7aca51264b43640397b7**, went live
+on September 17, 2026 at schema version 47 as the tenth release that day. Its
+two migrations (the Swedbank account is called `Swedbank`; an
 explanation records who answered) were rehearsed first on a restored copy of the
 real database, which reached schema 47 in 27 milliseconds with 4,140
 transactions, 140 active refund links, no expense without a category and
@@ -256,6 +266,35 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# Analytics reads like the workbook — September 17, 2026
+
+Schema version 48, deployed as `46cdb02aef90831341cce4a2ea1c93a97568f6ae`.
+
+The owner liked the household workbook's way of reading a year — total,
+average full month, month by month with the figure on each bar and the open
+month shaded, what made the big months big, every category in every month —
+and asked for the Analytics screen to work that way on the phone and the
+desktop, for a year by months, a month by days and a stretch by weeks, without
+a legend to decode and without a model writing prose. PR #40 rebuilds it: one
+period control with the bucket chosen from the period, Spent / average full
+bucket / biggest bucket / not yet placed, horizontal bucket bars with figures
+and an average rule (a column chart with shaded weekends past fourteen
+buckets), the three heaviest buckets explained by the categories that ran above
+their own average and their largest payments, a category-by-bucket grid that
+opens into parts and flips on the phone, the fifteen largest payments with
+bucket chips, and the rolled-up tree. The aggregation endpoint now carries each
+bucket's three largest payments and the period's fifteen, pinned by test. The
+"who decided the money" strip moved to System health; the historical-estimates
+toggle is gone. Two small notes ride along: the pending-payment paragraph is a
+tooltip on the "Bank processing" chip, and a failed explanation save says so in
+a toast with the status.
+
+Also in this release, from another session: LHV joins the banks reachable
+through the provider (PR #39, migration 48).
+
+Verified after the switch: both services active, 4,140 transactions, no error in
+the log, schema 48.
 
 # Either member decides, and the lists take their first polish — September 17, 2026
 
