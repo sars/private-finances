@@ -810,7 +810,8 @@ async function applyMigrations(db: Database): Promise<void> {
       await tx.query(`CREATE TABLE IF NOT EXISTS telegram_notes (
         id uuid PRIMARY KEY,chat_id text NOT NULL,message_id bigint NOT NULL,text text NOT NULL,
         state text NOT NULL CHECK(state IN ('queued','sending','sent','uncertain')),
-        lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now()
+        lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
+        reply_message_id bigint
       )`);
       await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
     }

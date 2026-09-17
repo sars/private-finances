@@ -8,6 +8,7 @@ import {
 } from './telegram.js';
 import { currencyExponent } from './fx.js';
 import { readMcc } from './mcc.js';
+import { mccLabels } from './mcc-labels.js';
 
 export type ClarificationBotFactory = (
   db: Database,
@@ -112,7 +113,8 @@ export async function queueDailyClarifications(
         const mcc = readMcc(
           row.source_details as Record<string, unknown> | undefined,
         );
-        const context = `${account ? `\nAccount: ${account}` : ''}${mcc ? `\nBank category: ${mcc.meaning}` : ''}`;
+        const meaning = mcc ? mccLabels[mcc.code] : undefined;
+        const context = `${account ? `\nAccount: ${account}` : ''}${meaning ? `\nBank category: ${meaning}` : ''}`;
         const prompt = `${owner === 'rodion' ? 'Rodion' : 'Katya'}, ${String(
           row.state === 'ready'
             ? row.question

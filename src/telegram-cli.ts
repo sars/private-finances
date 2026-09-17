@@ -36,6 +36,7 @@ import {
   type Executor,
 } from './database.js';
 import {
+  NOT_A_REPLY,
   TelegramClarifications,
   telegramTransport,
   type TelegramConfig,
@@ -170,7 +171,7 @@ export async function pollOnce(
         // update number, and nobody could say what had rejected it. A
         // duplicate is logged too: three answers were lost on 17 September
         // 2026 as duplicates, when an earlier consumer had taken the number.
-        if (outcome !== 'accepted')
+        if (outcome !== 'accepted' && detail !== NOT_A_REPLY)
           process.stdout.write(
             `${JSON.stringify({
               event: 'telegram_reply_discarded',

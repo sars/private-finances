@@ -5,6 +5,7 @@ import { Repository } from '../src/repository.js';
 import { Reports, previousReportPeriod } from '../src/reports.js';
 import { synthetic } from '../src/synthetic.js';
 import {
+  accountLine,
   initializeTelegram,
   TelegramClarifications,
   telegramTransport,
@@ -700,6 +701,41 @@ test('a household message that reaches no question is recorded, and one aimed at
     assert.match(replies[0]!.text, /could not link this to an open question/);
     assert.equal(await bot.dispatchNoteOne(), 'idle');
     assert.equal((await notes())[0]!.state, 'sent');
+
+    // A reply to a report, or to one of these notes, is not an answer that
+    // reached nothing: it is recorded and left alone.
+    await db.query(
+      `INSERT INTO report_delivery(id,report_id,actor,chat_id,text,state,message_id)
+       SELECT '00000000-0000-4000-8000-000000000009',id,'rodion','-123','Report','sent',900
+       FROM report_snapshots LIMIT 1`,
+    );
+    if ((await db.query('SELECT 1 FROM report_delivery')).rows.length) {
+      assert.equal(
+        (
+          await bot.receiveDetailed(
+            message(
+              30,
+              {},
+              { message_id: 900, from: { id: 999, is_bot: true } },
+            ),
+          )
+        ).detail,
+        'the message replied to is a report',
+      );
+    }
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(31, {}, { message_id: 501, from: { id: 999, is_bot: true } }),
+        )
+      ).detail,
+      'the message replied to is a note',
+    );
+    assert.equal((await notes()).length, 1);
+    // Monobank's own label is not doubled.
+    assert.equal(accountLine('monobank', 'Monobank black'), 'Monobank black');
+    assert.equal(accountLine('monobank', 'black'), 'black · Monobank');
+    assert.equal(accountLine('enablebanking', 'Wise EUR'), 'Wise EUR');
 
     // A real answer to the real question still lands, with nothing extra said.
     assert.equal(

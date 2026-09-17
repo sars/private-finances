@@ -15,6 +15,7 @@ import type { Owner } from './domain.js';
 import {
   accountLine,
   queueTelegramNote,
+  reviewLink,
   validateTelegramConfig,
   type TelegramConfig,
   type TelegramTransport,
@@ -297,9 +298,7 @@ export class TelegramReplyWorkflow {
    * decision applied without being confirmed has to be visible and reversible.
    */
   private async receiptText(item: Row): Promise<string> {
-    const link = this.settings.publicOrigin
-      ? `\n${this.settings.publicOrigin}/review?id=${encodeURIComponent(String(item.transaction_id))}`
-      : '';
+    const link = reviewLink(this.settings, String(item.transaction_id));
     const account = accountLine(item.source, item.account_label);
     const payment =
       String(item.description ?? 'Payment').slice(0, 200) +
@@ -436,21 +435,31 @@ export class TelegramReplyWorkflow {
             'a reply to a suggestion must be confirm or reject',
           ],
         );
-        if (
-          Number.isSafeInteger(message?.message_id) &&
-          Number(message!.message_id) > 0
-        )
-          await queueTelegramNote(
-            tx,
-            this.settings.chatId,
-            Number(message!.message_id),
-            'This suggestion is only confirmed or rejected: reply “confirm” or “reject” to it, or decide the payment in Private Finances.',
-          );
+        await queueTelegramNote(
+          tx,
+          this.settings.chatId,
+          Number(message!.message_id),
+          'This suggestion is only confirmed or rejected: reply “confirm” or “reject” to it, or decide the payment in Private Finances.',
+        );
         return 'ignored';
       }
-      if (['confirmed', 'rejected'].includes(String(row.state)))
+      if (['confirmed', 'rejected'].includes(String(row.state))) {
+        await tx.query(
+          "UPDATE telegram_updates SET outcome='ignored',detail='the suggestion was already decided' WHERE update_id=$1",
+          [update!.update_id],
+        );
         return 'duplicate';
-      if (row.state !== 'sent') return 'ignored';
+      }
+      if (row.state !== 'sent') {
+        await tx.query(
+          "UPDATE telegram_updates SET outcome='ignored',detail=$2 WHERE update_id=$1",
+          [
+            update!.update_id,
+            `the suggestion is ${String(row.state)}, not open`,
+          ],
+        );
+        return 'ignored';
+      }
       // Hold hierarchy stable through category validation and the decision commit.
       await tx.query('SELECT pg_advisory_xact_lock(7482394)');
       const current = (

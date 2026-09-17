@@ -303,9 +303,24 @@ export async function initializeTelegram(tx: Executor): Promise<void> {
   await tx.query(`CREATE TABLE IF NOT EXISTS telegram_notes (
     id uuid PRIMARY KEY,chat_id text NOT NULL,message_id bigint NOT NULL,text text NOT NULL,
     state text NOT NULL CHECK(state IN ('queued','sending','sent','uncertain')),
-    lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now()
+    lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
+    reply_message_id bigint
   )`);
 }
+
+/** Where a payment can be opened and decided; nothing when no origin is configured. */
+export function reviewLink(
+  settings: Pick<TelegramConfig, 'publicOrigin'>,
+  transactionId: string,
+): string {
+  return settings.publicOrigin
+    ? `\n${settings.publicOrigin}/review?id=${encodeURIComponent(transactionId)}`
+    : '';
+}
+
+/** The detail recorded for a plain message in the chat, which is the
+ * members' own conversation rather than an answer that reached nothing. */
+export const NOT_A_REPLY = 'the message is not a reply to a question';
 
 /** How a payment's account reads in a chat message: the household's own label,
  * with the bank named when the label alone does not name it. */
@@ -318,7 +333,7 @@ export function accountLine(
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .trim()
     .slice(0, 80);
-  if (source === 'monobank') return `${name} · Monobank`;
+  if (source === 'monobank' && !/mono/i.test(name)) return `${name} · Monobank`;
   if (source === 'manual_cash') return `${name} · cash`;
   return name;
 }
@@ -659,8 +674,7 @@ export class TelegramClarifications {
           await queueTelegramNote(tx, this.settings.chatId, ownMessage, note);
         return { outcome, detail };
       };
-      if (!positiveId(reply?.message_id))
-        return settle('ignored', 'the message is not a reply to a question');
+      if (!positiveId(reply?.message_id)) return settle('ignored', NOT_A_REPLY);
       // Any member of the household may answer any question in the shared chat;
       // the question is addressed to the card's owner but the other one may
       // well know what the payment was. Who answered is recorded rather than
@@ -672,24 +686,25 @@ export class TelegramClarifications {
         )
       ).rows[0];
       if (!row)
-        return settle(
-          'ignored',
-          'the message replied to is not an open question',
-          answeredUs
-            ? 'I could not link this to an open question about a payment, so nothing was saved. Reply directly to the question about that payment, or decide it in Private Finances.'
-            : undefined,
+        return this.unmatchedReply(
+          tx,
+          settle,
+          reply!.message_id,
+          actor,
+          answeredUs,
         );
       const current = (
         await tx.query('SELECT * FROM transactions WHERE id=$1 FOR UPDATE', [
           row.transaction_id,
         ])
       ).rows[0];
-      const link = this.settings.publicOrigin
-        ? `\n${this.settings.publicOrigin}/review?id=${encodeURIComponent(String(row.transaction_id))}`
-        : '';
-      const movedOn = `This payment changed since I asked, so your answer was not applied. Open it and decide there.${link}`;
+      const movedOn = `This payment changed since I asked, so your answer was not applied. Open it and decide there.${reviewLink(this.settings, String(row.transaction_id))}`;
       if (!current)
-        return settle('stale', 'the payment no longer exists', movedOn);
+        return settle(
+          'stale',
+          'the payment no longer exists',
+          'This payment is no longer in the ledger, so your answer was not applied.',
+        );
       if (current.owner !== row.owner)
         return settle(
           'stale',
@@ -720,6 +735,74 @@ export class TelegramClarifications {
       );
     });
   }
+  /**
+   * A reply to one of our messages that is not an open question. What it was
+   * decides what is said: a report or an earlier note draws nothing, a refund
+   * question addressed to the other member or already closed says so, and
+   * anything else — a receipt, a closed question — is told it reached nothing.
+   */
+  private async unmatchedReply(
+    tx: Executor,
+    settle: (
+      outcome: 'accepted' | 'ignored' | 'stale',
+      detail: string,
+      note?: string,
+    ) => Promise<{
+      outcome: 'accepted' | 'ignored' | 'stale';
+      detail: string;
+    }>,
+    repliedTo: number,
+    actor: Owner,
+    answeredUs: boolean,
+  ) {
+    if (!answeredUs)
+      return settle(
+        'ignored',
+        'the message replied to is not an open question',
+      );
+    const args = [this.settings.chatId, repliedTo];
+    if (
+      (
+        await tx.query(
+          'SELECT 1 FROM report_delivery WHERE chat_id=$1 AND message_id=$2',
+          args,
+        )
+      ).rows.length
+    )
+      return settle('ignored', 'the message replied to is a report');
+    if (
+      (
+        await tx.query(
+          'SELECT 1 FROM telegram_notes WHERE chat_id=$1 AND reply_message_id=$2',
+          args,
+        )
+      ).rows.length
+    )
+      return settle('ignored', 'the message replied to is a note');
+    const refund = (
+      await tx.query(
+        'SELECT owner,state FROM refund_questions WHERE chat_id=$1 AND message_id=$2',
+        args,
+      )
+    ).rows[0];
+    if (refund && refund.state === 'sent' && refund.owner !== actor)
+      return settle(
+        'ignored',
+        `the message replied to is a refund question addressed to ${String(refund.owner)}`,
+        `This refund question is addressed to ${String(refund.owner) === 'rodion' ? 'Rodion' : 'Katya'}, and only they can answer it.`,
+      );
+    if (refund)
+      return settle(
+        'ignored',
+        'the message replied to is a refund question that is no longer open',
+        'This question is no longer open, so nothing was saved. Open the payment in Private Finances if it needs changing.',
+      );
+    return settle(
+      'ignored',
+      'the message replied to is not an open question',
+      'I could not link this to an open question about a payment, so nothing was saved. Reply directly to the question about that payment, or decide it in Private Finances.',
+    );
+  }
   /** Send one queued note: a 👀 on the member's message, then the answer under
    * it. The reaction is a courtesy and never blocks the note. */
   async dispatchNoteOne(): Promise<'idle' | 'sent' | 'uncertain'> {
@@ -746,14 +829,16 @@ export class TelegramClarifications {
       .react(this.settings.chatId, Number(item.message_id), '👀')
       .catch(() => undefined);
     try {
-      await this.transport.reply(
+      const sent = await this.transport.reply(
         this.settings.chatId,
         Number(item.message_id),
         String(item.text),
       );
+      // The note's own message is remembered so that a reply to it is
+      // recognised as such rather than answered with another note.
       const saved = await this.db.query(
-        "UPDATE telegram_notes SET state='sent',lease_until=NULL WHERE id=$1 AND state='sending' AND lease_until>=now() RETURNING id",
-        [item.id],
+        "UPDATE telegram_notes SET state='sent',lease_until=NULL,reply_message_id=$2 WHERE id=$1 AND state='sending' AND lease_until>=now() RETURNING id",
+        [item.id, positiveId(sent.messageId) ? sent.messageId : null],
       );
       if (saved.rows.length) return 'sent';
     } catch {
