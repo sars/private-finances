@@ -412,10 +412,10 @@ export function DecisionCard({
       )}
       {t.spendingPolicy?.excluded && (
         <section
-          className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed"
+          className="space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs leading-relaxed"
           aria-label="Account spending exclusion"
         >
-          <p className="font-medium text-amber-800 dark:text-amber-300">
+          <p className="font-medium text-warning">
             Excluded from personal spending by an account rule
           </p>
           <p>
@@ -613,16 +613,13 @@ export function DecisionCard({
                 </ToggleGroupItem>
               </ToggleGroup>
               {looksExceptional && (
-                <p className="text-xs text-amber-700 dark:text-amber-400">
+                <p className="text-xs text-warning">
                   This is a large payment. Mark it exceptional if it was not
                   part of your usual spending.
                 </p>
               )}
               {t.spendingPattern?.needsReview && (
-                <p
-                  role="status"
-                  className="text-xs text-amber-700 dark:text-amber-400"
-                >
+                <p role="status" className="text-xs text-warning">
                   The payment changed since this was last reviewed. Confirm it
                   again.
                 </p>

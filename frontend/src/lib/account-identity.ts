@@ -72,13 +72,14 @@ export function accountIdentity(
   };
 }
 
-/** Tailwind classes per tone, kept beside the tone so both stay in step. */
+/** Classes per tone, kept beside the tone so both stay in step. Tones are
+ * design tokens (frontend/DESIGN.md): the neutrals and the chart series, so
+ * they follow the theme and dark mode without their own colour classes. */
 export const accountToneClasses: Record<AccountTone, string> = {
-  ink: 'bg-neutral-900 text-neutral-50 dark:bg-neutral-100 dark:text-neutral-900',
-  paper:
-    'bg-neutral-100 text-neutral-900 ring-1 ring-inset ring-neutral-300 dark:bg-neutral-800 dark:text-neutral-100 dark:ring-neutral-600',
-  violet: 'bg-violet-600 text-white dark:bg-violet-500',
-  sky: 'bg-sky-600 text-white dark:bg-sky-500',
-  amber: 'bg-amber-500 text-amber-950 dark:bg-amber-400',
-  slate: 'bg-slate-600 text-white dark:bg-slate-500',
+  ink: 'bg-foreground text-background',
+  paper: 'bg-muted text-foreground ring-1 ring-inset ring-border',
+  violet: 'bg-chart-3 text-white',
+  sky: 'bg-chart-1 text-white',
+  amber: 'bg-chart-4 text-white',
+  slate: 'bg-chart-5 text-white',
 };

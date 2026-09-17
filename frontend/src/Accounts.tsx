@@ -371,8 +371,8 @@ export default function Accounts() {
               </span>
             </div>
             {missingPurpose > 0 && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-                <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="flex items-start gap-3 rounded-lg border border-warning/20 bg-warning/5 px-4 py-3">
+                <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                 <div>
                   <p className="text-sm font-medium">
                     {missingPurpose}{' '}

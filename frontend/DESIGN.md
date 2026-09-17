@@ -74,7 +74,10 @@ page scroll, ever; long text truncates with a title attribute.
 
 ## Don't
 
-No hex colours in `.tsx`. No `Intl.NumberFormat` outside `lib/format.ts`. No
+No hex colours in `.tsx`, and no Tailwind palette classes either (`text-amber-700`,
+`bg-emerald-500/10`…): warnings are `warning`, deltas `positive`/`negative`,
+series and account tones `chart-1`…`chart-6`; the checker refuses both. No
+`Intl.NumberFormat` outside `lib/format.ts`. No
 `<input type="date">`; use `PeriodPicker`. No raw `<table>`; use the data table
 or card rows. No raw `Select`; use `Choice`, which carries the labels Base UI
 needs and never reports an empty pick. No `asChild`; Base UI composes with

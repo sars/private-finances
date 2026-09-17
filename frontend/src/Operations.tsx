@@ -253,7 +253,7 @@ export default function Operations() {
                                   variant="outline"
                                   className={
                                     ['failed', 'uncertain'].includes(state)
-                                      ? 'border-amber-400/40 text-amber-700 dark:text-amber-300'
+                                      ? 'border-warning/40 text-warning'
                                       : ''
                                   }
                                 >
@@ -267,10 +267,7 @@ export default function Operations() {
                             )}
                           </div>
                           {Boolean(flow.expiredSendingCount) && (
-                            <p
-                              role="status"
-                              className="text-xs text-amber-700 dark:text-amber-300"
-                            >
+                            <p role="status" className="text-xs text-warning">
                               {flow.expiredSendingCount} interrupted sending
                               attempts need attention.
                             </p>
@@ -325,7 +322,7 @@ export default function Operations() {
                               variant="outline"
                               className={
                                 connection.state === 'failed'
-                                  ? 'text-amber-700 dark:text-amber-400'
+                                  ? 'text-warning'
                                   : ''
                               }
                             >
@@ -353,8 +350,8 @@ export default function Operations() {
                             </p>
                           )}
                           {connection.error_code && (
-                            <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-relaxed">
-                              <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                            <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs leading-relaxed">
+                              <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                               <p>
                                 {advice[connection.error_code] ??
                                   'Import needs review before retrying.'}
