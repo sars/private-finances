@@ -1,0 +1,26 @@
+[Unit]
+Description=Private Finances monthly assets snapshot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=private-finances
+Group=private-finances
+WorkingDirectory=/opt/private-finances/current
+EnvironmentFile=/etc/private-finances/app.env
+EnvironmentFile=/etc/private-finances/sync.env
+ExecStart=/usr/bin/node dist/src/holdings-snapshot-cli.js
+TimeoutStartSec=15min
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LimitNOFILE=4096
+MemoryMax=512M

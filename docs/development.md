@@ -95,7 +95,7 @@ locally when no isolated PostgreSQL database is configured; the skip is visible.
 - GET `/api/transactions`, `/api/summary` — optional owner=rodion or owner=katya.
 - GET `/health/live` — process liveness; GET `/health/ready` — database readiness.
 - POST `/import` — queue fixed synthetic data; POST `/classify` — audited owner edit.
-- GET `/api/holdings`, POST `/api/holdings`, `/api/holding-snapshots`, `/api/asset-prices` — household assets; see [assets](assets.md).
+- GET `/api/holdings`, POST `/api/holdings`, `/api/holdings/fill`, `/api/holding-snapshots`, `/api/asset-prices` — household assets; see [assets](assets.md).
 
 POST endpoints use form encoding and a CSRF token from the page. Unsupported or
 invalid requests receive a sanitized error and request ID. Request logs omit URLs,

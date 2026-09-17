@@ -76,6 +76,16 @@ and verify authenticated readiness with its release SHA. Roll back the symlink
 if readiness fails; never automatically downgrade schema. Automatic CD remains
 disabled until rollout and rollback have both been demonstrated.
 
+## Monthly assets snapshot
+
+`private-finances-assets-snapshot.service` and `.timer` run
+`holdings-snapshot-cli` on the last Thursday of the month at 10:05 Europe/Riga
+as the application user with `app.env` and `sync.env`; the broker and exchange
+feeds switch on when their files exist in the credentials directory
+(`ibkr-flex-token`, `ibkr-flex-query`, `binance-api-key`, `binance-api-secret`,
+mode 600, owned by the application user like the bank tokens). Installation and
+a credential check are in [assets](../docs/assets.md).
+
 ## Releasing
 
 `bash deploy/release.sh <40-character commit SHA>` performs that whole sequence as

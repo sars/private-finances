@@ -9,6 +9,12 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+Merged after this release and not yet deployed: the assets feeds (PF-020
+steps two and four, migration 54; see [assets](assets.md)). The migration
+adds two nullable columns to `holdings` and touches nothing else. At release
+the new timer unit is installed and enabled and the credential check run;
+both are operator steps recorded in the assets document.
+
 **872511b79eb289cea78e57ad79bedfd117c29118**, live since September 18, 2026 at
 schema version 53, deployed with `deploy/release.sh`. It carries PR #59: the
 reaction a saved Telegram answer receives is 👍, because Telegram accepts only

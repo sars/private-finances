@@ -48,7 +48,17 @@ export const HOLDING_KINDS = [
   'other',
 ] as const;
 export type HoldingKind = (typeof HOLDING_KINDS)[number];
-export type Holding = ValuedHolding & { kind: HoldingKind };
+/** Where a holding's quantity comes from when nobody types it. */
+export const HOLDING_FEEDS = ['bank', 'ibkr', 'binance', 'wallet'] as const;
+export type HoldingFeed = (typeof HOLDING_FEEDS)[number];
+export type Holding = ValuedHolding & {
+  kind: HoldingKind;
+  feed: HoldingFeed | null;
+  /** What the feed looks the holding up by: `source|accountId` for a bank,
+   * a symbol or `CASH` for the broker, `TOTAL` or an asset for the exchange,
+   * a public address for a wallet. */
+  feedRef: string | null;
+};
 export type Snapshot = SnapshotPoint & {
   id: string;
   version: number;
@@ -74,6 +84,7 @@ export async function initializeHoldings(tx: Executor): Promise<void> {
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
+  await addHoldingFeeds(tx);
   await tx.query(`CREATE TABLE IF NOT EXISTS holding_snapshots (
     id uuid PRIMARY KEY,
     holding_id uuid NOT NULL REFERENCES holdings(id),
@@ -102,6 +113,14 @@ export async function initializeHoldings(tx: Executor): Promise<void> {
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE(symbol, as_of, version)
   )`);
+}
+
+/** Schema 54: which feed fills a holding, and by what reference. */
+export async function addHoldingFeeds(tx: Executor): Promise<void> {
+  await tx.query(
+    `ALTER TABLE holdings ADD COLUMN IF NOT EXISTS feed text CHECK (feed IN (${HOLDING_FEEDS.map((f) => `'${f}'`).join(',')}))`,
+  );
+  await tx.query('ALTER TABLE holdings ADD COLUMN IF NOT EXISTS feed_ref text');
 }
 
 const dateValid = (value: unknown): value is string =>
@@ -153,6 +172,14 @@ function mapHolding(row: Row): Holding {
     note: row.note === null || row.note === undefined ? null : String(row.note),
     archived: Boolean(row.archived),
     revision: Number(row.revision),
+    feed:
+      row.feed === null || row.feed === undefined
+        ? null
+        : (String(row.feed) as HoldingFeed),
+    feedRef:
+      row.feed_ref === null || row.feed_ref === undefined
+        ? null
+        : String(row.feed_ref),
   };
 }
 function mapSnapshot(row: Row): Snapshot {
@@ -180,7 +207,7 @@ function mapSnapshot(row: Row): Snapshot {
   };
 }
 const HOLDING_COLUMNS =
-  'id,name,kind,denomination,invested,liquid,owner,group_name,matures_on::text AS matures_on_text,note,archived,sort_order,revision';
+  'id,name,kind,denomination,invested,liquid,owner,group_name,matures_on::text AS matures_on_text,note,archived,sort_order,revision,feed,feed_ref';
 const SNAPSHOT_COLUMNS =
   'id,holding_id,as_of::text AS as_of_text,version,quantity,entered_amount,entered_currency,source,entered_by,note,created_at';
 
@@ -197,6 +224,8 @@ export interface HoldingInput {
   note?: string | null;
   archived?: boolean | string;
   sortOrder?: number | string;
+  feed?: string | null;
+  feedRef?: string | null;
   /** Required when `id` names an existing holding; must match its current revision. */
   revision?: number | string;
 }
@@ -215,11 +244,13 @@ export interface PriceInput {
   usdPerUnit: string;
   source?: string;
 }
+/** A valued row whose holding carries its feed link too. */
+export type HoldingRow = Omit<ValuedRow, 'holding'> & { holding: Holding };
 export interface HoldingsReport {
   display: string;
   at: string;
   dates: string[];
-  rows: ValuedRow[];
+  rows: HoldingRow[];
   totals: DatedTotals;
   previous: DatedTotals | null;
   series: DatedTotals[];
@@ -259,7 +290,19 @@ export class Holdings {
         input.sortOrder === undefined || input.sortOrder === ''
           ? 0
           : Number(input.sortOrder),
+      feed: optionalText(input.feed, 16, 'holding_invalid_feed'),
+      feedRef: optionalText(input.feedRef, 200, 'holding_invalid_feed_ref'),
     };
+    if (
+      values.feed !== null &&
+      !HOLDING_FEEDS.includes(values.feed as HoldingFeed)
+    )
+      throw new Error('holding_invalid_feed');
+    if (values.feed === null) values.feedRef = null;
+    if (values.feed === 'bank' && !/^[^|]+\|[^|]+$/.test(values.feedRef ?? ''))
+      throw new Error('holding_invalid_feed_ref');
+    if (values.feed === 'wallet' && !values.feedRef)
+      throw new Error('holding_invalid_feed_ref');
     if (values.owner !== null && !['rodion', 'katya'].includes(values.owner))
       throw new Error('holding_invalid_owner');
     if (values.maturesOn !== null && !dateValid(values.maturesOn))
@@ -287,7 +330,7 @@ export class Holdings {
           throw new Conflict('holding_stale_revision');
         const updated = (
           await tx.query(
-            `UPDATE holdings SET name=$2,kind=$3,denomination=$4,invested=$5,liquid=$6,owner=$7,group_name=$8,matures_on=$9,note=$10,archived=$11,sort_order=$12,revision=revision+1,updated_at=now()
+            `UPDATE holdings SET name=$2,kind=$3,denomination=$4,invested=$5,liquid=$6,owner=$7,group_name=$8,matures_on=$9,note=$10,archived=$11,sort_order=$12,feed=$13,feed_ref=$14,revision=revision+1,updated_at=now()
              WHERE id=$1 RETURNING ${HOLDING_COLUMNS}`,
             [
               input.id,
@@ -302,6 +345,8 @@ export class Holdings {
               values.note,
               values.archived,
               values.sortOrder,
+              values.feed,
+              values.feedRef,
             ],
           )
         ).rows[0]!;
@@ -313,8 +358,8 @@ export class Holdings {
       if (existing) throw new Conflict('holding_name_taken');
       const inserted = (
         await tx.query(
-          `INSERT INTO holdings(id,name,kind,denomination,invested,liquid,owner,group_name,matures_on,note,archived,sort_order)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${HOLDING_COLUMNS}`,
+          `INSERT INTO holdings(id,name,kind,denomination,invested,liquid,owner,group_name,matures_on,note,archived,sort_order,feed,feed_ref)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING ${HOLDING_COLUMNS}`,
           [
             randomUUID(),
             values.name,
@@ -328,6 +373,8 @@ export class Holdings {
             values.note,
             values.archived,
             values.sortOrder,
+            values.feed,
+            values.feedRef,
           ],
         )
       ).rows[0]!;
@@ -561,7 +608,8 @@ export class Holdings {
       display,
       at: resolved,
       dates,
-      rows,
+      // `valueOn` is handed full holdings and returns them untouched.
+      rows: rows as HoldingRow[],
       totals: points[index]!,
       previous: index > 0 ? points[index - 1]! : null,
       series: points,

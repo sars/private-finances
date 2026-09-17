@@ -1,0 +1,13 @@
+[Unit]
+Description=Private Finances monthly assets snapshot timer
+
+[Timer]
+# The last Thursday of the month is the Thursday that falls on the 25th or
+# later; 10:05 where the household lives. A missed run fires at the next boot.
+OnCalendar=Thu *-*-25..31 10:05:00 Europe/Riga
+RandomizedDelaySec=2min
+Persistent=true
+Unit=private-finances-assets-snapshot.service
+
+[Install]
+WantedBy=timers.target

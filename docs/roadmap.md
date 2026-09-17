@@ -49,7 +49,6 @@ within one account, and only genuinely ambiguous money becomes a Telegram questi
 Merged in PR 83 with green CI; not yet deployed. See
 [refunds](refunds.md) and [ADR 0007](adr/0007-refunds-and-reimbursements.md).
 
-
 Full-page explanation-first review, visible combined app/Telegram context and simple
 cash purchases are deployed and verified, including the 36-table restore. See [review flow](explanation-first-review.md).
 Cash withdrawal reconciliation remains deferred; it is distinct from entering purchases.
@@ -61,7 +60,9 @@ snapshots, exact valuation through the stored daily bank quotes and per-symbol
 prices, the `/assets` screen, and the import of the owner's spreadsheet
 history. Automatic bank balances, the monthly Telegram round with movement
 matching, and the brokerage, exchange and wallet feeds follow as separate
-increments. See [assets](assets.md).
+increments; the feed links and the bank, broker, exchange and wallet feeds
+with the last-Thursday job are merged as migration 54 and await release. The
+Telegram round is the remaining step. See [assets](assets.md).
 
 ## Open work and deferred decisions
 

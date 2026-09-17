@@ -25,6 +25,8 @@ export interface ImportDocument {
     archived?: boolean;
     sortOrder?: number;
     maturesOn?: string | null;
+    feed?: string | null;
+    feedRef?: string | null;
   }>;
   snapshots: Array<{ name: string; asOf: string; quantity: string }>;
   prices: Array<{ symbol: string; asOf: string; usdPerUnit: string }>;
@@ -32,6 +34,8 @@ export interface ImportDocument {
 export interface ImportSummary {
   holdingsCreated: number;
   holdingsSeen: number;
+  /** Existing holdings whose feed link the document set or changed. */
+  holdingsLinked: number;
   snapshotsWritten: number;
   snapshotsUnchanged: number;
   pricesWritten: number;
@@ -61,7 +65,13 @@ export function parseImportDocument(raw: unknown): ImportDocument {
         !HOLDING_KINDS.includes(holding.kind as HoldingKind)) ||
       (holding.maturesOn !== undefined &&
         holding.maturesOn !== null &&
-        typeof holding.maturesOn !== 'string')
+        typeof holding.maturesOn !== 'string') ||
+      (holding.feed !== undefined &&
+        holding.feed !== null &&
+        typeof holding.feed !== 'string') ||
+      (holding.feedRef !== undefined &&
+        holding.feedRef !== null &&
+        typeof holding.feedRef !== 'string')
     )
       throw new Error('import_invalid_holding');
   }
@@ -101,6 +111,7 @@ export async function importHoldings(
   const summary: ImportSummary = {
     holdingsCreated: 0,
     holdingsSeen: 0,
+    holdingsLinked: 0,
     snapshotsWritten: 0,
     snapshotsUnchanged: 0,
     pricesWritten: 0,
@@ -109,7 +120,27 @@ export async function importHoldings(
   const byName = new Map((await service.list()).map((h) => [h.name, h]));
   for (const entry of document.holdings) {
     summary.holdingsSeen += 1;
-    if (byName.has(entry.name)) continue;
+    const existing = byName.get(entry.name);
+    if (existing) {
+      // A later document may link an existing holding to its feed; nothing
+      // else about it is touched, and a document without a feed changes nothing.
+      if (
+        entry.feed !== undefined &&
+        (entry.feed !== existing.feed ||
+          (entry.feedRef ?? null) !== existing.feedRef)
+      ) {
+        const linked = await service.upsert('import', {
+          ...existing,
+          id: existing.id,
+          revision: existing.revision,
+          feed: entry.feed,
+          feedRef: entry.feedRef ?? null,
+        });
+        byName.set(linked.name, linked);
+        summary.holdingsLinked += 1;
+      }
+      continue;
+    }
     const created = await service.upsert('import', {
       name: entry.name,
       kind: entry.kind ?? 'other',
@@ -122,6 +153,8 @@ export async function importHoldings(
       archived: entry.archived ?? false,
       sortOrder: entry.sortOrder ?? 0,
       maturesOn: entry.maturesOn ?? null,
+      feed: entry.feed ?? null,
+      feedRef: entry.feedRef ?? null,
     });
     byName.set(created.name, created);
     summary.holdingsCreated += 1;
