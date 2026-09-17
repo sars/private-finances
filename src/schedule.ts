@@ -42,7 +42,14 @@ export async function verifiedMarker(
   }
 }
 
-export type SyncResult = 'success' | 'transient' | 'rate_limit' | 'blocked';
+/**
+ * `consent_pending` is a bank the owner has not approved yet: the timer for a
+ * newly added bank can be enabled before the approval, and the first import
+ * follows the approval on its own, instead of the first run latching the
+ * instance blocked for an operator to clear.
+ */
+export type SyncResult =
+  'success' | 'transient' | 'rate_limit' | 'consent_pending' | 'blocked';
 export async function scheduleEnabled(
   directory: string,
   instance: string,
@@ -179,7 +186,9 @@ function invokeCli(args: string[]): Promise<SyncResult> {
           if (
             !error.killed &&
             failure.event === 'bank_sync_failed' &&
-            (failure.code === 'transient' || failure.code === 'rate_limit')
+            (failure.code === 'transient' ||
+              failure.code === 'rate_limit' ||
+              failure.code === 'consent_pending')
           )
             return done(failure.code);
         } catch {
@@ -212,7 +221,12 @@ async function main() {
   process.stdout.write(
     JSON.stringify({ event: 'scheduled_sync', instance, result }) + '\n',
   );
-  if (result !== 'success' && result !== 'disabled' && result !== 'deferred')
+  if (
+    result !== 'success' &&
+    result !== 'disabled' &&
+    result !== 'deferred' &&
+    result !== 'consent_pending'
+  )
     process.exitCode = 1;
 }
 

@@ -120,6 +120,12 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
           consent: true,
           monobankJarsExcluded: true,
         },
+        banks: [
+          { name: 'Wise', label: 'Wise' },
+          { name: 'Revolut', label: 'Revolut' },
+          { name: 'Swedbank', label: 'Swedbank' },
+          { name: 'LHV Pank', label: 'LHV' },
+        ],
       },
     );
     const katyaAuthorization =

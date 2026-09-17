@@ -6,6 +6,7 @@ import {
   writeFile,
   chmod,
   readFile,
+  readdir,
   symlink,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -217,6 +218,29 @@ test('PF-002 auth or uncertain failure latches only that connector; transient ha
     };
     await assert.rejects(runScheduledSync(crash), /simulated crash/);
     assert.equal(await runScheduledSync(crash), 'blocked');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a bank the owner has not approved yet is retried on the next tick, never latched', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-consent-'));
+  let calls = 0;
+  const options = {
+    instance: 'enablebanking-rodion-lhv',
+    now: new Date('2026-09-17T03:00:00Z'),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async () => {
+      calls++;
+      return 'consent_pending' as const;
+    },
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'consent_pending');
+    assert.equal(await runScheduledSync(options), 'consent_pending');
+    assert.equal(calls, 2);
+    assert.deepEqual(await readdir(directory), []);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -12,8 +12,14 @@ the private Tailscale hostname recorded in
 The original example.com callback must be replaced. Keep Tailscale connected on
 the device completing bank approval. No public endpoint is required for this
 browser redirect. The Bank connections page offers the banks listed in
-`src/connectors/banks.ts` — Wise, Revolut and Swedbank — and asks for the
-appropriate country code, then links to the provider's approval page.
+`src/connectors/banks.ts` — Wise, Revolut, Swedbank and LHV — and asks for the
+appropriate country code (LHV is `EE`), then links to the provider's approval
+page. The page shows each bank by the name the owner uses; the form sends the
+provider's registered name, and that is what `bank_consents.bank` stores.
+
+A sync timer may be enabled before its bank has been approved. Until the
+approval writes the session file, each run ends as `consent_pending`: no
+latch, no cooldown, and the first import follows the approval on its own.
 
 An approval lasts days rather than months, and when it lapses the imports stop
 without any other sign. The Telegram loop therefore checks every authorised

@@ -36,17 +36,17 @@ not cover the other person's accounts. This distinction is explicit in the
 
 Server configuration:
 
-| Item | Location / setting |
-| --- | --- |
-| Application ID | `ENABLEBANKING_APPLICATION_ID` in restricted app/sync configuration |
-| Private PEM | `/etc/private-finances/credentials/enablebanking.pem` |
-| Dashboard key path | `ENABLEBANKING_PRIVATE_KEY_FILE` points to that PEM |
-| Kate application ID | `ENABLEBANKING_KATYA_APPLICATION_ID` in restricted app/sync configuration |
-| Kate private PEM | `/etc/private-finances/credentials/enablebanking-katya.pem` |
-| Kate key path | `ENABLEBANKING_KATYA_PRIVATE_KEY_FILE` points to that PEM |
-| Secret directory for imports | `CREDENTIALS_DIRECTORY=/etc/private-finances/credentials` |
-| Consent sessions | `ENABLEBANKING_SESSION_DIRECTORY=/var/lib/private-finances-consent` |
-| Per-owner, per-bank session file | `enablebanking-<owner>-<wise\|revolut\|swedbank>-session` within that directory |
+| Item                             | Location / setting                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| Application ID                   | `ENABLEBANKING_APPLICATION_ID` in restricted app/sync configuration                  |
+| Private PEM                      | `/etc/private-finances/credentials/enablebanking.pem`                                |
+| Dashboard key path               | `ENABLEBANKING_PRIVATE_KEY_FILE` points to that PEM                                  |
+| Kate application ID              | `ENABLEBANKING_KATYA_APPLICATION_ID` in restricted app/sync configuration            |
+| Kate private PEM                 | `/etc/private-finances/credentials/enablebanking-katya.pem`                          |
+| Kate key path                    | `ENABLEBANKING_KATYA_PRIVATE_KEY_FILE` points to that PEM                            |
+| Secret directory for imports     | `CREDENTIALS_DIRECTORY=/etc/private-finances/credentials`                            |
+| Consent sessions                 | `ENABLEBANKING_SESSION_DIRECTORY=/var/lib/private-finances-consent`                  |
+| Per-owner, per-bank session file | `enablebanking-<owner>-<wise\|revolut\|swedbank\|lhv>-session` within that directory |
 
 Owner-specific settings `ENABLEBANKING_<RODION|KATYA>_APPLICATION_ID` and
 `ENABLEBANKING_<RODION|KATYA>_PRIVATE_KEY_FILE` must be configured as a complete

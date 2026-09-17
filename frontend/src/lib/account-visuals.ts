@@ -6,11 +6,13 @@
  *
  * Colours are named here and defined in src/index.css (the `--account-*`
  * tokens), as frontend/DESIGN.md requires. Artwork is SVG path data in a 24×24
- * box: Revolut and Wise are their published marks (Simple Icons, CC0); the
- * Monobank cat and the Swedbank oak are silhouettes drawn for this registry,
- * bold enough to survive a 20 px tile.
+ * box: Revolut and Wise are their published marks (Simple Icons, CC0), LHV is
+ * the bank's own wordmark scaled from its site; the Monobank cat and the
+ * Swedbank oak are silhouettes drawn for this registry, bold enough to
+ * survive a 20 px tile.
  */
-export type Bank = 'monobank' | 'swedbank' | 'revolut' | 'wise' | 'cash';
+export type Bank =
+  'monobank' | 'swedbank' | 'revolut' | 'wise' | 'lhv' | 'cash';
 export type Product =
   'iron' | 'black' | 'white' | 'aid' | 'national-cashback' | 'fop' | 'standard';
 export type Owner = 'rodion' | 'katya';
@@ -20,6 +22,7 @@ export const banks: Bank[] = [
   'swedbank',
   'revolut',
   'wise',
+  'lhv',
   'cash',
 ];
 export const products: Product[] = [
@@ -64,6 +67,12 @@ export const glyphs: Record<Bank | 'unknown', Glyph> = {
   },
   wise: {
     path: 'M6.488 7.469 0 15.05h11.585l1.301-3.576H7.922l3.033-3.507.01-.092L8.993 4.48h8.873l-6.878 18.925h4.706L24 .595H2.543l3.945 6.874Z',
+    fillRule: 'nonzero',
+  },
+  lhv: {
+    // The bank's wordmark, one joined "LHV" shape, fitted to the box's width
+    // and centred: a wide short glyph, as the mark is.
+    path: 'M12.42 7.96 L11.92 11.20 L9.20 11.20 L9.70 7.97 L6.20 7.97 L6.20 14.85 L2.53 14.85 L3.57 7.97 L0.00 7.97 L0.00 16.04 L8.47 16.04 L9.02 12.38 L11.75 12.38 L11.20 16.04 L14.07 16.04 L15.23 9.15 L17.79 16.04 L20.32 16.04 L24.00 7.97 L22.02 7.97 L20.19 12.21 L19.98 12.72 L19.78 12.20 L18.17 7.97 L12.42 7.96 Z',
     fillRule: 'nonzero',
   },
   cash: {
@@ -144,6 +153,14 @@ export const tiles: Record<Bank | 'unknown', Partial<Record<Product, Tile>>> = {
       name: 'Wise',
     },
   },
+  lhv: {
+    standard: {
+      fill: 'var(--account-lhv)',
+      ink,
+      border: edge,
+      name: 'LHV',
+    },
+  },
   cash: {
     standard: {
       fill: 'var(--account-cash)',
@@ -180,6 +197,7 @@ export function bankFor(
   if (/revolut|револют/.test(text)) return 'revolut';
   if (/\bwise\b|вайз/.test(text)) return 'wise';
   if (/swedbank|сведбанк/.test(text)) return 'swedbank';
+  if (/\blhv\b|лхв/.test(text)) return 'lhv';
   if (source === 'monobank' || /\bmono/.test(text)) return 'monobank';
   return null;
 }

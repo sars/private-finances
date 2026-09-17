@@ -2,12 +2,12 @@
 
 Рішення власника, 2026-09-11. Репозиторій: https://github.com/sars/private-finances.
 
-| Власник | Джерело | Інтеграція |
-| --- | --- | --- |
-| Rodion | Wise, Revolut, Swedbank | Enable Banking |
-| Katya | Wise | Enable Banking |
-| Rodion | Monobank | Прямий Monobank personal API, окремий token |
-| Katya | Monobank | Прямий Monobank personal API, окремий token |
+| Власник | Джерело                      | Інтеграція                                  |
+| ------- | ---------------------------- | ------------------------------------------- |
+| Rodion  | Wise, Revolut, Swedbank, LHV | Enable Banking                              |
+| Katya   | Wise                         | Enable Banking                              |
+| Rodion  | Monobank                     | Прямий Monobank personal API, окремий token |
+| Katya   | Monobank                     | Прямий Monobank personal API, окремий token |
 
 ## Enable Banking
 

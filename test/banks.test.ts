@@ -4,6 +4,7 @@ import {
   BANKS,
   BANK_NAMES,
   BANK_SLUGS,
+  bankLabel,
   bankName,
   bankSlug,
   isBankName,
@@ -44,6 +45,21 @@ test('an account at any supported bank is named after the bank the owner knows',
     'Swedbank EUR · Ikdienas',
   );
   assert.equal(accountLabel('wise', 'USD'), 'Wise USD');
+});
+
+test('a bank the provider registers under a longer name is still named as the owner knows it', () => {
+  // The provider calls it "LHV Pank" and that exact string is what the
+  // consent must carry; the owner calls it "LHV", and so does every account.
+  assert.equal(bankName('lhv'), 'LHV Pank');
+  assert.equal(bankSlug('LHV Pank'), 'lhv');
+  assert.equal(bankLabel('lhv'), 'LHV');
+  assert.equal(accountLabel('lhv', 'EUR'), 'LHV EUR');
+  assert.equal(
+    accountLabel('lhv', 'EUR', { product: 'Current account' }),
+    'LHV EUR',
+  );
+  assert.equal(accountLabel('lhv', 'XXX'), 'LHV multi-currency');
+  for (const bank of BANKS) assert.ok(bank.label.length <= bank.name.length);
 });
 
 test('every supported bank can be scheduled', () => {

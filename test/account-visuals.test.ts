@@ -59,7 +59,7 @@ test('every bank has a glyph and every card a tile, and every colour is a token 
   assert.doesNotMatch(source, /#[0-9a-f]{3,6}\b/i);
 });
 
-test("the household's nine accounts resolve from the names the owner gives them", () => {
+test("the household's accounts resolve from the names the owner gives them", () => {
   const cases: Array<[string, string, string, string]> = [
     ['monobank', 'Mono Iron', 'monobank', 'iron'],
     ['monobank', 'Mono Black', 'monobank', 'black'],
@@ -73,6 +73,7 @@ test("the household's nine accounts resolve from the names the owner gives them"
     ['enablebanking', 'Swedbank', 'swedbank', 'standard'],
     ['enablebanking', 'Revolut USD', 'revolut', 'standard'],
     ['enablebanking', 'Wise EUR', 'wise', 'standard'],
+    ['enablebanking', 'LHV EUR', 'lhv', 'standard'],
     ['manual_cash', '', 'cash', 'standard'],
   ];
   for (const [source, label, bank, product] of cases) {

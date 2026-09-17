@@ -742,6 +742,23 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (47)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=48'))
+        .rows.length
+    ) {
+      // The owner opened an account at LHV and linked it to the provider
+      // application. The consent table allows the banks in
+      // src/connectors/banks.ts by the provider's own name, which for this
+      // bank is "LHV Pank"; the owner sees "LHV" everywhere else.
+      await tx.query(
+        'ALTER TABLE bank_consents DROP CONSTRAINT IF EXISTS bank_consents_bank_check',
+      );
+      await tx.query(
+        `ALTER TABLE bank_consents ADD CONSTRAINT bank_consents_bank_check
+         CHECK (bank IN ('Wise','Revolut','Swedbank','LHV Pank'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (48)');
+    }
   });
 }
 

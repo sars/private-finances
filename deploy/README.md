@@ -8,6 +8,7 @@ recorded in [what the production server needs](../docs/server-requirements.md).
 Update that file in the same change that introduces a new system dependency.
 
 Layout:
+
 - /opt/private-finances/releases/<tested Git SHA>: immutable application build.
 - /opt/private-finances/current: atomic symlink to the active release.
 - /etc/private-finances/app.env: root-owned mode 600, database URL and owner passwords.
@@ -55,7 +56,7 @@ with DATABASE_URL and CREDENTIALS_DIRECTORY supplied by restricted configuration
 Katya's token filename is monobank-kate-token. Enable Banking additionally needs
 ENABLEBANKING_APPLICATION_ID, ENABLEBANKING_SESSION_DIRECTORY and
 `enablebanking-<owner>-<bank>-session` files. Select a slug from
-`src/connectors/banks.ts` — `wise`, `revolut` or `swedbank` — as the fifth CLI
+`src/connectors/banks.ts` — `wise`, `revolut`, `swedbank` or `lhv` — as the fifth CLI
 argument (or ENABLEBANKING_BANK for a manual pilot). Scheduled instances must be
 `enablebanking-<owner>-<slug>`;
 Monobank remains `monobank-<owner>`. Each instance has its own enable marker,
@@ -80,7 +81,7 @@ disabled until rollout and rollback have both been demonstrated.
 `bash deploy/release.sh <40-character commit SHA>` performs that whole sequence as
 one command against the `radar` SSH host: it transfers a Git archive of the exact
 commit and checks its digest, builds and runs the application tests on the server,
-restores the real database into a disposable copy and migrates *that* with the new
+restores the real database into a disposable copy and migrates _that_ with the new
 code, pauses the sync timers and the worker until no import is running, installs
 the root-owned release, hands over to `switch-release.py`, resumes the timers and
 the worker, and prints the resulting release, schema version and transaction count.

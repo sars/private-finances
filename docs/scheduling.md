@@ -62,7 +62,7 @@ independently validate the drill. Remove the restore marker when proof is no
 longer valid (for example until a new migration's recovery drill passes).
 
 Allowed instances: `monobank-rodion`, `monobank-katya`, and
-`enablebanking-<rodion|katya>-<wise|revolut|swedbank>`, following the slugs in
+`enablebanking-<rodion|katya>-<wise|revolut|swedbank|lhv>`, following the slugs in
 `src/connectors/banks.ts`. Each bank is isolated. Enable only the specific timer whose credentials, owner,
 account scope and pilot reconciliation have been verified. Example after all
 gates: `systemctl enable --now private-finances-sync@monobank-rodion.timer`.
@@ -100,7 +100,6 @@ Tests exercise UTC/leap-year boundaries, gate failures, repeat windows, a
 persistent failure latch, connector isolation and lack of immediate retries.
 They never load bank credentials or call a bank API. Deployment evidence is recorded in STATUS.md.
 
-
 ## Timer rollout and rollback
 
 The template applies the conservative six-hour schedule. Install both tracked
@@ -115,7 +114,6 @@ Do not enable Katya Wise just because a generic timer template exists.
 Rollback restores the saved unit template and removes newly introduced drop-ins,
 then reloads systemd and restarts the same timers. Application rollback follows
 the existing release procedure; retained cooldown files remain conservative.
-
 
 ## Previous hourly trial mechanism (superseded by half-hourly trial below)
 
@@ -147,7 +145,6 @@ wake after 22:01 Riga. All three connections had successful half-hour polling,
 no fallback/auth latches and healthy Telegram queue delivery; see STATUS for
 aggregate evidence. This check is complete and should not repeat. Delayed laptop
 wakes do not affect server-side cooldown/fallback behavior.
-
 
 ## Half-hour trial (September 12 clarification)
 

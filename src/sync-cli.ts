@@ -16,6 +16,19 @@ async function secret(path: string): Promise<string> {
     throw new Error('invalid_secret_file');
   return (await readFile(path, 'utf8')).trim();
 }
+/**
+ * The session the owner's approval wrote. Until they approve, the file does
+ * not exist, and that is not an error to review: the scheduler waits for it.
+ */
+async function consentSession(path: string): Promise<string> {
+  try {
+    return await secret(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      throw new Error('consent_pending');
+    throw error;
+  }
+}
 async function main() {
   const [provider, owner, fromArg, toArg, bankArg] = process.argv.slice(2);
   if (
@@ -74,7 +87,7 @@ async function main() {
             bank: bank as BankSlug,
             applicationId: credentials!.applicationId,
             privateKey: credentials!.privateKey,
-            sessionId: await secret(
+            sessionId: await consentSession(
               resolve(
                 process.env.ENABLEBANKING_SESSION_DIRECTORY!,
                 `enablebanking-${owner}-${bank}-session`,
@@ -107,7 +120,9 @@ main().catch((error) => {
       code:
         error instanceof ConnectorError
           ? error.code
-          : 'configuration_or_sync_error',
+          : error instanceof Error && error.message === 'consent_pending'
+            ? 'consent_pending'
+            : 'configuration_or_sync_error',
     }) + '\n',
   );
   process.exitCode = 1;

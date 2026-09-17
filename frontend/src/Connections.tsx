@@ -24,7 +24,20 @@ type Session = {
   actor: string;
   csrf: string;
   features: { consent: boolean; monobankJarsExcluded: boolean };
+  /** The provider's name, sent back on the form, and the name the owner reads. */
+  banks: Array<{ name: string; label: string }>;
 };
+/** "Wise, Revolut, Swedbank and LHV": the heading of the provider card. */
+function bankListSentence(banks: Session['banks']) {
+  const labels = banks.map((b) => b.label);
+  return labels.length > 1
+    ? `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+    : labels.join('');
+}
+/** The name the owner knows a bank by, for an approval stored under the provider's name. */
+function bankLabel(banks: Session['banks'], name: string) {
+  return banks.find((b) => b.name === name)?.label ?? name;
+}
 function expiry(value: string) {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
@@ -204,7 +217,7 @@ export default function Connections() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Landmark className="size-4 text-primary" />
-                    Wise, Revolut and Swedbank
+                    {bankListSentence(session.banks)}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     Connect through Enable Banking.
@@ -225,9 +238,10 @@ export default function Connections() {
                             className="w-full"
                             value={bank}
                             onChange={setBank}
-                            options={['Wise', 'Revolut', 'Swedbank'].map(
-                              (name) => ({ value: name, label: name }),
-                            )}
+                            options={session.banks.map((b) => ({
+                              value: b.name,
+                              label: b.label,
+                            }))}
                             disabled={starting}
                           />
                         </Field>
@@ -328,7 +342,8 @@ export default function Connections() {
                         <CardHeader>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <CardTitle className="text-base">
-                              {connection.bank} · {connection.country}
+                              {bankLabel(session.banks, connection.bank)} ·{' '}
+                              {connection.country}
                             </CardTitle>
                             <Badge
                               variant="outline"

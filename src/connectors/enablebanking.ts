@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import type { Owner } from '../domain.js';
-import { bankName, isBankSlug, type BankSlug } from './banks.js';
+import { bankLabel, isBankSlug, type BankSlug } from './banks.js';
 import {
   ConnectorError,
   decimalToMinor,
@@ -91,18 +91,18 @@ export function accountLabel(
     .map((value) => text(value))[0];
   if (isMultiCurrency(currency)) {
     const named = provider?.trim();
-    return named && named.toLowerCase() !== bankName(bank).toLowerCase()
-      ? `${bankName(bank)} ${named.toLowerCase() === 'current' ? 'current account' : named}`
-      : `${bankName(bank)} multi-currency`;
+    return named && named.toLowerCase() !== bankLabel(bank).toLowerCase()
+      ? `${bankLabel(bank)} ${named.toLowerCase() === 'current' ? 'current account' : named}`
+      : `${bankLabel(bank)} multi-currency`;
   }
-  const base = `${bankName(bank)} ${currency}`;
+  const base = `${bankLabel(bank)} ${currency}`;
   if (!provider) return base;
   const noise = new Set([
     currency.toLowerCase(),
     `${currency.toLowerCase()} account`,
     'account',
     'current account',
-    bankName(bank).toLowerCase(),
+    bankLabel(bank).toLowerCase(),
   ]);
   const extra = provider.trim();
   return noise.has(extra.toLowerCase()) ? base : `${base} · ${extra}`;
