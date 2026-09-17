@@ -54,6 +54,15 @@ Full-page explanation-first review, visible combined app/Telegram context and si
 cash purchases are deployed and verified, including the 36-table restore. See [review flow](explanation-first-review.md).
 Cash withdrawal reconciliation remains deferred; it is distinct from entering purchases.
 
+## Household assets (PF-020)
+
+Step one is merged as code, not yet deployed: holdings with dated, versioned
+snapshots, exact valuation through the stored daily bank quotes and per-symbol
+prices, the `/assets` screen, and the import of the owner's spreadsheet
+history. Automatic bank balances, the monthly Telegram round with movement
+matching, and the brokerage, exchange and wallet feeds follow as separate
+increments. See [assets](assets.md).
+
 ## Open work and deferred decisions
 
 The consolidated [project to-do list](TODO.md) is the canonical checklist, with

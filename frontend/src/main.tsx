@@ -44,6 +44,7 @@ const Accounts = lazy(() => import('./Accounts'));
 const Reports = lazy(() => import('./Reports'));
 const Connections = lazy(() => import('./Connections'));
 const Imports = lazy(() => import('./Imports'));
+const Assets = lazy(() => import('./Assets'));
 const screens: Record<
   string,
   React.LazyExoticComponent<React.ComponentType>
@@ -62,6 +63,7 @@ const screens: Record<
   '/connections': Connections,
   '/imports': Imports,
   '/settings': Settings,
+  '/assets': Assets,
 };
 
 type Theme = 'system' | 'light' | 'dark';
