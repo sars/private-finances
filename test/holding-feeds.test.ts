@@ -27,8 +27,9 @@ const statementXml = `<?xml version="1.0" encoding="UTF-8"?>
 <OpenPosition accountId="U0000000" currency="USD" assetCategory="STK" symbol="BAD" position="abc" markPrice="1" levelOfDetail="SUMMARY" />
 </OpenPositions>
 <CashReport>
-<CashReportCurrency accountId="U0000000" currency="BASE_SUMMARY" endingCash="17205.55" levelOfDetail="SUMMARY" />
-<CashReportCurrency accountId="U0000000" currency="USD" endingCash="17205.55" levelOfDetail="SUMMARY" />
+<CashReportCurrency accountId="U0000000" currency="BASE_SUMMARY" endingCash="17205.55" levelOfDetail="BaseCurrency" />
+<CashReportCurrency accountId="U0000000" currency="USD" endingCash="17205.55" levelOfDetail="Currency" />
+<CashReportCurrency accountId="U0000000" currency="EUR" endingCash="0" levelOfDetail="Currency" />
 <CashReportCurrency accountId="U0000000" currency="USD" endingCash="1" levelOfDetail="LOT" />
 </CashReport>
 </FlexStatement>
@@ -59,7 +60,9 @@ test('a Flex statement yields summary positions with prices and real-currency ca
   );
   assert.deepEqual(statement.cash, [
     { currency: 'USD', endingCash: '17205.55' },
+    { currency: 'EUR', endingCash: '0' },
   ]);
+  assert.deepEqual(statement.sections, ['OpenPositions', 'CashReport']);
   assert.equal(statement.fromDate, '2026-09-17');
   assert.throws(() => parseFlexStatement('<html>login</html>'), /schema/);
 });

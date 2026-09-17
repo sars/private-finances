@@ -91,12 +91,11 @@ const fetcher: Fetcher = (url, init) =>
 async function check(credentials: FeedCredentials) {
   const status = async (
     feed: string,
-    attempt: (() => Promise<unknown>) | undefined,
+    attempt: (() => Promise<Record<string, unknown>>) | undefined,
   ) => {
     if (!attempt) return { feed, status: 'not_configured' };
     try {
-      await attempt();
-      return { feed, status: 'ok' };
+      return { feed, status: 'ok', ...(await attempt()) };
     } catch (error) {
       return {
         feed,
@@ -110,24 +109,35 @@ async function check(credentials: FeedCredentials) {
     await status(
       'ibkr',
       credentials.ibkr &&
-        (() =>
-          fetchFlexStatement(
+        (async () => {
+          // Shape only: how many positions, which cash currencies, which
+          // sections the query has — enough to see a misconfigured query
+          // without printing a single figure.
+          const statement = await fetchFlexStatement(
             credentials.ibkr!.token,
             credentials.ibkr!.queryId,
             fetcher,
-          )),
+          );
+          return {
+            positions: statement.positions.length,
+            cashCurrencies: statement.cash.map((c) => c.currency),
+            sections: statement.sections,
+          };
+        }),
     ),
   );
   log(
     await status(
       'binance',
       credentials.binance &&
-        (() =>
-          fetchBinanceSpot(
+        (async () => {
+          const spot = await fetchBinanceSpot(
             credentials.binance!.key,
             credentials.binance!.secret,
             fetcher,
-          )),
+          );
+          return { assets: spot.assets.length, unpriced: spot.unpriced.length };
+        }),
     ),
   );
 }
