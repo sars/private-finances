@@ -1,6 +1,24 @@
 import type { Owner, TransactionInput } from '../domain.js';
 import type { BankSlug } from './banks.js';
 
+/**
+ * What an account holds, as the provider states it.
+ *
+ * A balance is evidence carrying a timestamp, not a running total this
+ * application computes: nothing sums transactions into a position, because
+ * there is no opening figure to sum from. `asOf` is the provider's own word for
+ * when the figure was true and is absent when it does not say, in which case
+ * the time we asked is all anyone knows.
+ */
+export type AccountBalance = {
+  currency: string;
+  /** Exact integer minor units, signed; an overdrawn account is negative. */
+  amountMinor: string;
+  /** An agreed overdraft, when the provider publishes one. The amount above
+   * already includes it, so own money is the amount less this. */
+  creditLimitMinor?: string;
+  asOf?: string;
+};
 export type BankAccount = {
   source: 'monobank' | 'enablebanking';
   accountId: string;
@@ -19,6 +37,10 @@ export type BankAccount = {
    * this string and nothing else, so knowing our own cards is the only way such
    * a payment can be recognised as household money rather than spending. */
   cards?: string[];
+  /** Stated alongside the account listing, when the provider puts it there.
+   * Monobank does, at no extra request; Enable Banking keeps balances behind a
+   * request of their own and answers `balances()` instead. */
+  balance?: AccountBalance;
 };
 export type BankTransaction = TransactionInput & {
   status: 'pending' | 'booked';
@@ -29,6 +51,13 @@ export interface BankConnector {
   readonly owner: Owner;
   readonly bank?: BankSlug;
   accounts(): Promise<BankAccount[]>;
+  /** What the account holds now, for a provider that does not state it with the
+   * listing. Optional: a connector that fills `BankAccount.balance` needs no
+   * second request. A caller treats failure here as "not known" and never as a
+   * failed import, so a bank that refuses a balance still delivers payments.
+   * An account holding several currencies answers with one entry per currency,
+   * which is the only shape that can describe it. */
+  balances?(account: BankAccount): Promise<AccountBalance[]>;
   transactions(
     account: BankAccount,
     from: Date,

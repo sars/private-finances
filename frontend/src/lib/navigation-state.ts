@@ -9,6 +9,7 @@ export const appPaths = [
   '/ops',
   '/fx',
   '/accounts',
+  '/balances',
   '/reports',
   '/connections',
   '/imports',

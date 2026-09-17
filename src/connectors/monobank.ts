@@ -25,6 +25,39 @@ const currencies: Record<number, string> = {
   414: 'KWD',
   48: 'BHD',
 };
+/** A whole number of minor units, or null when the provider sent anything else.
+ * Monobank states balances as integers already, so there is nothing to convert
+ * and nothing to round; a fractional or out-of-range value is a payload this
+ * code does not understand and is dropped rather than guessed at. */
+function wholeMinor(value: unknown): string | null {
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    Math.abs(value) < 1e15
+    ? String(value)
+    : null;
+}
+/** The `balance` field of an account or jar, with the card's overdraft when one
+ * is published. Returns nothing to spread when the balance is unreadable, so an
+ * account still lists without one. */
+function balanceOf(
+  raw: Record<string, unknown>,
+  currency: string,
+): { balance: BankAccount['balance'] } | null {
+  const amountMinor = wholeMinor(raw.balance);
+  if (amountMinor === null) return null;
+  // `creditLimit` is the agreed overdraft already counted inside `balance`.
+  // Zero means no overdraft and is not worth recording.
+  const creditLimitMinor = wholeMinor(raw.creditLimit);
+  return {
+    balance: {
+      currency,
+      amountMinor,
+      ...(creditLimitMinor !== null && creditLimitMinor !== '0'
+        ? { creditLimitMinor }
+        : {}),
+    },
+  };
+}
 export class MonobankConnector implements BankConnector {
   readonly source = 'monobank' as const;
   constructor(
@@ -79,6 +112,13 @@ export class MonobankConnector implements BankConnector {
             : typeof a.type === 'string'
               ? text(a.type)
               : 'Monobank account',
+        // Stated per account and per jar in the same `client-info` response the
+        // listing already costs, in the account's own minor units. It is read
+        // here rather than fetched later so knowing what an account holds
+        // spends no part of the 60-second-per-token allowance. A value that is
+        // not a whole number is dropped rather than rounded: a balance nobody
+        // can vouch for is worse than no balance.
+        ...(balanceOf(a, currency) ?? {}),
       };
     });
   }

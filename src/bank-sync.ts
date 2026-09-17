@@ -1,4 +1,5 @@
 import { Accounts } from './accounts.js';
+import { AccountBalances } from './account-balances.js';
 import { randomUUID } from 'node:crypto';
 import { Repository, Conflict } from './repository.js';
 import { ConnectorError, type BankConnector } from './connectors/types.js';
@@ -52,6 +53,7 @@ export async function syncBank(
     const accounts = await connector.accounts();
     const seen = new Set<string>();
     const registry = new Accounts(repo.db);
+    const balances = new AccountBalances(repo.db);
     for (const account of accounts) {
       if (
         account.owner !== connector.owner ||
@@ -61,6 +63,25 @@ export async function syncBank(
         throw new ConnectorError('schema');
       seen.add(account.accountId);
       await registry.discover(account);
+      // What the account holds, recorded beside the payments that moved it.
+      //
+      // Deliberately best-effort and deliberately first: Monobank states the
+      // balance in the listing already fetched, so it costs nothing, and
+      // Enable Banking answers one extra request, which counts as a request but
+      // not as another background fetch against the daily allowance banks
+      // impose on unattended polling. Either way a balance is a nicety and the
+      // payments are the point, so a bank that refuses one — a rate limit, a
+      // resource it does not serve, a shape this code does not know — leaves
+      // the previous figure in place to go visibly stale and the import carries
+      // on. Nothing here may turn a successful import into a failed one.
+      try {
+        const stated = account.balance
+          ? [account.balance]
+          : ((await connector.balances?.(account)) ?? []);
+        if (stated.length) await balances.record(account, stated);
+      } catch {
+        // Left for the next run; the page shows how old the last figure is.
+      }
       const batch = await connector.transactions(account, from, to);
       // An account holding several currencies reports none of its own, so only
       // a single-currency account can have its payments checked against it.

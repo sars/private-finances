@@ -127,3 +127,26 @@ Backend contract: owner-scoped `/api/review` replies include status, workflow_st
 created_at, revision and transaction_description; `detailOnly=1` returns only the
 selected payment's replies. No confirmation behavior changes and no polling were
 added. Refresh explicitly retrieves current saved history and processing status.
+
+## Balances
+
+Balances (`/balances`) is the first screen built on the query cache from its
+first line rather than migrated to it. It lists every account of the household
+with what its bank last said the account holds, one card each, and a total in
+the display currency. Two tabs separate the members and the selected one lives
+in the URL (`?who=`), so Back and Forward restore it. Both members see both
+tabs: the page reports the household, as the overview does, and decides nothing.
+
+Arrange turns on dragging. The sortable primitive and the input library behind
+it are a lazily loaded chunk of their own, entered only when arranging starts,
+so the ordinary reading path does not carry them. Each person's order is stored
+on the server under their own name through `POST /api/ui-layout` with the same
+revision check the settings screen uses; it is a view preference and is
+deliberately not part of the administrator-only household settings.
+
+`tabScreens` now names the four screens on the phone's tab bar instead of taking
+the first four of the Money group, so adding a screen to the sidebar cannot
+silently reorder the buttons under somebody's thumb. Changing the tab bar is its
+own decision.
+
+See [balances](balances.md) for where the figures come from and what they cost.

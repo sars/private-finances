@@ -55,6 +55,8 @@ import { initializeTelegram } from './telegram.js';
 import { initializeClassifier } from './classifier.js';
 import { initializeReports } from './reports.js';
 import { initializeAccounts } from './accounts.js';
+import { initializeAccountBalances } from './account-balances.js';
+import { initializeUiLayouts } from './ui-layout.js';
 import {
   correctBankWordedPlacements,
   installRestingPlace,
@@ -797,6 +799,26 @@ async function applyMigrations(db: Database): Promise<void> {
                        WHERE w.account_id=a.account_id AND w.connection LIKE 'enablebanking:%:lhv')`,
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (50)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=51'))
+        .rows.length
+    ) {
+      // The household could see what it had spent and never what it had. Every
+      // bank states an account's balance and this application threw the figure
+      // away: Monobank sends it with the account listing the importer already
+      // reads, and Enable Banking keeps it one request further on. Both are
+      // stored from now on, per account and per currency, each with the moment
+      // it was observed — a balance is evidence with an age, never a total this
+      // code derives, because no opening figure exists to derive one from.
+      //
+      // Beside it, the first per-person view preference this application has
+      // had. Card order is not household configuration: the settings store is
+      // administrator-only and holds decisions that change what the figures
+      // mean, and where somebody likes their accounts to sit changes nothing.
+      await initializeAccountBalances(tx);
+      await initializeUiLayouts(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
     }
   });
 }

@@ -38,3 +38,11 @@ The review API accepts `display=UAH|EUR|USD|GBP` (default UAH) and returns scope
 reason. It uses the existing reporting conversion policy; original bank amounts are
 unchanged. Detail-only responses also restrict proposals, triage and reply metadata
 to the selected authorized record.
+
+## What is not a household setting
+
+Where a person likes their cards to sit is theirs, not the household's. Card
+order is stored per owner in `ui_layouts` and saved through `POST /api/ui-layout`,
+outside this administrator-gated store, because it changes nothing about what any
+figure means and both members need to set it for themselves. It uses the same
+revision check this screen does. See [balances](balances.md).

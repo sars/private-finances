@@ -6,6 +6,7 @@ import {
   decimalToMinor,
   record,
   text,
+  type AccountBalance,
   type BankAccount,
   type BankConnector,
   type BankTransaction,
@@ -49,6 +50,34 @@ function day(value: unknown): string {
   )
     throw new ConnectorError('schema');
   return parsed.toISOString();
+}
+/**
+ * ISO 20022 balance types, best first. `ITAV` is what is spendable now and
+ * `CLBD` what the bank last closed the books on; the two interim and opening
+ * figures follow. Everything else — forward-dated availability, informational
+ * rows, a bank's own `OTHR` — is deliberately absent, so an unrecognised type
+ * is skipped instead of being shown as the account's position.
+ */
+const balanceRanks: Record<string, number> = {
+  ITAV: 0,
+  CLBD: 1,
+  ITBD: 2,
+  OPAV: 3,
+  OPBD: 4,
+  PRCD: 5,
+};
+/**
+ * A provider timestamp as an instant. The resource carries either a full
+ * date-time or a bare calendar day; a day is read at UTC midnight, the same
+ * reading the transaction importer already gives Enable Banking dates. An
+ * unparseable value is a payload this code does not understand.
+ */
+function instant(value: string): string {
+  const raw = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return day(raw);
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) throw new ConnectorError('schema');
+  return new Date(parsed).toISOString();
 }
 function identity(owner: Owner, hash: string): string {
   return `enablebanking:${owner}:${createHash('sha256').update(hash).digest('hex')}`;
@@ -203,6 +232,57 @@ export class EnableBankingConnector implements BankConnector {
       });
     }
     return result;
+  }
+  /**
+   * What the account holds, from the provider's own balances resource.
+   *
+   * This is one extra request per account per run. It does not cost a further
+   * background fetch against the allowance many banks impose — that counts
+   * unattended polls, not the requests inside one — but it is still a request,
+   * so the caller makes it best-effort and an import never waits on it.
+   *
+   * A bank publishes several balance types for the same account. The one worth
+   * showing is what is spendable now, so an available figure is preferred over
+   * a booked one, and a booked one over anything else; a forward-dated or
+   * purely informational figure is never treated as the account's position. An
+   * account holding several currencies returns one entry per currency, and
+   * amounts arrive as decimal strings converted exactly to minor units.
+   */
+  async balances(account: BankAccount): Promise<AccountBalance[]> {
+    if (account.owner !== this.owner || account.source !== this.source)
+      throw new ConnectorError('schema');
+    const response = await this.get(
+      `/accounts/${encodeURIComponent(account.providerAccountId)}/balances`,
+    );
+    const entries = response.balances;
+    if (!Array.isArray(entries) || entries.length > 200)
+      throw new ConnectorError('schema');
+    const best = new Map<string, { rank: number; balance: AccountBalance }>();
+    for (const raw of entries) {
+      const entry = record(raw);
+      const amount = record(entry.balance_amount);
+      const currency = text(amount.currency, 3);
+      if (!/^[A-Z]{3}$/.test(currency)) throw new ConnectorError('schema');
+      const type =
+        typeof entry.balance_type === 'string'
+          ? entry.balance_type.trim().toUpperCase()
+          : '';
+      const rank = balanceRanks[type];
+      // A forward-dated, informational or otherwise unranked figure says
+      // nothing about what the account holds today and is left out entirely.
+      if (rank === undefined) continue;
+      const asOf = [entry.last_change_date_time, entry.reference_date].find(
+        (value) => typeof value === 'string' && value.trim(),
+      );
+      const balance: AccountBalance = {
+        currency,
+        amountMinor: decimalToMinor(text(amount.amount, 40), currency),
+        ...(typeof asOf === 'string' ? { asOf: instant(asOf) } : {}),
+      };
+      const held = best.get(currency);
+      if (!held || rank < held.rank) best.set(currency, { rank, balance });
+    }
+    return [...best.values()].map((held) => held.balance);
   }
   async transactions(
     account: BankAccount,

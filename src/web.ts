@@ -17,6 +17,8 @@ import { TransactionTriage } from './transaction-triage.js';
 import { llmBudgetSummary } from './llm-budget.js';
 import type { CredentialHealth } from './credential-health.js';
 import { convertedSpending } from './analytics.js';
+import { AccountBalances, convertedBalances } from './account-balances.js';
+import { UiLayouts, arrange } from './ui-layout.js';
 import {
   aggregateSpending,
   parseAnalyticsOptions,
@@ -90,6 +92,7 @@ const escape = (v: unknown) =>
 const frontendRoutes = new Set([
   '/',
   '/accounts',
+  '/balances',
   '/reports',
   '/analytics',
   '/receipts',
@@ -385,6 +388,31 @@ export function web(
           accounts: await service.withImpact(actor),
           suggestions: await service.suggestions(actor),
           household: await service.household(),
+        });
+        return;
+      }
+      if (req.method === 'GET' && route === '/api/balances') {
+        // The household, both members, exactly as the overview reports it: the
+        // question this screen answers is where the money is, and half an
+        // answer to that is not an answer. What each person may *decide* stays
+        // owner-scoped elsewhere; this is a view.
+        const service = new AccountBalances(repo.db);
+        const { accounts } = await service.household();
+        const display = url.searchParams.get('display');
+        const flat = accounts.flatMap((account) => account.balances);
+        // Already in this person's order, so the screen renders what it is
+        // given and only the person rearranging has to think about ordering.
+        const layout = await new UiLayouts(repo.db).get(actor, 'balances');
+        json(200, {
+          accounts: arrange(
+            accounts,
+            layout.ordering,
+            (account) => `${account.source}:${account.accountId}`,
+          ),
+          layout,
+          ...(display
+            ? { reporting: await convertedBalances(repo.db, flat, display) }
+            : {}),
         });
         return;
       }
@@ -956,6 +984,31 @@ export function web(
             },
           );
           json(200, { settings });
+          return;
+        }
+        if (route === '/api/ui-layout') {
+          // A person's own arrangement of a screen, saved under their own name.
+          // Unlike the settings screen this is not administrator-gated: it
+          // changes nothing about what any figure means, and each member
+          // arranges only their own view.
+          if (!/^[a-z][a-z-]{0,39}$/.test(form.key ?? ''))
+            throw new Error('invalid_layout');
+          if (!/^\d+$/.test(form.revision ?? ''))
+            throw new Error('invalid_layout');
+          let ordering: unknown;
+          try {
+            ordering = JSON.parse(form.ordering ?? '');
+          } catch {
+            throw new Error('invalid_layout');
+          }
+          json(200, {
+            layout: await new UiLayouts(repo.db).save(
+              actor,
+              form.key!,
+              ordering,
+              Number(form.revision),
+            ),
+          });
           return;
         }
         if (

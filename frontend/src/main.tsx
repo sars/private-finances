@@ -44,6 +44,7 @@ const Accounts = lazy(() => import('./Accounts'));
 const Reports = lazy(() => import('./Reports'));
 const Connections = lazy(() => import('./Connections'));
 const Imports = lazy(() => import('./Imports'));
+const Balances = lazy(() => import('./Balances'));
 const screens: Record<
   string,
   React.LazyExoticComponent<React.ComponentType>
@@ -57,6 +58,7 @@ const screens: Record<
   '/categories': Categories,
   '/ops': Operations,
   '/fx': Fx,
+  '/balances': Balances,
   '/accounts': Accounts,
   '/reports': Reports,
   '/connections': Connections,

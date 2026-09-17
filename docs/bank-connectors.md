@@ -52,3 +52,14 @@ whose scheduler has stopped shows as a last run growing old; the scheduler's
 latch and cooldown files on the server are deliberately not read by the web
 process. System health links here in place of the approvals form, which stays
 on Bank connections.
+
+## Balances
+
+Both adapters now report what an account holds as well as what moved through it.
+Monobank states it in the `client-info` response the account listing already
+fetches, at no extra request. Enable Banking keeps balances behind
+`GET /accounts/{uid}/balances`, one request per account per run; that is a
+request but not another background fetch against the four-a-day allowance the
+FAQ describes, which counts unattended polls. Both are best-effort in
+`syncBank`: a refusal leaves the previous figure to go stale and never fails the
+import. See [balances](balances.md).

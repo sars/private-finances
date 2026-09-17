@@ -6,6 +6,7 @@ import { Repository } from '../dist/src/repository.js';
 import { syncBank } from '../dist/src/bank-sync.js';
 import { ConnectorError } from '../dist/src/connectors/types.js';
 import { synthetic } from '../dist/src/synthetic.js';
+import { FxRates } from '../dist/src/fx-rates.js';
 
 const db = memoryDatabase('data/demo');
 await migrate(db);
@@ -24,6 +25,17 @@ function connector({ source, owner, bank, accounts, fail, payments = 3 }) {
         providerAccountId: a.id,
         currency: a.currency,
         label: a.label,
+        // Stated with the listing, as Monobank states it. An account left
+        // without one demonstrates a bank that will not say.
+        ...(a.balance === undefined
+          ? {}
+          : {
+              balance: {
+                currency: a.currency === 'XXX' ? 'EUR' : a.currency,
+                amountMinor: a.balance,
+                ...(a.creditLimit ? { creditLimitMinor: a.creditLimit } : {}),
+              },
+            }),
       })),
     transactions: async (account) => {
       if (fail) throw new ConnectorError(fail);
@@ -49,15 +61,15 @@ const runs = [
     source: 'monobank',
     owner: 'rodion',
     accounts: [
-      { id: 'iron', currency: 'UAH', label: 'iron' },
-      { id: 'white', currency: 'UAH', label: 'white' },
-      { id: 'fop', currency: 'UAH', label: 'fop' },
+      { id: 'iron', currency: 'UAH', label: 'iron', balance: '3435539' },
+      { id: 'white', currency: 'UAH', label: 'white', balance: '-128400', creditLimit: '2000000' },
+      { id: 'fop', currency: 'UAH', label: 'fop', balance: '881205' },
     ],
   }),
   connector({
     source: 'monobank',
     owner: 'katya',
-    accounts: [{ id: 'black', currency: 'UAH', label: 'black' }],
+    accounts: [{ id: 'black', currency: 'UAH', label: 'black', balance: '1704322' }],
     fail: 'schema',
   }),
   connector({
@@ -65,28 +77,28 @@ const runs = [
     owner: 'rodion',
     bank: 'wise',
     accounts: [
-      { id: 'w1', currency: 'EUR', label: 'Wise EUR' },
-      { id: 'w2', currency: 'USD', label: 'Wise USD' },
+      { id: 'w1', currency: 'EUR', label: 'Wise EUR', balance: '245080' },
+      { id: 'w2', currency: 'USD', label: 'Wise USD', balance: '61233' },
     ],
   }),
   connector({
     source: 'enablebanking',
     owner: 'rodion',
     bank: 'revolut',
-    accounts: [{ id: 'r1', currency: 'USD', label: 'Revolut USD' }],
+    accounts: [{ id: 'r1', currency: 'USD', label: 'Revolut USD', balance: '12905' }],
     payments: 1,
   }),
   connector({
     source: 'enablebanking',
     owner: 'rodion',
     bank: 'swedbank',
-    accounts: [{ id: 's1', currency: 'XXX', label: 'Swedbank' }],
+    accounts: [{ id: 's1', currency: 'XXX', label: 'Swedbank', balance: '1590744' }],
   }),
   connector({
     source: 'enablebanking',
     owner: 'katya',
     bank: 'wise',
-    accounts: [{ id: 'kw', currency: 'EUR', label: 'Wise EUR' }],
+    accounts: [{ id: 'kw', currency: 'EUR', label: 'Wise EUR', balance: '78650' }],
     fail: 'rate_limit',
   }),
 ];
@@ -95,6 +107,33 @@ for (const c of runs) {
     await syncBank(repo, c, from, to);
   } catch {
     // A failed connection is part of the picture.
+  }
+}
+// Daily rates, so the demo can show a household total in one currency rather
+// than only the warning that says it could not. Synthetic figures, and the
+// same shape the real feed writes.
+const rates = new FxRates(db);
+for (let back = 0; back < 3; back++) {
+  const asOf = new Date(Date.now() - back * 86400000).toISOString().slice(0, 10);
+  for (const [base, rate] of [
+    ['USD', '41.50'],
+    ['EUR', '48.20'],
+    ['GBP', '55.10'],
+  ]) {
+    try {
+      await rates.insert({
+        source: 'demo',
+        base,
+        target: 'UAH',
+        rate,
+        asOf,
+        retrievedAt: `${asOf}T12:00:00.000Z`,
+        version: 1,
+        provenance: 'synthetic demo rate',
+      });
+    } catch {
+      // Already seeded.
+    }
   }
 }
 await db.query(

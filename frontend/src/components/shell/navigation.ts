@@ -11,6 +11,7 @@ import {
   Landmark,
   LayoutDashboard,
   ListChecks,
+  PiggyBank,
   Receipt,
   Settings,
   Tags,
@@ -32,6 +33,7 @@ export const screenGroups: ScreenGroup[] = [
     label: 'Money',
     items: [
       { href: '/', label: 'Home', icon: LayoutDashboard },
+      { href: '/balances', label: 'Balances', icon: PiggyBank },
       {
         href: '/analytics',
         label: 'Spending analytics',
@@ -63,8 +65,16 @@ export const screenGroups: ScreenGroup[] = [
   },
 ];
 
-/** The four screens on the phone's tab bar; the fifth tab opens everything. */
-export const tabScreens = screenGroups[0]!.items.slice(0, 4);
+/**
+ * The four screens on the phone's tab bar; the fifth tab opens everything.
+ *
+ * Named rather than taken off the front of the Money group, so that adding a
+ * screen to the sidebar cannot silently reorder the four buttons under
+ * somebody's thumb. Changing the tab bar is its own decision, made here.
+ */
+export const tabScreens = ['/', '/analytics', '/review', '/transactions']
+  .map((href) => screenGroups[0]!.items.find((item) => item.href === href)!)
+  .filter(Boolean);
 
 export function visibleGroups(isAdmin: boolean): ScreenGroup[] {
   return screenGroups.map((group) => ({
