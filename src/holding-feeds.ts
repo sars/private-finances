@@ -115,6 +115,8 @@ export interface FlexCash {
 export interface FlexStatement {
   positions: FlexPosition[];
   cash: FlexCash[];
+  /** Section names seen in the statement, for a check that names no figure. */
+  sections: string[];
   /** The statement's own dates, when it states them. */
   fromDate: string | null;
   toDate: string | null;
@@ -171,7 +173,11 @@ export function parseFlexStatement(xml: string): FlexStatement {
   }
   const cash: FlexCash[] = [];
   for (const row of elements(xml, 'CashReportCurrency')) {
-    if (!summaryOnly(row)) continue;
+    // The cash report labels its per-currency rows "Currency" and its total
+    // "BaseCurrency"; positions use "SUMMARY" and "LOT". Only a real
+    // currency's own row is cash in that currency.
+    const detail = (row.levelOfDetail ?? '').toUpperCase();
+    if (detail && detail !== 'SUMMARY' && detail !== 'CURRENCY') continue;
     const currency = (row.currency ?? '').trim().toUpperCase();
     const endingCash = decimal(row.endingCash);
     // The report's "BASE_SUMMARY" row totals every currency in the base one
@@ -179,9 +185,19 @@ export function parseFlexStatement(xml: string): FlexStatement {
     if (!/^[A-Z]{3}$/.test(currency) || endingCash === null) continue;
     cash.push({ currency, endingCash });
   }
+  const sections = [
+    ...new Set(
+      [...xml.matchAll(/<([A-Z][A-Za-z]+)>/g)]
+        .map((m) => m[1]!)
+        .filter(
+          (name) => !['FlexQueryResponse', 'FlexStatements'].includes(name),
+        ),
+    ),
+  ];
   return {
     positions,
     cash,
+    sections,
     fromDate: flexDate(statement.fromDate),
     toDate: flexDate(statement.toDate),
   };
