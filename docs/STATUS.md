@@ -9,7 +9,22 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**4f19583752d532842c41c78114260a1376bd08bb**, live since September 18, 2026 at
+**c6bf2f2b73b1bc4ff1434be2ade5bebfc3c77502**, live since September 18, 2026 at
+schema version 53, deployed with `deploy/release.sh`. It changes one file
+against the release before it — this document — and is recorded because the
+running release must be one anybody can name. On the server 570 application
+tests passed, 4 skipped; the rehearsal on a restored copy of the real database
+reached schema 53 in 33 milliseconds with 4,165 transactions, 140 active refund
+links, no expense without a category and nothing filed on a heading. After the
+switch both services are active and the ledger holds 4,165 transactions.
+
+A first attempt at this release, against **1e43ec5**, passed every gate and was
+then refused at the last one: another session had switched to 4f19583 while it
+built, and 1e43ec5 predated that, so switching would have withdrawn the Telegram
+fix. The guard added on 17 September did exactly what it was put there for. The
+commit was brought up to date and released again, which is the run above.
+
+The release before it, **4f19583752d532842c41c78114260a1376bd08bb**, went live on September 18, 2026 at
 schema version 53, deployed with `deploy/release.sh`. It carries two things.
 PR #57 closes the last silent path for a Telegram answer: with f97abac live
 the owner answered the Facebook question "business, for advertising" and again
