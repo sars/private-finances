@@ -11,6 +11,7 @@ import {
 import {
   CircleAlert,
   Clock3,
+  Landmark,
   Pencil,
   Plus,
   RefreshCw,
@@ -67,12 +68,23 @@ type Holding = {
   note: string | null;
   archived: boolean;
   revision: number;
+  feed: Feed | null;
+  feedRef: string | null;
+};
+type Feed = 'bank' | 'ibkr' | 'binance' | 'wallet';
+type LinkableAccount = {
+  source: string;
+  accountId: string;
+  owner: 'rodion' | 'katya';
+  label: string;
+  currencies: string[];
 };
 type Row = {
   holding: Holding;
   quantity: string | null;
   quantityAsOf: string | null;
   carried: boolean;
+  source: string | null;
   enteredAmount: string | null;
   enteredCurrency: string | null;
   valueMinor: string | null;
@@ -101,6 +113,12 @@ type Report = {
   totals: Totals;
   previous: Totals | null;
   series: Totals[];
+  accounts: LinkableAccount[];
+};
+type FillSummary = {
+  filled: number;
+  unchanged: number;
+  skipped: Record<string, number>;
 };
 
 const kinds: Record<string, string> = {
@@ -115,6 +133,26 @@ const kinds: Record<string, string> = {
   business: 'Business',
   receivable: 'Owed to us',
   other: 'Other',
+};
+const feeds: Record<Feed, string> = {
+  bank: 'Bank balance',
+  ibkr: 'Interactive Brokers',
+  binance: 'Binance',
+  wallet: 'Wallet address',
+};
+const feedHint: Record<Feed, string> = {
+  bank: 'The account whose stored balance fills this holding.',
+  ibkr: 'The symbol in the statement, or CASH for the cash in this currency.',
+  binance: 'TOTAL for everything in USD, or one asset symbol.',
+  wallet: 'The public address; BTC and ETH are read.',
+};
+const sourceLabel: Record<string, string> = {
+  manual: 'typed',
+  spreadsheet: 'spreadsheet',
+  bank: 'from the bank',
+  ibkr: 'from IBKR',
+  binance: 'from Binance',
+  wallet: 'from the wallet',
 };
 const currencies = ['USD', 'EUR', 'UAH', 'GBP'];
 const isCurrency = (symbol: string) => currencies.includes(symbol);
@@ -160,6 +198,8 @@ type Draft = {
   maturesOn: string;
   note: string;
   archived: boolean;
+  feed: string;
+  feedRef: string;
 };
 const emptyDraft: Draft = {
   name: '',
@@ -172,6 +212,8 @@ const emptyDraft: Draft = {
   maturesOn: '',
   note: '',
   archived: false,
+  feed: '',
+  feedRef: '',
 };
 
 export default function Assets() {
@@ -181,6 +223,8 @@ export default function Assets() {
   const [at, setAt] = useUrlField('at', '');
   const [showRetired, setShowRetired] = useState(false);
   const [editing, setEditing] = useState<Holding | null | undefined>();
+  const [filling, setFilling] = useState(false);
+  const [notice, setNotice] = useState('');
   const query = useQuery({
     queryKey: ['holdings', display, at],
     queryFn: ({ signal }) =>
@@ -215,6 +259,31 @@ export default function Assets() {
   );
   const today = rigaToday();
   const selected = report?.at ?? at;
+  const linkedToBanks = (report?.rows ?? []).some(
+    (row) => row.holding.feed === 'bank' && !row.holding.archived,
+  );
+  async function fillFromBanks() {
+    if (!session || filling) return;
+    setFilling(true);
+    setNotice('');
+    try {
+      const { fill } = (await send('/api/holdings/fill', {
+        csrf: session.csrf,
+        asOf: selected,
+      })) as { fill: FillSummary };
+      await refresh();
+      const skipped = Object.entries(fill.skipped)
+        .map(([reason, count]) => `${count} ${reason.replaceAll('_', ' ')}`)
+        .join(', ');
+      setNotice(
+        `${fill.filled} filled from stored bank balances, ${fill.unchanged} already current${skipped ? `; skipped: ${skipped}` : ''}.`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Not filled.');
+    } finally {
+      setFilling(false);
+    }
+  }
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
       <PageHeader
@@ -241,6 +310,16 @@ export default function Assets() {
               Snapshot today
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              disabled={!report || !linkedToBanks || filling}
+              onClick={() => void fillFromBanks()}
+              title="Copies the balances the banks last stated into this date"
+            >
+              <Landmark className={filling ? 'animate-pulse' : ''} />
+              Fill from banks
+            </Button>
+            <Button
               size="sm"
               disabled={!session}
               onClick={() => setEditing(null)}
@@ -251,6 +330,14 @@ export default function Assets() {
           </>
         }
       />
+      {notice && (
+        <div
+          role="status"
+          className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
+        >
+          {notice}
+        </div>
+      )}
       {query.error && (
         <div
           role="alert"
@@ -453,6 +540,7 @@ export default function Assets() {
       {editing !== undefined && (
         <HoldingDialog
           holding={editing}
+          accounts={report?.accounts ?? []}
           csrf={session?.csrf}
           onClose={() => setEditing(undefined)}
         />
@@ -483,6 +571,7 @@ function HoldingName({ holding }: { holding: Holding }) {
             {holding.maturesOn}
           </span>
         )}
+        {holding.feed && <span>· fed by {feeds[holding.feed]}</span>}
       </p>
     </div>
   );
@@ -649,6 +738,9 @@ function CountedCell({ row }: { row: Row }) {
       ) : (
         row.quantityAsOf
       )}
+      {row.source && row.source !== 'manual' && (
+        <span className="block">{sourceLabel[row.source] ?? row.source}</span>
+      )}
     </span>
   );
 }
@@ -733,10 +825,12 @@ function HoldingCard({
 
 function HoldingDialog({
   holding,
+  accounts,
   csrf,
   onClose,
 }: {
   holding: Holding | null;
+  accounts: LinkableAccount[];
   csrf?: string;
   onClose: () => void;
 }) {
@@ -754,9 +848,21 @@ function HoldingDialog({
           maturesOn: holding.maturesOn ?? '',
           note: holding.note ?? '',
           archived: holding.archived,
+          feed: holding.feed ?? '',
+          feedRef: holding.feedRef ?? '',
         }
       : emptyDraft,
   );
+  const accountOptions = accounts
+    .filter(
+      (account) =>
+        !account.currencies.length ||
+        account.currencies.includes(draft.denomination.trim().toUpperCase()),
+    )
+    .map((account) => ({
+      value: `${account.source}|${account.accountId}`,
+      label: `${account.label} · ${account.owner === 'rodion' ? 'Rodion' : 'Katya'}${account.currencies.length ? ` · ${account.currencies.join('/')}` : ''}`,
+    }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const field = (key: keyof Draft) => (value: string | boolean) =>
@@ -774,6 +880,14 @@ function HoldingDialog({
     }
     if (draft.maturesOn && !/^\d{4}-\d{2}-\d{2}$/.test(draft.maturesOn)) {
       setError('Write the maturity date as YYYY-MM-DD.');
+      return;
+    }
+    if (draft.feed === 'bank' && !draft.feedRef) {
+      setError('Pick the account whose balance fills this holding.');
+      return;
+    }
+    if (draft.feed === 'wallet' && !draft.feedRef.trim()) {
+      setError('Paste the wallet’s public address.');
       return;
     }
     setSaving(true);
@@ -794,6 +908,8 @@ function HoldingDialog({
         maturesOn: draft.maturesOn.trim(),
         note: draft.note.trim(),
         archived: String(draft.archived),
+        feed: draft.feed,
+        feedRef: draft.feed ? draft.feedRef.trim() : '',
       });
       await refresh();
       onClose();
@@ -916,6 +1032,64 @@ function HoldingDialog({
                 </label>
               )}
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`${prefix}-feed`}>Filled by</Label>
+              <Choice
+                id={`${prefix}-feed`}
+                value={draft.feed}
+                onChange={(value) =>
+                  setDraft((current) => ({
+                    ...current,
+                    feed: value,
+                    feedRef: '',
+                  }))
+                }
+                options={[
+                  { value: '', label: 'Typed by hand' },
+                  ...Object.entries(feeds).map(([value, label]) => ({
+                    value,
+                    label,
+                  })),
+                ]}
+              />
+            </div>
+            {draft.feed && (
+              <div className="space-y-1.5">
+                <Label htmlFor={`${prefix}-ref`}>
+                  {draft.feed === 'bank' ? 'Account' : 'Reference'}
+                </Label>
+                {draft.feed === 'bank' ? (
+                  <Choice
+                    id={`${prefix}-ref`}
+                    value={draft.feedRef}
+                    onChange={field('feedRef')}
+                    placeholder={
+                      accountOptions.length
+                        ? 'Pick an account'
+                        : 'No account holds this currency'
+                    }
+                    options={accountOptions}
+                  />
+                ) : (
+                  <Input
+                    id={`${prefix}-ref`}
+                    value={draft.feedRef}
+                    onChange={(event) => field('feedRef')(event.target.value)}
+                    placeholder={
+                      draft.feed === 'ibkr'
+                        ? draft.denomination || 'symbol, or CASH'
+                        : draft.feed === 'binance'
+                          ? 'TOTAL'
+                          : 'public address'
+                    }
+                    maxLength={200}
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {feedHint[draft.feed as Feed]}
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor={`${prefix}-note`}>Note</Label>
               <Textarea

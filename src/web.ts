@@ -37,6 +37,7 @@ import type { Classifier } from './classifier.js';
 import { Reports, previousReportPeriod } from './reports.js';
 import { Accounts } from './accounts.js';
 import { Holdings } from './holdings.js';
+import { fillFromBalances } from './holding-fill.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
@@ -387,13 +388,23 @@ export function web(
       if (req.method === 'GET' && route === '/api/holdings') {
         // The household's holdings are shared: either member reads and
         // records them, so nothing here is scoped to the actor.
-        json(
-          200,
-          await new Holdings(repo.db).report(
-            url.searchParams.get('display') || 'USD',
-            url.searchParams.get('at') || undefined,
-          ),
+        const report = await new Holdings(repo.db).report(
+          url.searchParams.get('display') || 'USD',
+          url.searchParams.get('at') || undefined,
         );
+        // The accounts a bank holding may be linked to, with the currencies
+        // their banks have stated balances in; labels only, no figures.
+        const { accounts } = await new AccountBalances(repo.db).household();
+        json(200, {
+          ...report,
+          accounts: accounts.map((account) => ({
+            source: account.source,
+            accountId: account.accountId,
+            owner: account.owner,
+            label: account.label,
+            currencies: account.balances.map((b) => b.currency),
+          })),
+        });
         return;
       }
       if (req.method === 'GET' && route === '/api/accounts') {
@@ -914,9 +925,19 @@ export function web(
             note: form.note,
             archived: form.archived,
             sortOrder: form.sortOrder,
+            feed: form.feed,
+            feedRef: form.feedRef,
             revision: form.revision,
           });
           json(200, { holding });
+          return;
+        }
+        if (route === '/api/holdings/fill') {
+          // The bank part of the monthly job, on demand: stored balances only,
+          // no bank is called from here.
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(form.asOf ?? ''))
+            throw new Error('holdings_invalid_date');
+          json(200, { fill: await fillFromBalances(repo.db, form.asOf!) });
           return;
         }
         if (route === '/api/holding-snapshots') {

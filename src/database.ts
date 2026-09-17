@@ -21,7 +21,7 @@ import {
 } from './refund-automation.js';
 import { initializeRefundQuestions } from './refund-questions.js';
 import { initializeFxRates } from './fx-rates.js';
-import { initializeHoldings } from './holdings.js';
+import { addHoldingFeeds, initializeHoldings } from './holdings.js';
 import { initializeSpendingPatterns } from './spending-pattern.js';
 import { initializeTransactionTriage } from './transaction-triage.js';
 import { initializeLlmBudget } from './llm-budget.js';
@@ -851,6 +851,16 @@ async function applyMigrations(db: Database): Promise<void> {
       await initializeAccountBalances(tx);
       await initializeUiLayouts(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (53)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=54'))
+        .rows.length
+    ) {
+      // A holding may name the feed that fills it — a bank account's stored
+      // balance, the broker, the exchange or a wallet address — so the
+      // monthly snapshot job knows what to read (PF-020, step two).
+      await addHoldingFeeds(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (54)');
     }
   });
 }

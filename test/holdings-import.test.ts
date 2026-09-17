@@ -95,6 +95,7 @@ test('a prepared document is validated for shape, loaded once, and a second run 
     assert.deepEqual(first, {
       holdingsCreated: 5,
       holdingsSeen: 5,
+      holdingsLinked: 0,
       snapshotsWritten: 6,
       snapshotsUnchanged: 0,
       pricesWritten: 3,
@@ -104,6 +105,7 @@ test('a prepared document is validated for shape, loaded once, and a second run 
     assert.deepEqual(second, {
       holdingsCreated: 0,
       holdingsSeen: 5,
+      holdingsLinked: 0,
       snapshotsWritten: 0,
       snapshotsUnchanged: 6,
       pricesWritten: 0,

@@ -159,3 +159,11 @@ After a rate-limit/transient error, wait the existing 24-hour cooldown, then use
 six hours between successful attempts. Auth/uncertain latches stay blocked.
 No empty-result fallback and no fabricated online-user headers. On rollout shorten
 only a known successful cooldown with no conservative marker or failure latch.
+
+## Monthly assets snapshot
+
+`private-finances-assets-snapshot.timer` fires on the last Thursday of each
+month at 10:05 Europe/Riga and runs `holdings-snapshot-cli` once, which fills
+every fed holding from stored bank balances, the broker statement, the exchange
+and the wallet ledgers. It makes a handful of requests to fixed hosts once a
+month and needs no bank access of its own; see [assets](assets.md).

@@ -5,6 +5,8 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { web, type WebConfig } from '../src/web.js';
 import { FxRates } from '../src/fx-rates.js';
+import { AccountBalances } from '../src/account-balances.js';
+import { Accounts } from '../src/accounts.js';
 
 test('holdings HTTP routes are shared by the household, need CSRF, and value in the display currency', async () => {
   const db = memoryDatabase();
@@ -166,6 +168,52 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
     const carried = await (await get('/api/holdings?at=2026-09-25')).json();
     assert.equal(carried.rows[0].carried, true);
     assert.equal(carried.series.length, 2);
+    // The accounts a bank holding may link to travel with the report, and a
+    // linked holding is filled from the stored balance on demand.
+    assert.deepEqual(carried.accounts, []);
+    await new Accounts(db).discover({
+      source: 'synthetic',
+      accountId: 'main',
+      owner: 'rodion',
+      label: 'Main account',
+    });
+    await new AccountBalances(db).record(
+      { source: 'synthetic', accountId: 'main' },
+      [{ currency: 'USD', amountMinor: '250000' }],
+    );
+    const withAccounts = await (await get('/api/holdings')).json();
+    assert.equal(withAccounts.accounts.length, 1);
+    assert.deepEqual(withAccounts.accounts[0].currencies, ['USD']);
+    assert.equal(
+      (
+        await post('/api/holdings', {
+          ...fields,
+          csrf,
+          id: holding.id,
+          revision: '1',
+          denomination: 'USD',
+          feed: 'bank',
+          feedRef: 'synthetic|main',
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await post('/api/holdings/fill', { csrf, asOf: 'today' })).status,
+      400,
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    const filled = await post(
+      '/api/holdings/fill',
+      { csrf: kateCsrf, asOf: today },
+      'katya',
+    );
+    assert.equal(filled.status, 200);
+    assert.equal((await filled.json()).fill.filled, 1);
+    const latest = await (await get(`/api/holdings?at=${today}`)).json();
+    assert.equal(latest.rows[0].quantity, '2500');
+    assert.equal(latest.rows[0].source, 'bank');
+    assert.equal(latest.rows[0].holding.feed, 'bank');
   } finally {
     server.close();
     await db.close();

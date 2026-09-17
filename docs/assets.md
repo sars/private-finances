@@ -6,9 +6,10 @@ spreadsheet the owner kept by hand, moved into the application: the same
 model, the same history, and the manual work squeezed down to the figures
 nobody can read for us.
 
-Status, September 17, 2026: step one is deployed as release 1ef7b68 at schema
-51 and the spreadsheet history is loaded — the model, the screen, the import
-and the daily-rate valuation. Automatic balances, the monthly Telegram round
+Status, September 18, 2026: step one is deployed (release 1ef7b68, schema 51)
+with the spreadsheet history loaded; steps two and four — feed links, the
+bank, broker, exchange and wallet feeds, the last-Thursday job — are merged as
+migration 54 and await release. The Telegram round is the remaining step. Automatic balances, the monthly Telegram round
 and the brokerage, exchange and wallet feeds are the following steps, listed
 at the end.
 
@@ -116,30 +117,72 @@ imported as prices with the source `spreadsheet`, so the history is valued
 exactly as the spreadsheet valued it. Dates after the import use the daily
 bank quotes and whatever prices are recorded.
 
+## Feeds: what fills itself
+
+A holding may name the **feed** that fills it and a **reference** the feed
+looks it up by; the edit dialog offers both. Four feeds exist:
+
+| Feed                | Reference                                                  | What is written                                                                                                                                                                                                                       |
+| ------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bank balance        | an account from the Balances page (`source\|accountId`)    | the balance the bank last stated in the holding's currency, less the agreed overdraft the bank counts inside it; a balance older than three days or later than the day is skipped, by reason                                          |
+| Interactive Brokers | a symbol, or `CASH` for the cash in the holding's currency | the summary position (zero once it is gone from the statement) or the ending cash; each position's mark price in USD is stored as that day's price; a position with no holding yet gets one, shaped like the existing broker holdings |
+| Binance             | `TOTAL` on a USD holding, or one asset symbol              | the dollar value of every Spot balance at the exchange's own last prices, or that asset's quantity; the prices are stored                                                                                                             |
+| Wallet address      | a public BTC or ETH address                                | the address's balance from a public ledger — mempool.space for bitcoin, a public JSON-RPC node for ethereum — with the coin's price from the exchange's open ticker                                                                   |
+
+Every feed is read-only, talks to one fixed host with a timeout, a size limit
+and no redirects, and reduces failure to a code; one feed failing never stops
+another. The bank feed reads what the sync runs already stored and calls no
+bank, so the Assets screen offers it on demand as **Fill from banks**. The
+others run only from the command line and the timer.
+
+`node dist/src/holdings-snapshot-cli.js [YYYY-MM-DD] [--check]` is the
+monthly job: it fills every fed holding for the day (today in Riga by default)
+and prints one line per feed with counts and status codes, never a name, an
+address or a figure. `--check` only tries the broker and exchange credentials
+and prints a status word each. Credentials are files in
+`CREDENTIALS_DIRECTORY`, present or absent: `ibkr-flex-token` with
+`ibkr-flex-query` (the Flex Web Service token and the Query ID of an Activity
+Flex Query in XML with Open Positions at summary level — Symbol, Position,
+Mark Price, Position Value, Currency, Asset Class, Level of Detail — and Cash
+Report — Currency, Ending Cash, Level of Detail — over the last business day),
+and `binance-api-key` with `binance-api-secret` (a read-only key, restricted
+to the server's address). `ETH_RPC_URL` may point the ethereum lookup at
+another public node.
+
+`private-finances-assets-snapshot.timer` runs the job on the last Thursday of
+the month at 10:05 Europe/Riga — the Thursday that falls on the 25th or later
+— with `Persistent=true`, so a missed run fires at the next boot. Install and
+enable it like the other units:
+
+```sh
+sudo install -m 644 deploy/private-finances-assets-snapshot.service /etc/systemd/system/
+sudo install -m 644 deploy/private-finances-assets-snapshot.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now private-finances-assets-snapshot.timer
+sudo systemd-run --wait --pipe --collect --uid=private-finances \
+  -p EnvironmentFile=/etc/private-finances/app.env -p EnvironmentFile=/etc/private-finances/sync.env \
+  -p WorkingDirectory=/opt/private-finances/current \
+  /usr/bin/node dist/src/holdings-snapshot-cli.js --check
+```
+
+Feed links can also arrive in the import document: a holding that already
+exists is matched by name and only its `feed` and `feedRef` are set; nothing
+else about it changes.
+
 ## What stays manual, and what follows
 
-Manual for now: cash, the Ukrainian banks without a personal API (PrivatBank
-offers only a business API and an open-banking API for licensed third
-parties), payment services, bonds, the property, the businesses and the debts.
-A bond is one holding per issue with its maturity date; the value is the
-purchase cost carried forward until it is counted again.
+Manual: cash, the Ukrainian banks without a personal API (PrivatBank offers
+only a business API and an open-banking API for licensed third parties),
+payment services, bonds, the property, the businesses and the debts. A bond is
+one holding per issue with its maturity date; the value is the purchase cost
+carried forward until it is counted again.
 
-The following steps, each its own increment:
-
-1. **Automatic balances.** Keep the balance Monobank's client-info call
-   already returns (less the credit limit) and add Enable Banking's balances
-   call for Wise, Revolut, Swedbank and LHV; a job on the last Thursday of the
-   month at 10:05 Riga creates the snapshot and fills every linked holding.
-2. **The monthly round in Telegram.** The same job lists the holdings still
-   needing a figure in the household chat; a reply like "cash USD 9660"
-   records it; a second nudge after two days; a holding reaching its maturity
-   date is announced. Movements between holdings — money that left one and
-   arrived in another — are proposed from matching changes and confirmed with
-   one tap, so a transfer is never read as a loss and a gain.
-3. **Feeds.** Interactive Brokers through its Flex Web Service (positions with
-   market value and cash), Binance Spot through a read-only key, BTC and ETH
-   wallets by public address with a public price source. Each fills its
-   holdings inside the same job.
+Still to come, as its own increment: **the monthly round in Telegram.** The
+job lists the holdings still needing a figure in the household chat; a reply
+like "cash USD 9660" records it; a second nudge after two days; a holding
+reaching its maturity date is announced. Movements between holdings — money
+that left one and arrived in another — are proposed from matching changes and
+confirmed with one tap, so a transfer is never read as a loss and a gain.
 
 ## Verification
 
@@ -149,4 +192,10 @@ currency conversion; `test/holdings.test.ts` the migration, validation,
 versions and the report; `test/holdings-http.test.ts` authentication, CSRF,
 shared household access, stale revisions and display currencies over HTTP;
 `test/holdings-import.test.ts` the document's shape and a repeat run that
-changes nothing. Migration 51 adds three tables and touches nothing existing.
+changes nothing; `test/holding-feeds.test.ts` the Flex statement parser and
+request flow, the exchange signing and valuation and the ledger lookups
+against fake fetchers; `test/holding-fill.test.ts` the bank fill with
+overdraft and staleness, the broker fill with sold and new positions, the
+exchange and wallet fills, the full run and the linking document. Migration
+51 adds three tables and touches nothing existing; migration 54 adds the two
+feed columns.
