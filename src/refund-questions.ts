@@ -326,11 +326,13 @@ export class RefundQuestions {
     if (!actor) return false;
     const text = message.text;
     const outcome = await this.db.transaction(async (tx) => {
-      const inserted = await tx.query(
-        'INSERT INTO telegram_updates(update_id) VALUES($1) ON CONFLICT DO NOTHING RETURNING update_id',
-        [update!.update_id],
-      );
-      if (!inserted.rows.length) return null;
+      // Look before consuming. This flow shares the poller's transaction with
+      // the classification consumer, so an update number it takes stays taken
+      // even when it then declines the message. Until 17 September 2026 the
+      // number was taken first, and every answer to a classification question
+      // was then refused by that consumer's own insert as a duplicate: three
+      // answers from a household member reached nothing that day, and nothing
+      // logged or said so. The update is ours only once a question matches.
       const question = (
         await tx.query(
           `SELECT * FROM refund_questions WHERE chat_id=$1 AND message_id=$2 AND owner=$3
@@ -339,6 +341,11 @@ export class RefundQuestions {
         )
       ).rows[0];
       if (!question) return null;
+      const inserted = await tx.query(
+        'INSERT INTO telegram_updates(update_id) VALUES($1) ON CONFLICT DO NOTHING RETURNING update_id',
+        [update!.update_id],
+      );
+      if (!inserted.rows.length) return null;
       const options = (question.options as RefundQuestionOption[]) ?? [];
       const answer = parseRefundAnswer(text, options);
       if (answer.kind === 'unclear')

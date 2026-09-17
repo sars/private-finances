@@ -2,10 +2,12 @@ import { previousReportPeriod } from './reports.js';
 import type { Database } from './database.js';
 import type { Owner } from './domain.js';
 import {
+  accountLine,
   activeQuestionForPayment,
   type TelegramClarifications,
 } from './telegram.js';
 import { currencyExponent } from './fx.js';
+import { readMcc } from './mcc.js';
 
 export type ClarificationBotFactory = (
   db: Database,
@@ -76,8 +78,9 @@ export async function queueDailyClarifications(
       if (!remaining) continue;
       const rows = (
         await tx.query(
-          `SELECT t.*,q.question,q.state
+          `SELECT t.*,q.question,q.state,acc.label AS account_label
         FROM transactions t JOIN transaction_triage q ON q.transaction_id=t.id AND q.revision=t.revision AND q.owner=t.owner
+        LEFT JOIN own_accounts acc ON acc.owner=t.owner AND acc.source=t.source AND acc.account_id=t.account_id
         WHERE ((q.state='ready' AND q.question IS NOT NULL) OR ($5=true AND q.state IN ('deferred','uncertain'))) AND t.owner=$1 AND (t.kind='unresolved' OR t.provisional) AND (t.status='booked' OR ($5=true AND t.status='pending')) AND t.amount_minor<0
         AND t.source<>'manual_cash'
         AND NOT EXISTS(SELECT 1 FROM transaction_explanations e WHERE e.transaction_id=t.id AND e.revision=t.revision AND e.status='pending')
@@ -102,6 +105,14 @@ export async function queueDailyClarifications(
         const description = String(row.description)
           .replace(/[\u0000-\u001f\u007f]/g, ' ')
           .slice(0, 500);
+        // The account the payment left and what the bank says the merchant
+        // does, when it says so: without them a bare "Other" from the bank
+        // gave the person nothing to go on.
+        const account = accountLine(row.source, row.account_label);
+        const mcc = readMcc(
+          row.source_details as Record<string, unknown> | undefined,
+        );
+        const context = `${account ? `\nAccount: ${account}` : ''}${mcc ? `\nBank category: ${mcc.meaning}` : ''}`;
         const prompt = `${owner === 'rodion' ? 'Rodion' : 'Katya'}, ${String(
           row.state === 'ready'
             ? row.question
@@ -111,7 +122,7 @@ export async function queueDailyClarifications(
           .slice(
             0,
             800,
-          )}\n${date} (UTC) · ${amountText(String(row.amount_minor), String(row.currency))}${row.status === 'pending' ? '\nBank processing · amount may change until settled.' : ''}\nBank description: ${description}\nReply to this message with context. It will remain unresolved until reviewed.`;
+          )}\n${date} (UTC) · ${amountText(String(row.amount_minor), String(row.currency))}${row.status === 'pending' ? '\nBank processing · amount may change until settled.' : ''}${context}\nBank description: ${description}\nReply to this message with context. It will remain unresolved until reviewed.`;
         const id = await bot.queue(
           String(row.id),
           Number(row.revision),

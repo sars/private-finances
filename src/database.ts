@@ -798,6 +798,22 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (50)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=51'))
+        .rows.length
+    ) {
+      // A loose note to a household member whose answer reached nothing: the
+      // outbox holds a question about a payment and could not carry one, so
+      // until now a lost answer was recorded and logged but never said in the
+      // chat. `initializeTelegram` creates the table for a fresh database but
+      // is gated behind version 7, so an existing one needs it here.
+      await tx.query(`CREATE TABLE IF NOT EXISTS telegram_notes (
+        id uuid PRIMARY KEY,chat_id text NOT NULL,message_id bigint NOT NULL,text text NOT NULL,
+        state text NOT NULL CHECK(state IN ('queued','sending','sent','uncertain')),
+        lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now()
+      )`);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
+    }
   });
 }
 

@@ -241,6 +241,12 @@ test('a reply from anyone else, or to another message, changes nothing', async (
       false,
     );
     assert.equal((await new Refunds(db).list('rodion')).length, 0);
+    // Declining a message must leave its update number untouched, or the
+    // consumer it is passed on to sees a duplicate and drops the answer.
+    assert.equal(
+      (await db.query('SELECT 1 FROM telegram_updates')).rows.length,
+      0,
+    );
   } finally {
     await db.close();
   }
