@@ -42,7 +42,7 @@ later correction, and a purchase is hidden as having come to nothing only when
 its net after refunds is zero without such a disagreement. Both are computed over
 the few linked payments and their ids handed to SQL. The amount range needs the
 reporting conversion, so when it is set the candidates are converted first and
-the page cut afterwards. `test/transaction-page.test.ts` walks every page of a
+the page cut afterwards. `test/paged-transactions.test.ts` walks every page of a
 matrix of queries and requires the result to equal, in order, what the in-memory
 pipeline over `repo.list()` selects.
 
