@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react';
 import {
   ArrowLeft,
   Clock,
+  Ellipsis,
   FolderTree,
   History,
   Hourglass,
@@ -25,6 +26,12 @@ import { owners } from '@/lib/account-visuals';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { AccountChip } from './account-chip';
 import { BankRecord } from './bank-record';
 import {
@@ -36,6 +43,38 @@ import {
 import { DirectionMark, DisplayAmount, ReplyCard } from './pieces';
 import { ReceiptEvidence } from './receipt-evidence';
 import { RefundPanel } from './refund-panel';
+
+/** The secondary actions of a payment page, folded behind one button on the phone. */
+function MoreMenu({
+  items,
+}: {
+  items: Array<{ label: string; onClick?: () => void; href?: string }>;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="outline" size="icon" aria-label="More actions" />
+        }
+      >
+        <Ellipsis className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {items.map((item) =>
+          item.href ? (
+            <DropdownMenuItem key={item.label} render={<a href={item.href} />}>
+              {item.label}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem key={item.label} onClick={item.onClick}>
+              {item.label}
+            </DropdownMenuItem>
+          ),
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** A labelled fact, so no value on this page appears as a bare word. */
 function Pill({
@@ -89,45 +128,47 @@ export function PaymentHeader({
   const pattern = t.spendingPattern?.pattern;
   return (
     <header className="space-y-4 rounded-lg border p-4 sm:p-5">
-      <div className="space-y-1">
-        <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
-        <h1 className="text-2xl font-semibold tracking-tight break-words">
-          {t.description || 'Payment'}
-        </h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
+          <h1 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">
+            {t.description || 'Payment'}
+          </h1>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <Clock aria-hidden="true" className="size-3.5" />
+              <time dateTime={moment.iso}>
+                {moment.day}
+                {moment.time ? ` · ${moment.time}` : ''}
+              </time>
+            </span>
+            <AccountChip
+              source={t.source}
+              currency={t.currency}
+              label={t.spendingPolicy?.accountLabel}
+              owner={t.owner}
+            />
+            <span className="text-xs text-muted-foreground">
+              {owners[t.owner].name}’s account
+            </span>
+            {t.status === 'pending' && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                <Hourglass aria-hidden="true" className="size-3" />
+                Bank processing
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 sm:justify-end sm:text-right">
+          <DirectionMark amountMinor={t.amountMinor} />
+          <DisplayAmount
+            transaction={t}
+            reporting={data.reporting}
+            requested={displayCurrency}
+          />
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <DirectionMark amountMinor={t.amountMinor} />
-        <DisplayAmount
-          transaction={t}
-          reporting={data.reporting}
-          requested={displayCurrency}
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-          <Clock aria-hidden="true" className="size-3.5" />
-          <time dateTime={moment.iso}>
-            {moment.day}
-            {moment.time ? ` · ${moment.time}` : ''}
-          </time>
-        </span>
-        <AccountChip
-          source={t.source}
-          currency={t.currency}
-          label={t.spendingPolicy?.accountLabel}
-          owner={t.owner}
-        />
-        <span className="text-xs text-muted-foreground">
-          {owners[t.owner].name}’s account
-        </span>
-        {t.status === 'pending' && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-            <Hourglass aria-hidden="true" className="size-3" />
-            Bank processing
-          </span>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 border-t pt-4">
         <Pill icon={Wallet} label="Type" value={kinds[t.kind]} />
         <Pill
           icon={FolderTree}
@@ -223,7 +264,7 @@ export function TransactionDetail({
           <ArrowLeft className="size-4" />
           Back to review
         </Button>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden items-center gap-2 sm:flex">
           <Button
             variant="ghost"
             size="sm"
@@ -239,6 +280,17 @@ export function TransactionDetail({
           >
             Refresh payment
           </Button>
+        </div>
+        <div className="sm:hidden">
+          <MoreMenu
+            items={[
+              { label: 'Refresh payment', onClick: onRefresh },
+              {
+                label: 'Payment page',
+                href: `/transactions/${encodeURIComponent(t.id)}`,
+              },
+            ]}
+          />
         </div>
       </div>
       {notice && (
@@ -328,11 +380,12 @@ export function PaymentView({
 }) {
   const replies = repliesForTransaction(data.replies, t.id);
   const cash = t.source === 'manual_cash';
+  const reviewHref = `/review?id=${encodeURIComponent(t.id)}&display=${displayCurrency}`;
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {back}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden items-center gap-2 sm:flex">
           <Button
             variant="ghost"
             size="sm"
@@ -351,17 +404,21 @@ export function PaymentView({
           >
             Refresh payment
           </Button>
-          <Button
-            size="sm"
-            render={
-              <a
-                href={`/review?id=${encodeURIComponent(t.id)}&display=${displayCurrency}`}
-              />
-            }
-          >
+          <Button size="sm" render={<a href={reviewHref} />}>
             <ListChecks className="size-4" />
             Review this payment
           </Button>
+        </div>
+        <div className="sm:hidden">
+          <MoreMenu
+            items={[
+              { label: 'Refresh payment', onClick: onRefresh },
+              {
+                label: 'Decision history',
+                href: `/transactions/${encodeURIComponent(t.id)}/history`,
+              },
+            ]}
+          />
         </div>
       </div>
       <PaymentHeader
@@ -370,6 +427,10 @@ export function PaymentView({
         displayCurrency={displayCurrency}
         eyebrow="Payment"
       />
+      <Button className="w-full sm:hidden" render={<a href={reviewHref} />}>
+        <ListChecks className="size-4" />
+        Review this payment
+      </Button>
       {t.status === 'pending' && <PendingNote />}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.95fr)]">
         <div className="min-w-0 space-y-5">

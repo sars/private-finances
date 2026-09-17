@@ -5,19 +5,20 @@ import { AccountBadge, TransactionRow } from '@/components/finance';
 import { accountIdentity } from '@/lib/account-identity';
 import type { PaymentContext } from '@/lib/payments';
 import { bookedMoment, kinds, type Transaction } from '@/lib/transactions';
-import { DisplayAmount, HistoryLink } from './pieces';
+import { DisplayAmount } from './pieces';
 
 /**
  * One payment as both lists show it: which account paid and whose it is (the
  * badge), what it was, when, where it is filed and what it cost, with the
- * facts a reviewer needs as badges. The action is the screen's: review it, or
- * open it.
+ * facts a reviewer needs as badges. The row opens the payment; the action is
+ * the screen's word for that on wider screens.
  */
 export function PaymentRow({
   transaction: t,
   context,
   displayCurrency,
   showKind = true,
+  href,
   action,
 }: {
   transaction: Transaction;
@@ -25,6 +26,8 @@ export function PaymentRow({
   displayCurrency: string;
   /** Off where every row shares one kind, as on the review list. */
   showKind?: boolean;
+  /** Where the row leads; the whole row is the link on the phone. */
+  href: string;
   action?: ReactNode;
 }) {
   const moment = bookedMoment(t.bookedAt, t.source);
@@ -51,6 +54,7 @@ export function PaymentRow({
         />
       }
       markOnPhone
+      href={href}
       description={t.description || 'Payment without a description'}
       meta={
         <>
@@ -71,6 +75,7 @@ export function PaymentRow({
           reporting={context.reporting}
           requested={displayCurrency}
           className="text-sm font-semibold"
+          compact
         />
       }
       badges={
@@ -91,6 +96,11 @@ export function PaymentRow({
           )}
           {t.status === 'pending' && (
             <Badge variant="outline">Bank processing</Badge>
+          )}
+          {t.refund?.role === 'reduced' && (
+            <Badge variant="outline">
+              {t.refund.fullyReduced ? 'Refunded in full' : 'Partly refunded'}
+            </Badge>
           )}
           {estimate && (
             <Badge variant="outline">
@@ -129,7 +139,6 @@ export function PaymentRow({
           ))}
         </>
       }
-      history={<HistoryLink id={t.id} label="History" />}
       action={action}
     />
   );

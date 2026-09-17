@@ -66,11 +66,14 @@ export function DisplayAmount({
   reporting,
   requested,
   className,
+  compact = false,
 }: {
   transaction: Pick<Transaction, 'id' | 'amountMinor' | 'currency' | 'refund'>;
   reporting?: ReviewData['reporting'];
   requested: string;
   className?: string;
+  /** In a list row: the figure that counts, and one short word about it. */
+  compact?: boolean;
 }) {
   const row =
     reporting?.currency === requested
@@ -81,6 +84,19 @@ export function DisplayAmount({
   const reduced =
     transaction.refund?.role === 'reduced' ? transaction.refund : undefined;
   const lead = className ?? 'text-2xl font-semibold tracking-tight';
+  if (reduced && compact)
+    return (
+      <span className="inline-flex flex-col items-end gap-0.5">
+        <span className={lead}>
+          {transaction.currency === requested || !row?.netAmountMinor
+            ? money(reduced.netMinor, transaction.currency)
+            : money(row.netAmountMinor, requested)}
+        </span>
+        <span className="text-xs font-normal text-muted-foreground">
+          after refund
+        </span>
+      </span>
+    );
   if (reduced)
     return (
       <span className="inline-flex flex-col gap-0.5">
