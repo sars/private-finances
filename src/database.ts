@@ -759,6 +759,27 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (48)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=49'))
+        .rows.length
+    ) {
+      // Starting a bank approval used to overwrite the row of a live one with
+      // "pending" and the new attempt's requested expiry, before anything had
+      // been approved. On September 17, 2026 an approval started for the
+      // default bank in the form and abandoned did exactly that to Rodion's
+      // Wise approval, whose reminders then had nothing to watch. The attempt's
+      // bound now has its own column, and this puts that row back to what the
+      // provider reports for its session.
+      await tx.query(
+        'ALTER TABLE bank_consents ADD COLUMN IF NOT EXISTS requested_expires_at timestamptz',
+      );
+      await tx.query(
+        `UPDATE bank_consents SET status='authorized', expires_at='2026-09-21T17:46:06.825Z'
+         WHERE owner='rodion' AND bank='Wise' AND status='pending'
+           AND state_expires_at BETWEEN '2026-09-17T14:00:00Z' AND '2026-09-17T15:00:00Z'`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (49)');
+    }
   });
 }
 

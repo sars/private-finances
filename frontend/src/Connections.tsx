@@ -24,8 +24,9 @@ type Session = {
   actor: string;
   csrf: string;
   features: { consent: boolean; monobankJarsExcluded: boolean };
-  /** The provider's name, sent back on the form, and the name the owner reads. */
-  banks: Array<{ name: string; label: string }>;
+  /** The provider's name, sent back on the form, the name the owner reads,
+   * and the country the form pre-fills for it. */
+  banks: Array<{ name: string; label: string; country: string }>;
 };
 /** "Wise, Revolut, Swedbank and LHV": the heading of the provider card. */
 function bankListSentence(banks: Session['banks']) {
@@ -53,6 +54,12 @@ export default function Connections() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [bank, setBank] = useState('Wise');
   const [country, setCountry] = useState('LV');
+  /** Choosing a bank chooses its country too; the field stays editable. */
+  function chooseBank(name: string) {
+    setBank(name);
+    const chosen = session?.banks.find((b) => b.name === name);
+    if (chosen) setCountry(chosen.country);
+  }
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
@@ -126,7 +133,7 @@ export default function Connections() {
         throw new Error(
           response.status === 403
             ? 'Your session changed. Reload before starting bank approval.'
-            : 'We couldn’t start bank approval. Please try again.',
+            : `We couldn’t start approval for ${bankLabel(session.banks, bank)} in ${country}. Check the country code and try again.`,
         );
       const data = await response.json();
       const destination = new URL(data.redirect);
@@ -237,7 +244,7 @@ export default function Connections() {
                             id="connection-bank"
                             className="w-full"
                             value={bank}
-                            onChange={setBank}
+                            onChange={chooseBank}
                             options={session.banks.map((b) => ({
                               value: b.name,
                               label: b.label,

@@ -278,3 +278,81 @@ test('missing owner credentials fail before network without using Rodion fallbac
     await db.close();
   }
 });
+
+test('starting another approval leaves a live one authorised until the new one succeeds', async () => {
+  const db = memoryDatabase(),
+    dir = await mkdtemp(join(tmpdir(), 'consent-live-'));
+  let state = '';
+  let accept = true;
+  let sessionExpiry = '';
+  const post: ConsentPost = async (path, body) => {
+    if (path === '/auth') {
+      if (!accept) throw new Error('provider says no');
+      state = String(body.state);
+      sessionExpiry = (body.access as { valid_until: string }).valid_until;
+      return {
+        url: 'https://tilisy.enablebanking.com/ais/start?sessionid=synthetic',
+      };
+    }
+    if (!accept) throw new Error('provider says no');
+    return {
+      session_id: randomUUID(),
+      aspsp: { name: 'Wise', country: 'LV' },
+      psu_type: 'personal',
+      access: { valid_until: sessionExpiry },
+    };
+  };
+  const service = new ConsentService({
+    db,
+    privateKey,
+    applicationId: 'synthetic',
+    redirectUrl: 'https://example.com/callback',
+    secretDirectory: dir,
+    post,
+  });
+  const live = async () => (await service.list('rodion'))[0]!;
+  try {
+    await service.initialize();
+    // A first approval, completed.
+    await service.start('rodion', 'Wise', 'LV');
+    await service.finish('rodion', state, 'code-1');
+    const first = await live();
+    assert.equal(first.status, 'authorized');
+
+    // A second attempt is started and abandoned: the live one is untouched.
+    await service.start('rodion', 'Wise', 'LV');
+    assert.deepEqual(await live(), first);
+
+    // A second attempt the provider refuses: still untouched.
+    accept = false;
+    await assert.rejects(service.start('rodion', 'Wise', 'LV'));
+    assert.deepEqual(await live(), first);
+
+    // A renewal whose callback fails at the provider: back to the live one.
+    accept = true;
+    await service.start('rodion', 'Wise', 'LV');
+    accept = false;
+    await assert.rejects(service.finish('rodion', state, 'code-2'));
+    assert.deepEqual(await live(), first);
+
+    // A renewal that succeeds replaces it, with the new expiry.
+    accept = true;
+    await service.start('rodion', 'Wise', 'LV');
+    await service.finish('rodion', state, 'code-3');
+    const renewed = await live();
+    assert.equal(renewed.status, 'authorized');
+    assert.equal(renewed.expiry, new Date(sessionExpiry).toISOString());
+    assert.ok(Date.parse(renewed.expiry) > Date.parse(first.expiry));
+
+    // A bank with no live approval still reads "failed" when refused.
+    accept = false;
+    await assert.rejects(service.start('rodion', 'Revolut', 'LV'));
+    const revolut = (await service.list('rodion')).find(
+      (c) => c.bank === 'Revolut',
+    );
+    assert.equal(revolut?.status, 'failed');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    await db.close?.();
+  }
+});

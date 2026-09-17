@@ -42,7 +42,12 @@ import { parseFilters, filterTransactions } from './filters.js';
 import { pageTransactions, parsePageQuery } from './transaction-page.js';
 import { Repository, Conflict } from './repository.js';
 import { expenseSummary, type Owner } from './domain.js';
-import { BANKS, isBankName, type BankName } from './connectors/banks.js';
+import {
+  BANKS,
+  bankCountry,
+  isBankName,
+  type BankName,
+} from './connectors/banks.js';
 
 export type WebConfig = {
   frontendDirectory?: string;
@@ -362,8 +367,13 @@ export function web(
             monobankJarsExcluded: Boolean(config.monobankJarsExcluded),
           },
           // The banks the Connections page may offer: the provider's name is
-          // what the form sends back, the label is what the owner reads.
-          banks: BANKS.map((b) => ({ name: b.name, label: b.label })),
+          // what the form sends back, the label is what the owner reads, and
+          // the country is what the form pre-fills when the bank is chosen.
+          banks: BANKS.map((b) => ({
+            name: b.name,
+            label: b.label,
+            country: b.country,
+          })),
         });
         return;
       }
@@ -745,7 +755,7 @@ export function web(
           ? await config.consent.list(actor)
           : [];
         html(
-          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>${escape(bankListSentence())}</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANKS.map((b) => `<option value="${escape(b.name)}">${escape(b.label)}</option>`).join('')}</select></label><label>Country code for the bank connection<input name="country" required pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
+          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>${escape(bankListSentence())}</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANKS.map((b) => `<option value="${escape(b.name)}">${escape(b.label)}</option>`).join('')}</select></label><label>Country code for the bank connection (blank for the bank's own)<input name="country" pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
         );
         return;
       }
@@ -1168,11 +1178,11 @@ export function web(
           if (!config.consent) throw new Error('consent_not_configured');
           const bank = form.bank;
           if (!isBankName(bank)) throw new Error('invalid_bank');
-          const target = await config.consent.start(
-            actor,
-            bank,
-            (form.country ?? '').toUpperCase(),
-          );
+          // A blank country means the bank's own; a wrong one still fails at
+          // the provider rather than being second-guessed here.
+          const country =
+            (form.country ?? '').trim().toUpperCase() || bankCountry(bank);
+          const target = await config.consent.start(actor, bank, country);
           const destination = new URL(target);
           if (
             destination.protocol !== 'https:' ||

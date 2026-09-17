@@ -121,10 +121,10 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
           monobankJarsExcluded: true,
         },
         banks: [
-          { name: 'Wise', label: 'Wise' },
-          { name: 'Revolut', label: 'Revolut' },
-          { name: 'Swedbank', label: 'Swedbank' },
-          { name: 'LHV Pank', label: 'LHV' },
+          { name: 'Wise', label: 'Wise', country: 'LV' },
+          { name: 'Revolut', label: 'Revolut', country: 'LV' },
+          { name: 'Swedbank', label: 'Swedbank', country: 'LV' },
+          { name: 'LHV Pank', label: 'LHV', country: 'EE' },
         ],
       },
     );
