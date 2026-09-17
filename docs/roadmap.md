@@ -61,7 +61,7 @@ prices, the `/assets` screen, and the import of the owner's spreadsheet
 history. Automatic bank balances, the monthly Telegram round with movement
 matching, and the brokerage, exchange and wallet feeds follow as separate
 increments; the feed links and the bank, broker, exchange and wallet feeds
-with the last-Thursday job are merged as migration 54 and await release. The
+with the last-Thursday job are deployed (migration 54, September 18, 2026). The
 Telegram round is the remaining step. See [assets](assets.md).
 
 ## Open work and deferred decisions

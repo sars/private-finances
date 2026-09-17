@@ -121,6 +121,7 @@ async function check(credentials: FeedCredentials) {
           return {
             positions: statement.positions.length,
             cashCurrencies: statement.cash.map((c) => c.currency),
+            cashFields: statement.cashFields,
             sections: statement.sections,
           };
         }),

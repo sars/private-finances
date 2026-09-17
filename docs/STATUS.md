@@ -9,6 +9,28 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**cb3066a256ba1b028a94cc9c17bad4c3c4623d6d**, live since September 18, 2026 at
+schema version 54, the third release of the assets feeds that night, each
+deployed with `deploy/release.sh` in one run with 579 application tests
+passing on the server and the rehearsal on a restored copy reaching schema 54
+with 4,165 transactions unchanged. `4c17d471` (PR #62) made the timer fire
+every Thursday with the job deciding whether it is the month's last, moved
+the ethereum lookup to a public node that answers without a key, and dropped
+zero exchange quotes; `cb3066a2` (PR #63) counts the broker's per-currency
+cash rows, which are labelled "Currency", and made `--check` describe the
+statement's shape. The timer is reinstalled from the release and next fires
+on Thursday, September 24 at 10:05 Riga, which is the last Thursday.
+
+With the owner's re-issued token both credentials answer `ok`. The snapshot
+for September 18 holds 26 fed holdings: 13 bank balances, 10 broker
+positions (two of them zero, sold since the spreadsheet), the exchange total
+and both wallets, with 101 prices stored from the broker and the exchange.
+Three fed holdings have no figure yet: LHV and Swedbank, whose banks have
+stated no balance so far, and the broker's cash line — the statement's Cash
+Report section carries no row this code could read, which the next release
+diagnoses by printing the rows' attribute names and reads from the settled-
+cash field as well.
+
 **695378e28c6852d8b94350b603c50c0a8978f210**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run. It carries
 the assets feeds (PR #61; see [assets](assets.md)): a holding names the feed
