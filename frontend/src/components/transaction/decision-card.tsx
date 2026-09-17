@@ -159,8 +159,9 @@ export function DecisionCard({
   // is the absence of a decision rather than one worth repeating.
   const ruleAvailable = kind !== 'unresolved' && t.description.trim() !== '';
   const outgoing = BigInt(t.amountMinor) < 0n;
-  const patternAvailable =
-    t.owner === identity.actor && t.status === 'booked' && outgoing;
+  // Either member may decide the other's payment, so the pattern is offered
+  // for any settled outflow; the server records who decided.
+  const patternAvailable = t.status === 'booked' && outgoing;
   const threshold = exceptionalHint[displayCurrency];
   const looksExceptional =
     patternAvailable &&
