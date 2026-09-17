@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { periodRange, rigaToday } from '@/lib/spending-period';
+import { cn } from '@/lib/utils';
 
 export type Period = { from: string; to: string };
 
@@ -108,9 +109,14 @@ function wholeMonth(date: Date): Period {
 export function PeriodPicker({
   value,
   onChange,
+  size = 'sm',
+  className,
 }: {
   value: Period;
   onChange: (period: Period) => void;
+  /** `default` matches a Choice in a FilterBar; `sm` sits beside small buttons. */
+  size?: 'sm' | 'default';
+  className?: string;
 }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -146,7 +152,12 @@ export function PeriodPicker({
     : 'Tap a first and a last day';
 
   const trigger = (
-    <Button variant="outline" size="sm" aria-label="Period" className="gap-2">
+    <Button
+      variant="outline"
+      size={size}
+      aria-label="Period"
+      className={cn('gap-2', className)}
+    >
       <CalendarDays />
       {active ? `${active.label} · ${describe(value)}` : describe(value)}
       <ChevronDown className="opacity-60" />
