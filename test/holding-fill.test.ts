@@ -8,6 +8,7 @@ import {
   applyFlexStatement,
   fillFromBalances,
   fillWallets,
+  isLastThursday,
   rigaDate,
   runFeeds,
 } from '../src/holding-fill.js';
@@ -402,6 +403,17 @@ test('the full run reports each feed separately and a prepared document can link
     assert.equal(rigaDate(new Date('2026-09-24T22:30:00Z')), '2026-09-25');
     assert.equal(parseArguments(['2026-09-01']).asOf, '2026-09-01');
     assert.equal(parseArguments(['--check']).check, true);
+    assert.equal(
+      parseArguments(['--when=last-thursday']).lastThursdayOnly,
+      true,
+    );
+    assert.throws(() => parseArguments(['--when=friday']), /usage/);
+    // September 2026 ends on a Wednesday, so its last Thursday is the 24th.
+    assert.equal(isLastThursday('2026-09-24'), true);
+    assert.equal(isLastThursday('2026-09-17'), false);
+    assert.equal(isLastThursday('2026-09-25'), false);
+    assert.equal(isLastThursday('2026-10-29'), true);
+    assert.equal(isLastThursday('2026-02-26'), true);
     assert.throws(() => parseArguments(['2099-01-01']), /invalid_date/);
     assert.throws(() => parseArguments(['a', 'b']), /usage/);
   } finally {

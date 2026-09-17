@@ -147,11 +147,14 @@ Mark Price, Position Value, Currency, Asset Class, Level of Detail — and Cash
 Report — Currency, Ending Cash, Level of Detail — over the last business day),
 and `binance-api-key` with `binance-api-secret` (a read-only key, restricted
 to the server's address). `ETH_RPC_URL` may point the ethereum lookup at
-another public node.
+another public node; the default is publicnode's, which answers without a key
+where the other well-known public nodes now demand one.
 
-`private-finances-assets-snapshot.timer` runs the job on the last Thursday of
-the month at 10:05 Europe/Riga — the Thursday that falls on the 25th or later
-— with `Persistent=true`, so a missed run fires at the next boot. Install and
+`private-finances-assets-snapshot.timer` fires every Thursday at 10:05
+Europe/Riga and the service passes `--when=last-thursday`, so the job does its
+work only when the following Thursday falls in the next month; a calendar
+expression alone cannot say "the last Thursday" (25..31 misses a 30-day
+month's). `Persistent=true` makes a missed firing run at the next boot. Install and
 enable it like the other units:
 
 ```sh

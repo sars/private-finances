@@ -281,7 +281,12 @@ export function usdPrices(
   const last = new Map<string, string>();
   for (const ticker of tickers) {
     const price = decimal(ticker.price);
-    if (typeof ticker.symbol === 'string' && price !== null)
+    // A market quoted at zero is a delisted or dead token, not a price.
+    if (
+      typeof ticker.symbol === 'string' &&
+      price !== null &&
+      parseDecimal(price)!.n > 0n
+    )
       last.set(ticker.symbol, price);
   }
   const prices = new Map<string, string>();
@@ -424,7 +429,8 @@ export async function fetchBinancePublicPrices(
 // ---------------------------------------------------------------------------
 
 export const BTC_API_ORIGIN = 'https://mempool.space';
-export const ETH_RPC_DEFAULT = 'https://eth.public-rpc.com';
+/** Answers eth_getBalance without a key; the other well-known public nodes now demand one. */
+export const ETH_RPC_DEFAULT = 'https://ethereum-rpc.publicnode.com';
 
 export function isBitcoinAddress(value: string): boolean {
   return /^(bc1[a-z0-9]{25,90}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(value);

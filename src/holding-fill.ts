@@ -233,7 +233,11 @@ export async function applyExchangeHoldings(
   const w = await writer(service);
   const fed = (await service.list(false)).filter((h) => h.feed === 'binance');
   for (const asset of exchange.assets) {
-    if (asset.usdPerUnit && !['USD'].includes(asset.asset)) {
+    if (
+      asset.usdPerUnit &&
+      asset.asset !== 'USD' &&
+      /^[A-Z0-9][A-Z0-9.\-]{0,15}$/.test(asset.asset)
+    ) {
       await service.recordPrice(null, {
         symbol: asset.asset,
         asOf,
@@ -395,10 +399,22 @@ export async function runFeeds(
   }
   return outcomes;
 }
+/** A feed's own code, or the application's own error name; never a provider payload. */
 const codeOf = (error: unknown) =>
   error instanceof FeedError
     ? `${error.code}${error.detail ? `:${error.detail}` : ''}`
-    : 'failed';
+    : error instanceof Error && /^[a-z_]{1,60}$/.test(error.message)
+      ? `failed:${error.message}`
+      : 'failed';
+
+/** True when the day is the last Thursday of its month. */
+export function isLastThursday(day: string): boolean {
+  const date = new Date(`${day}T12:00:00Z`);
+  if (date.getUTCDay() !== 4) return false;
+  const nextWeek = new Date(date);
+  nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+  return nextWeek.getUTCMonth() !== date.getUTCMonth();
+}
 
 /** Today's calendar date where the household lives. */
 export function rigaDate(now = new Date()): string {

@@ -9,11 +9,33 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-Merged after this release and not yet deployed: the assets feeds (PF-020
-steps two and four, migration 54; see [assets](assets.md)). The migration
-adds two nullable columns to `holdings` and touches nothing else. At release
-the new timer unit is installed and enabled and the credential check run;
-both are operator steps recorded in the assets document.
+**695378e28c6852d8b94350b603c50c0a8978f210**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run. It carries
+the assets feeds (PR #61; see [assets](assets.md)): a holding names the feed
+that fills it, and the bank, broker, exchange and wallet feeds with the
+monthly job. Migration 54 adds two nullable columns to `holdings`; the
+rehearsal on a restored copy of the real database reached schema 54 in 26
+milliseconds with 4,165 transactions, 140 active refund links, no expense
+without a category and nothing filed on a heading. On the server 579
+application tests passed, 4 skipped; after the switch both services are
+active and the seven import timers are back.
+
+Afterwards the operator steps ran: the snapshot timer is installed and
+enabled; the credential check answered `ok` for the exchange and
+`auth:flex_1015` — "Token is invalid" — for the broker, which the owner is
+re-issuing; the two link documents connected 14 broker, exchange and wallet
+holdings and 14 bank holdings to their accounts and created a Wise GBP
+holding; the retired Kate Mono EUR holding has no account behind it. The
+first snapshot run filled 13 bank holdings from stored balances and one
+wallet, and skipped the two accounts whose banks have stated no balance yet
+(LHV and Swedbank). It also found three things the follow-up release fixes:
+the timer's `25..31` calendar missed September's last Thursday, the 24th; the
+default public ethereum node now demands a key, so the second wallet was
+refused; and one exchange market quoted at zero made the exchange feed fail
+on a price that cannot be stored.
+
+The release before it, **872511b79eb289cea78e57ad79bedfd117c29118**, is
+described below.
 
 **872511b79eb289cea78e57ad79bedfd117c29118**, live since September 18, 2026 at
 schema version 53, deployed with `deploy/release.sh`. It carries PR #59: the
