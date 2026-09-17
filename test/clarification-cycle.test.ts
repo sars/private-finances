@@ -49,9 +49,15 @@ test('daily queue caps each owner under concurrency, skips replay, and rolls to 
           sourceId: `${owner}-${i}`,
           owner,
           accountId: owner,
+          sourceDetails: { mcc: 4900 },
         })),
       ),
     );
+    for (const owner of ['rodion', 'katya'])
+      await db.query(
+        "INSERT INTO own_accounts(source,account_id,owner,label,purpose) VALUES('synthetic',$1,$1,'black','personal')",
+        [owner],
+      );
     await ready(db);
     const results = await Promise.all([
       queueDailyClarifications(db, factory, now),
@@ -95,6 +101,10 @@ test('daily queue caps each owner under concurrency, skips replay, and rolls to 
         .prompt,
     );
     assert.match(prompt, /12\.34 EUR/);
+    // The account it left and what the bank says the merchant does, so a bare
+    // "Other" from the bank is not all the person has to go on.
+    assert.match(prompt, /\nAccount: black\n/);
+    assert.match(prompt, /\nBank category: Utilities/);
     assert.match(prompt, /remain unresolved/);
   } finally {
     await db.close();

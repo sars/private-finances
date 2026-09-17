@@ -11,6 +11,8 @@ import {
   initializeReplyWorkflow,
   TelegramReplyWorkflow,
 } from '../src/reply-workflow.js';
+import { RefundQuestions } from '../src/refund-questions.js';
+import { Receipts } from '../src/receipts.js';
 const settings = { chatId: '-123', userIds: { rodion: '101', katya: '102' } };
 const update = (
   id: number,
@@ -53,6 +55,9 @@ async function setup(
       description: 'Synthetic merchant',
     },
   ]);
+  await db.query(
+    "INSERT INTO own_accounts(source,account_id,owner,label,purpose) VALUES('synthetic','one','rodion','Wise EUR','personal')",
+  );
   const row = (await repo.list('rodion'))[0]!;
   const question = new TelegramClarifications(db, settings, {
     send: async () => ({ messageId: 42 }),
@@ -183,6 +188,7 @@ test('an explanation in Telegram is applied, acknowledged and answered with what
     assert.equal(s.replies.length, 1);
     assert.equal(s.replies[0]!.to, 1);
     assert.match(s.replies[0]!.text, /Saved as personal expense/);
+    assert.match(s.replies[0]!.text, /Account: Wise EUR/);
     assert.match(s.replies[0]!.text, /Food \/ Restaurants \/ Dining in/);
     assert.match(
       s.replies[0]!.text,
@@ -431,6 +437,94 @@ test('the owner’s own answer names nobody else', async () => {
     );
     assert.equal(await s.workflow.dispatchReceiptOne(), 'sent');
     assert.match(s.replies[0]!.text, /^rodion:/);
+  } finally {
+    await s.db.close();
+  }
+});
+
+test('an answer polled through every receiver reaches the question, not the refund flow', async () => {
+  const s = await setup();
+  try {
+    await s.db.transaction(initializeReplyWorkflow);
+    // The worker offers each update to the refund questions, the receipts and
+    // the suggestion workflow before the clarification consumer sees it. On
+    // 17 September 2026 the refund flow took the update number first and then
+    // declined the message, so the consumer saw its own insert refused and
+    // three of Katya's answers were dropped as duplicates, unlogged.
+    const next = await pollOnce(
+      s.db,
+      settings,
+      async () => [update(1, 'Dinner with family', 42, 102)],
+      async (scoped, raw) =>
+        (await new RefundQuestions(scoped, settings, s.transport).receive(
+          raw,
+        )) ||
+        (await new Receipts(scoped).receive(settings, raw)) ||
+        (await new TelegramReplyWorkflow(
+          scoped,
+          settings,
+          s.transport,
+          s.classifierFor,
+        ).receive(raw)) !== 'unmatched',
+    );
+    assert.equal(next, 2);
+    const recorded = (
+      await s.db.query(
+        'SELECT outcome, detail FROM telegram_updates WHERE update_id=1',
+      )
+    ).rows[0]!;
+    assert.equal(recorded.outcome, 'accepted');
+    assert.match(String(recorded.detail), /katya answered for rodion/);
+    assert.equal(
+      (await s.db.query('SELECT 1 FROM telegram_proposal_inputs')).rows.length,
+      1,
+    );
+    assert.equal(await s.workflow.processOne(), 'ready');
+    assert.equal(await s.workflow.dispatchOne(), 'applied');
+    assert.equal((await s.repo.list('rodion'))[0]!.kind, 'personal_expense');
+  } finally {
+    await s.db.close();
+  }
+});
+
+test('free text under a suggestion is recorded and answered, not dropped', async () => {
+  const s = await setup();
+  try {
+    await s.db.transaction(initializeReplyWorkflow);
+    assert.equal(
+      await s.question.receive(update(1, 'Dinner with family')),
+      'accepted',
+    );
+    // A suggestion the bot sent under the old confirm/reject flow, still open.
+    await s.db.query(
+      `INSERT INTO telegram_reply_workflows(id,input_id,transaction_id,revision,owner,chat_id,state,message_id)
+       SELECT '00000000-0000-4000-8000-000000000001',i.id,$1,0,'rodion','-123','sent',77
+       FROM telegram_proposal_inputs i LIMIT 1`,
+      [s.row.id],
+    );
+    assert.equal(
+      await s.workflow.receive(update(2, 'no, it was the intercom', 77)),
+      'ignored',
+    );
+    const recorded = (
+      await s.db.query(
+        'SELECT outcome, detail FROM telegram_updates WHERE update_id=2',
+      )
+    ).rows[0]!;
+    assert.equal(recorded.outcome, 'ignored');
+    assert.match(String(recorded.detail), /confirm or reject/);
+    // The note goes out through the chat, from whichever worker sends next.
+    assert.equal(
+      await new TelegramClarifications(
+        s.db,
+        settings,
+        s.transport,
+      ).dispatchNoteOne(),
+      'sent',
+    );
+    assert.deepEqual(s.reactions, [{ messageId: 2, emoji: '👀' }]);
+    assert.equal(s.replies[0]!.to, 2);
+    assert.match(s.replies[0]!.text, /reply “confirm” or “reject”/);
   } finally {
     await s.db.close();
   }

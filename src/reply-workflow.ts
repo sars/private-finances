@@ -13,6 +13,9 @@ import {
 import { Repository } from './repository.js';
 import type { Owner } from './domain.js';
 import {
+  accountLine,
+  queueTelegramNote,
+  reviewLink,
   validateTelegramConfig,
   type TelegramConfig,
   type TelegramTransport,
@@ -295,10 +298,11 @@ export class TelegramReplyWorkflow {
    * decision applied without being confirmed has to be visible and reversible.
    */
   private async receiptText(item: Row): Promise<string> {
-    const link = this.settings.publicOrigin
-      ? `\n${this.settings.publicOrigin}/review?id=${encodeURIComponent(String(item.transaction_id))}`
-      : '';
-    const payment = String(item.description ?? 'Payment').slice(0, 200);
+    const link = reviewLink(this.settings, String(item.transaction_id));
+    const account = accountLine(item.source, item.account_label);
+    const payment =
+      String(item.description ?? 'Payment').slice(0, 200) +
+      (account ? `\nAccount: ${account}` : '');
     if (item.state !== 'confirmed')
       return (
         `${payment}\nNothing was saved. ` +
@@ -329,9 +333,11 @@ export class TelegramReplyWorkflow {
       const row = (
         await tx.query(
           `SELECT w.*,i.message_id AS input_message_id,coalesce(i.answered_by,i.owner) AS answered_by,
-          t.description,t.kind AS current_kind,t.category AS current_category
+          t.description,t.kind AS current_kind,t.category AS current_category,
+          t.source,acc.label AS account_label
         FROM telegram_reply_workflows w JOIN telegram_proposal_inputs i ON i.id=w.input_id
         JOIN transactions t ON t.id=w.transaction_id
+        LEFT JOIN own_accounts acc ON acc.owner=t.owner AND acc.source=t.source AND acc.account_id=t.account_id
         WHERE w.chat_id=$1 AND w.receipt_state='queued' ORDER BY w.created_at,w.id LIMIT 1 FOR UPDATE OF w SKIP LOCKED`,
           [this.settings.chatId],
         )
@@ -414,17 +420,46 @@ export class TelegramReplyWorkflow {
       // Either member may answer for the household, here as well as when the
       // question was first asked; `actor` is only who spoke, not whose money.
       const action = String(message!.text).trim().toLowerCase();
-      if (action !== 'confirm' && action !== 'reject') return 'ignored';
       const inserted = await tx.query(
         'INSERT INTO telegram_updates(update_id) VALUES($1) ON CONFLICT DO NOTHING RETURNING update_id',
         [update!.update_id],
       );
-      if (
-        !inserted.rows.length ||
-        ['confirmed', 'rejected'].includes(String(row.state))
-      )
+      if (!inserted.rows.length) return 'duplicate';
+      if (action !== 'confirm' && action !== 'reject') {
+        // Anything else said to a suggestion is not a decision. It used to be
+        // dropped without a trace; now the row says so and the member is told.
+        await tx.query(
+          "UPDATE telegram_updates SET outcome='ignored',detail=$2 WHERE update_id=$1",
+          [
+            update!.update_id,
+            'a reply to a suggestion must be confirm or reject',
+          ],
+        );
+        await queueTelegramNote(
+          tx,
+          this.settings.chatId,
+          Number(message!.message_id),
+          'This suggestion is only confirmed or rejected: reply “confirm” or “reject” to it, or decide the payment in Private Finances.',
+        );
+        return 'ignored';
+      }
+      if (['confirmed', 'rejected'].includes(String(row.state))) {
+        await tx.query(
+          "UPDATE telegram_updates SET outcome='ignored',detail='the suggestion was already decided' WHERE update_id=$1",
+          [update!.update_id],
+        );
         return 'duplicate';
-      if (row.state !== 'sent') return 'ignored';
+      }
+      if (row.state !== 'sent') {
+        await tx.query(
+          "UPDATE telegram_updates SET outcome='ignored',detail=$2 WHERE update_id=$1",
+          [
+            update!.update_id,
+            `the suggestion is ${String(row.state)}, not open`,
+          ],
+        );
+        return 'ignored';
+      }
       // Hold hierarchy stable through category validation and the decision commit.
       await tx.query('SELECT pg_advisory_xact_lock(7482394)');
       const current = (

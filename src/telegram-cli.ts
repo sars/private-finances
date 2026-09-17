@@ -36,6 +36,7 @@ import {
   type Executor,
 } from './database.js';
 import {
+  NOT_A_REPLY,
   TelegramClarifications,
   telegramTransport,
   type TelegramConfig,
@@ -164,16 +165,19 @@ export async function pollOnce(
     for (const update of normalized) {
       if (Number(update.update_id) < next) continue;
       if (!(receiveWorkflow && (await receiveWorkflow(scoped, update)))) {
-        const outcome = await bot.receive(update);
+        const { outcome, detail } = await bot.receiveDetailed(update);
         // A household member's answer that reached nothing is a failure to
         // report, not a quiet no-op: without this the only trace was an
-        // update number, and nobody could say what had rejected it.
-        if (outcome === 'ignored' || outcome === 'stale')
+        // update number, and nobody could say what had rejected it. A
+        // duplicate is logged too: three answers were lost on 17 September
+        // 2026 as duplicates, when an earlier consumer had taken the number.
+        if (outcome !== 'accepted' && detail !== NOT_A_REPLY)
           process.stdout.write(
             `${JSON.stringify({
               event: 'telegram_reply_discarded',
               updateId: Number(update.update_id),
               outcome,
+              ...(detail ? { detail } : {}),
             })}\n`,
           );
       }
@@ -378,6 +382,7 @@ async function main(): Promise<void> {
       await workflow.dispatchOne();
       await workflow.dispatchReceiptOne();
       await bot.dispatchOne();
+      await bot.dispatchNoteOne();
       // Only household reports created after this explicit cutoff may be sent.
       const reportAfter = process.env.TELEGRAM_REPORTS_AFTER;
       if (reportAfter && Number.isFinite(Date.parse(reportAfter))) {

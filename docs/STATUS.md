@@ -9,6 +9,31 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**1ef7b68b790c84f9d9ad9653f580a7fe3ff8ac45**, live since September 17, 2026 at
+schema version 51, deployed with `deploy/release.sh` by the owner. It carries
+the household-assets increment (PR #51; see [assets](assets.md)): holdings
+with dated, versioned snapshots, per-symbol prices, the `/assets` screen and
+the spreadsheet import. Migration 51 adds three tables and touches nothing
+existing; the rehearsal on a restored copy of the real database reached schema
+51 in 72 milliseconds with 4,165 transactions, 140 active refund links, no
+expense without a category and nothing filed on a heading. On the server 556
+application tests passed, 4 skipped.
+
+The first attempt stopped at "pausing imports and the worker": the LHV and
+Monobank timers had fired at the moment the script reached that step and one
+import outlasted the five-minute wait, so the script exited without switching
+and left the timers and the Telegram worker stopped, as designed. The second
+run, minutes later, found nothing running and completed. After the switch the
+owner loaded the spreadsheet history with `holdings-import-cli` through
+`systemd-run` with the application's environment file — 92 holdings, 1,202
+snapshots over 21 dates and 188 prices, counts confirmed in the database. A
+first attempt had passed `DATABASE_URL` through `env` from a `grep` of the
+file, which kept the value's quotes and failed peer authentication; the
+documented command now lets systemd parse the file.
+
+The release before it, **2c30f679341d7002e70328d0a20430197fa9a0f3**, is
+described below.
+
 **2c30f679341d7002e70328d0a20430197fa9a0f3**, live since September 17, 2026 at
 schema version 50, deployed with `deploy/release.sh`. Two fixes on Spending
 analytics: the period picker is now the first labelled field of the filter bar,
@@ -283,6 +308,24 @@ whose purchase is on no account we sync, and a 6.00 EUR Riga parking reversal
 with no charge at all. What the matcher still will not decide is recorded in
 [refunds](refunds.md) rather than tracked here, so this section stays current
 rather than growing.
+
+### Implemented, not yet released
+
+A fix for lost Telegram answers, in a pull request from branch
+`worktree-fix+telegram-reply-feedback`, awaits review and release. On 17
+September 2026 three answers a household member gave the bot reached nothing:
+the refund-question receiver consumed each update before checking it was its
+own, so the clarification consumer saw a duplicate and dropped it unlogged. The
+receiver now consumes only what it matches; every household message leaves an
+outcome on its `telegram_updates` row and a log line; a reply the bot cannot
+link to an open question is answered under it with why (`telegram_notes`,
+schema 52); and each question and receipt names the payment's account and the
+bank's merchant category. Details in
+[the incident](incidents/2026-09-17-answers-taken-by-refund-flow.md) and
+[Telegram replies](telegram-replies.md). After release: the three questions
+from 17 September are still open in the chat and can be answered again; the
+owner named the two "Iнше" payments as the intercom fee, which also fits the
+bank's category for them.
 
 ## Live capabilities
 

@@ -21,6 +21,7 @@ import {
 } from './refund-automation.js';
 import { initializeRefundQuestions } from './refund-questions.js';
 import { initializeFxRates } from './fx-rates.js';
+import { initializeHoldings } from './holdings.js';
 import { initializeSpendingPatterns } from './spending-pattern.js';
 import { initializeTransactionTriage } from './transaction-triage.js';
 import { initializeLlmBudget } from './llm-budget.js';
@@ -804,6 +805,33 @@ async function applyMigrations(db: Database): Promise<void> {
       !(await tx.query('SELECT version FROM schema_versions WHERE version=51'))
         .rows.length
     ) {
+      // What the household owns, snapshot by snapshot (PF-020): holdings,
+      // their dated quantities and the prices that value them. Three new
+      // tables, nothing existing touched; see docs/assets.md.
+      await initializeHoldings(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=52'))
+        .rows.length
+    ) {
+      // A loose note to a household member whose answer reached nothing: the
+      // outbox holds a question about a payment and could not carry one, so
+      // until now a lost answer was recorded and logged but never said in the
+      // chat. `initializeTelegram` creates the table for a fresh database but
+      // is gated behind version 7, so an existing one needs it here.
+      await tx.query(`CREATE TABLE IF NOT EXISTS telegram_notes (
+        id uuid PRIMARY KEY,chat_id text NOT NULL,message_id bigint NOT NULL,text text NOT NULL,
+        state text NOT NULL CHECK(state IN ('queued','sending','sent','uncertain')),
+        lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
+        reply_message_id bigint
+      )`);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (52)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=53'))
+        .rows.length
+    ) {
       // The household could see what it had spent and never what it had. Every
       // bank states an account's balance and this application threw the figure
       // away: Monobank sends it with the account listing the importer already
@@ -816,9 +844,13 @@ async function applyMigrations(db: Database): Promise<void> {
       // had. Card order is not household configuration: the settings store is
       // administrator-only and holds decisions that change what the figures
       // mean, and where somebody likes their accounts to sit changes nothing.
+      //
+      // Numbered 53 rather than 51: the assets tables took that number while
+      // this was being built, and a migration number is a place in a sequence
+      // every existing database has already walked, not a label to reuse.
       await initializeAccountBalances(tx);
       await initializeUiLayouts(tx);
-      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
+      await tx.query('INSERT INTO schema_versions(version) VALUES (53)');
     }
   });
 }

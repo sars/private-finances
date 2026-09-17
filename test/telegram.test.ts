@@ -5,6 +5,7 @@ import { Repository } from '../src/repository.js';
 import { Reports, previousReportPeriod } from '../src/reports.js';
 import { synthetic } from '../src/synthetic.js';
 import {
+  accountLine,
   initializeTelegram,
   TelegramClarifications,
   telegramTransport,
@@ -601,6 +602,198 @@ test('an answer that reaches nothing records why, naming the other member when t
     );
     assert.equal(await bot.receive(update(14)), 'stale');
     assert.match(String((await outcomeOf(14))!.detail), /revision 0 to 1/);
+  } finally {
+    await db.close();
+  }
+});
+
+test('a household message that reaches no question is recorded, and one aimed at the bot is answered', async () => {
+  const db = memoryDatabase();
+  const reactions: Array<{ messageId: number; emoji: string | null }> = [];
+  const replies: Array<{ to: number; text: string }> = [];
+  try {
+    await migrate(db);
+    await db.transaction(initializeTelegram);
+    const repo = new Repository(db);
+    await repo.importBatch(synthetic);
+    const transaction = (await repo.list('rodion'))[0]!;
+    const bot = new TelegramClarifications(
+      db,
+      { ...settings, publicOrigin: 'https://finances.example' },
+      {
+        async send() {
+          return { messageId: 42 };
+        },
+        async react(_chat, messageId, emoji) {
+          reactions.push({ messageId, emoji });
+        },
+        async reply(_chat, to, text) {
+          replies.push({ to, text });
+          return { messageId: 500 + replies.length };
+        },
+      },
+    );
+    await bot.queue(transaction.id, 0, 'What was this?', 'rodion');
+    assert.equal(await bot.dispatchOne(), 'sent');
+    const message = (
+      id: number,
+      over: Record<string, unknown>,
+      reply?: Record<string, unknown>,
+    ) => ({
+      update_id: id,
+      message: {
+        message_id: id,
+        chat: { id: -123 },
+        from: { id: 102, is_bot: false },
+        text: 'It was the intercom',
+        ...(reply ? { reply_to_message: reply } : {}),
+        ...over,
+      },
+    });
+    const recorded = async (id: number) =>
+      (
+        await db.query(
+          'SELECT outcome, detail FROM telegram_updates WHERE update_id=$1',
+          [id],
+        )
+      ).rows[0];
+    const notes = async () =>
+      (
+        await db.query(
+          'SELECT message_id, text, state FROM telegram_notes ORDER BY created_at',
+        )
+      ).rows;
+
+    // A plain message in the chat is theirs, not ours: recorded, never answered.
+    assert.deepEqual(await bot.receiveDetailed(message(1, {})), {
+      outcome: 'ignored',
+      detail: 'the message is not a reply to a question',
+    });
+    assert.equal((await recorded(1))!.outcome, 'ignored');
+    assert.equal((await notes()).length, 0);
+
+    // A reply to the other member is their conversation too.
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(2, {}, { message_id: 7, from: { id: 101, is_bot: false } }),
+        )
+      ).outcome,
+      'ignored',
+    );
+    assert.equal((await notes()).length, 0);
+
+    // A reply to something the bot said that is not an open question is
+    // answered with why, under the member's own message.
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(3, {}, { message_id: 7, from: { id: 999, is_bot: true } }),
+        )
+      ).outcome,
+      'ignored',
+    );
+    assert.equal((await notes()).length, 1);
+    assert.equal(Number((await notes())[0]!.message_id), 3);
+    assert.equal(await bot.dispatchNoteOne(), 'sent');
+    assert.deepEqual(reactions, [{ messageId: 3, emoji: '👀' }]);
+    assert.equal(replies[0]!.to, 3);
+    assert.match(replies[0]!.text, /could not link this to an open question/);
+    assert.equal(await bot.dispatchNoteOne(), 'idle');
+    assert.equal((await notes())[0]!.state, 'sent');
+
+    // A reply to a report, or to one of these notes, is not an answer that
+    // reached nothing: it is recorded and left alone.
+    await db.query(
+      `INSERT INTO report_delivery(id,report_id,actor,chat_id,text,state,message_id)
+       SELECT '00000000-0000-4000-8000-000000000009',id,'rodion','-123','Report','sent',900
+       FROM report_snapshots LIMIT 1`,
+    );
+    if ((await db.query('SELECT 1 FROM report_delivery')).rows.length) {
+      assert.equal(
+        (
+          await bot.receiveDetailed(
+            message(
+              30,
+              {},
+              { message_id: 900, from: { id: 999, is_bot: true } },
+            ),
+          )
+        ).detail,
+        'the message replied to is a report',
+      );
+    }
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(31, {}, { message_id: 501, from: { id: 999, is_bot: true } }),
+        )
+      ).detail,
+      'the message replied to is a note',
+    );
+    assert.equal((await notes()).length, 1);
+    // Monobank's own label is not doubled.
+    assert.equal(accountLine('monobank', 'Monobank black'), 'Monobank black');
+    assert.equal(accountLine('monobank', 'black'), 'black · Monobank');
+    assert.equal(accountLine('enablebanking', 'Wise EUR'), 'Wise EUR');
+
+    // A real answer to the real question still lands, with nothing extra said.
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(4, {}, { message_id: 42, from: { id: 999, is_bot: true } }),
+        )
+      ).outcome,
+      'accepted',
+    );
+    assert.equal((await notes()).length, 1);
+
+    // One that arrives after the payment moved on says so, with a way back.
+    await repo.classify(
+      transaction.id,
+      0,
+      { kind: 'unresolved', category: null, reason: 'Owner reviewed' },
+      'rodion',
+    );
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(5, {}, { message_id: 42, from: { id: 999, is_bot: true } }),
+        )
+      ).outcome,
+      'stale',
+    );
+    assert.equal(await bot.dispatchNoteOne(), 'sent');
+    assert.equal(replies[1]!.to, 5);
+    assert.match(replies[1]!.text, /changed since I asked/);
+    assert.match(
+      replies[1]!.text,
+      new RegExp(`https://finances.example/review\\?id=${transaction.id}`),
+    );
+
+    // A note the chat did not take is kept for review, never repeated.
+    assert.equal(
+      (
+        await bot.receiveDetailed(
+          message(6, {}, { message_id: 8, from: { id: 999, is_bot: true } }),
+        )
+      ).outcome,
+      'ignored',
+    );
+    const failing = new TelegramClarifications(db, settings, {
+      async send() {
+        return { messageId: 42 };
+      },
+      async react() {
+        throw new TelegramError('uncertain');
+      },
+      async reply() {
+        throw new TelegramError('uncertain');
+      },
+    });
+    assert.equal(await failing.dispatchNoteOne(), 'uncertain');
+    assert.equal(await failing.dispatchNoteOne(), 'idle');
+    assert.equal((await notes())[2]!.state, 'uncertain');
   } finally {
     await db.close();
   }

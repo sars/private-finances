@@ -15,6 +15,7 @@ import {
   Receipt,
   Settings,
   Tags,
+  Gem,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ export const screenGroups: ScreenGroup[] = [
       { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
       { href: '/receipts', label: 'Receipts', icon: Receipt },
       { href: '/cash', label: 'Cash', icon: Banknote },
+      { href: '/assets', label: 'Assets', icon: Gem },
     ],
   },
   {
