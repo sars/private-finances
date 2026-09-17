@@ -9,6 +9,29 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**ed4d96d5660b548dbd30a1f939a9a28703dcfb69**, live since September 17, 2026 at
+schema version 49, deployed with `deploy/release.sh`. It fixes the LHV approval
+the owner could not start: the form pre-filled `LV` for every bank, the
+provider lists LHV only under `EE`, and the page said only "try again". Each
+bank now carries its country, the form fills it in when the bank is chosen, and
+a refusal names the bank and country it was tried with. It also stops a new
+approval attempt from overwriting a live one: the attempt's requested bound has
+its own column, the row stays `authorized` with its real expiry until the
+callback succeeds, and a refused or failed attempt restores the previous state.
+Migration 49 was rehearsed on a restored copy of the real database (schema 49
+in 28 milliseconds, 4,140 transactions, 140 active refund links, no expense
+without a category, nothing filed on a heading) and put Rodion's Wise approval
+row — reset to `pending` by an abandoned attempt earlier that day — back to the
+validity the provider reports. After the switch both services were active and
+all five approval rows read as they should.
+
+LHV is still waiting on the owner: choose LHV on Bank connections (the country
+now fills in as `EE`) and approve at the bank. The `enablebanking-rodion-lhv`
+timer keeps ending `consent_pending` until then.
+
+The release before it, **a7ff4ba08008f2afc3dcc1f7c150d119312d3582**, is described
+below together with the earlier releases of the day.
+
 **a7ff4ba08008f2afc3dcc1f7c150d119312d3582**, live since September 17, 2026 at
 schema version 48, deployed with `deploy/release.sh` as the fourteenth release
 that day. It carries one fix (PR #43): the "Save explanation & suggest" button
