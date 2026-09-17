@@ -713,6 +713,18 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (45)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=46'))
+        .rows.length
+    ) {
+      // Version 41 turned "Swedbank XXX · CURRENT" into "Swedbank current
+      // account", which reads like a description rather than a name. The
+      // household has one Swedbank account and calls it Swedbank.
+      await tx.query(
+        "UPDATE own_accounts SET label='Swedbank', revision=revision+1 WHERE label='Swedbank current account'",
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (46)');
+    }
   });
 }
 
