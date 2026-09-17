@@ -422,53 +422,55 @@ export default function Analytics() {
           </Button>
         }
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <PeriodPicker
-          value={period}
-          onChange={(next) => patch({ from: next.from, to: next.to })}
-        />
-        <FilterBar className="flex-1 border-0 bg-transparent p-0">
-          <Field label="Whose" htmlFor="analytics-owner">
-            <Choice
-              id="analytics-owner"
-              className="w-full sm:w-36"
-              value={owner}
-              onChange={setOwner}
-              options={[
-                { value: 'all', label: 'Both of us' },
-                { value: 'rodion', label: owners.rodion.name },
-                { value: 'katya', label: owners.katya.name },
-              ]}
-            />
-          </Field>
-          <Field label="By" htmlFor="analytics-bucket">
-            <Choice
-              id="analytics-bucket"
-              className="w-full sm:w-32"
-              value={bucketChoice}
-              onChange={setBucketChoice}
-              options={[
-                { value: 'auto', label: `Auto · ${noun}s` },
-                { value: 'day', label: 'Days' },
-                { value: 'week', label: 'Weeks' },
-                { value: 'month', label: 'Months' },
-              ]}
-            />
-          </Field>
-          <Field label="Investments & business" htmlFor="analytics-others">
-            <Choice
-              id="analytics-others"
-              className="w-full sm:w-40"
-              value={others}
-              onChange={setOthers}
-              options={[
-                { value: 'hidden', label: 'Hidden' },
-                { value: 'included', label: 'Included' },
-              ]}
-            />
-          </Field>
-        </FilterBar>
-      </div>
+      <FilterBar className="border-0 bg-transparent p-0">
+        <Field label="Period" className="basis-full sm:basis-auto">
+          <PeriodPicker
+            size="default"
+            className="max-w-full"
+            value={period}
+            onChange={(next) => patch({ from: next.from, to: next.to })}
+          />
+        </Field>
+        <Field label="Whose" htmlFor="analytics-owner">
+          <Choice
+            id="analytics-owner"
+            className="w-full sm:w-36"
+            value={owner}
+            onChange={setOwner}
+            options={[
+              { value: 'all', label: 'Both of us' },
+              { value: 'rodion', label: owners.rodion.name },
+              { value: 'katya', label: owners.katya.name },
+            ]}
+          />
+        </Field>
+        <Field label="By" htmlFor="analytics-bucket">
+          <Choice
+            id="analytics-bucket"
+            className="w-full sm:w-32"
+            value={bucketChoice}
+            onChange={setBucketChoice}
+            options={[
+              { value: 'auto', label: `Auto · ${noun}s` },
+              { value: 'day', label: 'Days' },
+              { value: 'week', label: 'Weeks' },
+              { value: 'month', label: 'Months' },
+            ]}
+          />
+        </Field>
+        <Field label="Investments & business" htmlFor="analytics-others">
+          <Choice
+            id="analytics-others"
+            className="w-full sm:w-40"
+            value={others}
+            onChange={setOthers}
+            options={[
+              { value: 'hidden', label: 'Hidden' },
+              { value: 'included', label: 'Included' },
+            ]}
+          />
+        </Field>
+      </FilterBar>
       {current.isPending ? (
         <div role="status" aria-label="Loading analytics" className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-4">

@@ -41,7 +41,7 @@ other than accepted, duplicates included, so a lost answer shows up in
 The person is told as well. A reply aimed at one of the bot's own messages that
 reaches no open question, or whose payment has moved on, gets a 👀 on it and an
 answer under it saying so — with a link to the payment when there is one to
-link — through the `telegram_notes` queue (schema 51), sent by the worker in
+link — through the `telegram_notes` queue (schema 52), sent by the worker in
 its next pass. A reply to a refund question addressed to the other member, or
 to one already closed, is told that instead. A plain message in the chat, a
 reply to the other member, a reply to a report or to one of these notes is

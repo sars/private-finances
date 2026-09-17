@@ -21,6 +21,7 @@ import {
 } from './refund-automation.js';
 import { initializeRefundQuestions } from './refund-questions.js';
 import { initializeFxRates } from './fx-rates.js';
+import { initializeHoldings } from './holdings.js';
 import { initializeSpendingPatterns } from './spending-pattern.js';
 import { initializeTransactionTriage } from './transaction-triage.js';
 import { initializeLlmBudget } from './llm-budget.js';
@@ -802,6 +803,16 @@ async function applyMigrations(db: Database): Promise<void> {
       !(await tx.query('SELECT version FROM schema_versions WHERE version=51'))
         .rows.length
     ) {
+      // What the household owns, snapshot by snapshot (PF-020): holdings,
+      // their dated quantities and the prices that value them. Three new
+      // tables, nothing existing touched; see docs/assets.md.
+      await initializeHoldings(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=52'))
+        .rows.length
+    ) {
       // A loose note to a household member whose answer reached nothing: the
       // outbox holds a question about a payment and could not carry one, so
       // until now a lost answer was recorded and logged but never said in the
@@ -813,7 +824,7 @@ async function applyMigrations(db: Database): Promise<void> {
         lease_until timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
         reply_message_id bigint
       )`);
-      await tx.query('INSERT INTO schema_versions(version) VALUES (51)');
+      await tx.query('INSERT INTO schema_versions(version) VALUES (52)');
     }
   });
 }

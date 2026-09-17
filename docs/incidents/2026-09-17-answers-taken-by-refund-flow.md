@@ -38,7 +38,7 @@ message a household member sends the chat now leaves an outcome on its row,
 including a plain message that is not a reply. A reply aimed at one of the
 bot's own messages that reaches no open question, or whose payment has moved
 on, is answered under that message with why, through a new `telegram_notes`
-queue (schema 51), so a lost answer is never silent again. The three lost
+queue (schema 52), so a lost answer is never silent again. The three lost
 answers themselves cannot be recovered: Telegram does not serve consumed
 updates, and only their numbers were kept. The three questions are still open
 in the chat and can be answered again once the release is live; the owner

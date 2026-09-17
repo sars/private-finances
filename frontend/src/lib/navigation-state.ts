@@ -13,6 +13,7 @@ export const appPaths = [
   '/connections',
   '/imports',
   '/settings',
+  '/assets',
 ];
 export function isAppPath(path: string) {
   return (
