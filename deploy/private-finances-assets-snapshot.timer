@@ -2,9 +2,10 @@
 Description=Private Finances monthly assets snapshot timer
 
 [Timer]
-# The last Thursday of the month is the Thursday that falls on the 25th or
-# later; 10:05 where the household lives. A missed run fires at the next boot.
-OnCalendar=Thu *-*-25..31 10:05:00 Europe/Riga
+# Every Thursday at 10:05 where the household lives; the job itself runs only
+# on the month's last Thursday (--when=last-thursday), because a calendar
+# expression cannot name "the last one" — 25..31 misses a 30-day month's.
+OnCalendar=Thu *-*-* 10:05:00 Europe/Riga
 RandomizedDelaySec=2min
 Persistent=true
 Unit=private-finances-assets-snapshot.service

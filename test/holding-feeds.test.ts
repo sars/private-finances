@@ -146,8 +146,10 @@ test('exchange assets are valued through dollar markets, then BTC markets, and t
     { symbol: 'ETHUSDT', price: '3000.5' },
     { symbol: 'RAREBTC', price: '0.0001' },
     { symbol: 'BNBUSDC', price: '600' },
+    { symbol: 'DEADUSDT', price: '0.00000000' },
     { symbol: 'JUNK', price: 'n/a' },
   ]);
+  assert.equal(prices.has('DEAD'), false);
   assert.equal(prices.get('BTC'), '90000');
   assert.equal(prices.get('USDT'), '1');
   assert.equal(prices.get('RARE'), '9');

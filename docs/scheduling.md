@@ -162,8 +162,9 @@ only a known successful cooldown with no conservative marker or failure latch.
 
 ## Monthly assets snapshot
 
-`private-finances-assets-snapshot.timer` fires on the last Thursday of each
-month at 10:05 Europe/Riga and runs `holdings-snapshot-cli` once, which fills
+`private-finances-assets-snapshot.timer` fires every Thursday at 10:05
+Europe/Riga; `holdings-snapshot-cli --when=last-thursday` does its work only on
+the month's last Thursday and otherwise logs a skip. It fills
 every fed holding from stored bank balances, the broker statement, the exchange
 and the wallet ledgers. It makes a handful of requests to fixed hosts once a
 month and needs no bank access of its own; see [assets](assets.md).

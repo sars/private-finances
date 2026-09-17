@@ -10,7 +10,7 @@ Group=private-finances
 WorkingDirectory=/opt/private-finances/current
 EnvironmentFile=/etc/private-finances/app.env
 EnvironmentFile=/etc/private-finances/sync.env
-ExecStart=/usr/bin/node dist/src/holdings-snapshot-cli.js
+ExecStart=/usr/bin/node dist/src/holdings-snapshot-cli.js --when=last-thursday
 TimeoutStartSec=15min
 Restart=no
 UMask=0077

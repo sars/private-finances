@@ -1,6 +1,6 @@
 /**
  * The monthly snapshot: `node dist/src/holdings-snapshot-cli.js [YYYY-MM-DD]
- * [--check]`. Fills every holding that names a feed for the day (today in
+ * [--check] [--when=last-thursday]`. Fills every holding that names a feed for the day (today in
  * Riga when no date is given) — bank balances already stored, the broker
  * statement, the exchange total, the wallet addresses — and records the
  * prices learned. `--check` only tries each configured credential and
@@ -23,7 +23,12 @@ import {
   FeedError,
   type Fetcher,
 } from './holding-feeds.js';
-import { rigaDate, runFeeds, type FeedCredentials } from './holding-fill.js';
+import {
+  isLastThursday,
+  rigaDate,
+  runFeeds,
+  type FeedCredentials,
+} from './holding-fill.js';
 
 const log = (value: unknown) =>
   process.stdout.write(JSON.stringify(value) + '\n');
@@ -57,14 +62,23 @@ export async function loadFeedCredentials(
 export function parseArguments(args: string[]): {
   asOf: string;
   check: boolean;
+  /** `--when=last-thursday`: do nothing unless the day is the month's last Thursday. */
+  lastThursdayOnly: boolean;
 } {
   const check = args.includes('--check');
-  const rest = args.filter((a) => a !== '--check');
-  if (rest.length > 1) throw new Error('holdings_snapshot_usage');
+  const lastThursdayOnly = args.includes('--when=last-thursday');
+  const rest = args.filter(
+    (a) => a !== '--check' && a !== '--when=last-thursday',
+  );
+  if (
+    rest.length > 1 ||
+    args.some((a) => a.startsWith('--when=') && a !== '--when=last-thursday')
+  )
+    throw new Error('holdings_snapshot_usage');
   const asOf = rest[0] ?? rigaDate();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || asOf > rigaDate())
     throw new Error('holdings_snapshot_invalid_date');
-  return { asOf, check };
+  return { asOf, check, lastThursdayOnly };
 }
 
 const fetcher: Fetcher = (url, init) =>
@@ -119,7 +133,21 @@ async function check(credentials: FeedCredentials) {
 }
 
 async function main() {
-  const { asOf, check: checkOnly } = parseArguments(process.argv.slice(2));
+  const {
+    asOf,
+    check: checkOnly,
+    lastThursdayOnly,
+  } = parseArguments(process.argv.slice(2));
+  // The timer fires every Thursday, because systemd cannot say "the last
+  // one"; the run itself knows which Thursday it is.
+  if (lastThursdayOnly && !isLastThursday(asOf)) {
+    log({
+      event: 'holdings_snapshot_skipped',
+      asOf,
+      reason: 'not_last_thursday',
+    });
+    return;
+  }
   const credentials = await loadFeedCredentials(
     process.env.CREDENTIALS_DIRECTORY,
   );
