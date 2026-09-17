@@ -6,7 +6,6 @@ import {
   FolderTree,
   History,
   Hourglass,
-  Info,
   ListChecks,
   MessageCircle,
   Repeat2,
@@ -23,8 +22,13 @@ import {
   type Transaction,
 } from '@/lib/transactions';
 import { owners } from '@/lib/account-visuals';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -152,10 +156,23 @@ export function PaymentHeader({
               {owners[t.owner].name}’s account
             </span>
             {t.status === 'pending' && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                <Hourglass aria-hidden="true" className="size-3" />
-                Bank processing
-              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="inline-flex cursor-help items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground" />
+                    }
+                  >
+                    <Hourglass aria-hidden="true" className="size-3" />
+                    Bank processing
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-64">
+                    The bank may still change the amount when it settles. The
+                    money has already left the account, so it counts as
+                    spending; you can decide it now.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
         </div>
@@ -195,19 +212,6 @@ export function PaymentHeader({
         )}
       </div>
     </header>
-  );
-}
-
-function PendingNote() {
-  return (
-    <Alert>
-      <Info />
-      <AlertDescription>
-        The bank is still processing this payment and may change its amount when
-        it settles. The money has already left the account, so it counts as
-        spending; you can explain and categorise it now.
-      </AlertDescription>
-    </Alert>
   );
 }
 
@@ -310,7 +314,6 @@ export function TransactionDetail({
         displayCurrency={displayCurrency}
         eyebrow="Payment review"
       />
-      {t.status === 'pending' && <PendingNote />}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
         <div className="min-w-0 rounded-lg border p-4 sm:p-5">
           <DecisionCard
@@ -431,7 +434,6 @@ export function PaymentView({
         <ListChecks className="size-4" />
         Review this payment
       </Button>
-      {t.status === 'pending' && <PendingNote />}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.95fr)]">
         <div className="min-w-0 space-y-5">
           {replies.length > 0 && (

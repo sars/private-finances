@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/finance';
+import { DecisionCoverage } from '@/components/decision-coverage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -155,6 +156,7 @@ export default function Operations() {
         }
       />
       <LlmBudget refresh={refresh} />
+      <DecisionCoverage />
       {loading ? (
         <div
           role="status"

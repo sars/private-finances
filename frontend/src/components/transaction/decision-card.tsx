@@ -33,6 +33,7 @@ import {
 import { Choice } from '@/components/finance';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ReplyCard } from './pieces';
+import { toast } from 'sonner';
 
 export type CategoryNode = {
   id: string;
@@ -235,7 +236,9 @@ export function DecisionCard({
         throw new Error(
           response.status === 409
             ? 'This payment changed. Refresh it before trying again.'
-            : 'Could not confirm the save. Retry the same explanation to check safely.',
+            : response.status === 401
+              ? 'You are signed out. Reload the page and sign in, then save again.'
+              : `Could not confirm the save (${response.status}). Retry the same explanation to check safely.`,
         );
       const result = (await response.json()) as {
         explanation: Reply;
@@ -260,11 +263,13 @@ export function DecisionCard({
       }
       await invalidateFinancialData();
     } catch (cause) {
-      setExplanationError(
+      const message =
         cause instanceof Error
           ? cause.message
-          : 'Could not save this explanation.',
-      );
+          : 'Could not save this explanation.';
+      setExplanationError(message);
+      // The line under the form is easy to miss on a phone; say it once out loud.
+      toast.error(message);
     } finally {
       setExplaining(false);
     }
