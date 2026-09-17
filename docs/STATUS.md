@@ -9,28 +9,44 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**ed4d96d5660b548dbd30a1f939a9a28703dcfb69**, live since September 17, 2026 at
-schema version 49, deployed with `deploy/release.sh`. It fixes the LHV approval
-the owner could not start: the form pre-filled `LV` for every bank, the
-provider lists LHV only under `EE`, and the page said only "try again". Each
-bank now carries its country, the form fills it in when the bank is chosen, and
-a refusal names the bank and country it was tried with. It also stops a new
-approval attempt from overwriting a live one: the attempt's requested bound has
-its own column, the row stays `authorized` with its real expiry until the
-callback succeeds, and a refused or failed attempt restores the previous state.
-Migration 49 was rehearsed on a restored copy of the real database (schema 49
-in 28 milliseconds, 4,140 transactions, 140 active refund links, no expense
-without a category, nothing filed on a heading) and put Rodion's Wise approval
-row — reset to `pending` by an abandoned attempt earlier that day — back to the
-validity the provider reports. After the switch both services were active and
-all five approval rows read as they should.
+**03539611ad6ef8663f575fd5d095c08df0b7eb97**, live since September 17, 2026 at
+schema version 50, deployed with `deploy/release.sh`. It adds the Bank imports
+page (`/imports`): one card per connection with its verdict, last complete run,
+runs in 24 hours, payments changed over 7 and 30 days, the accounts it reaches
+with what they hold, the approval and its remaining days, and the error advice,
+then the forty most recent runs. System health links to it in place of the
+approvals form. Migration 50 renamed the LHV account from the generated
+"LHV <holder's name>" to `LHV` and marked it personal, as the owner said it is
+the household's personal-expenses bank; a multi-currency account is now named
+after the bank alone. Rehearsed on a restored copy first; both services active
+after the switch.
+
+State of the imports at this release, checked instance by instance:
+
+- LHV: approved with country `EE`, first import at 18:22 Riga found the account
+  and two payments; the bank serves history between two and six months only
+  (a window from March 2026 is refused with 422) and enforces the PSD2
+  allowance on unattended calls, so the `half-hourly` marker was removed and
+  LHV runs every six hours. A one-shot backfill of 19 June to 17 August 2026 is
+  scheduled on the server as the transient timer `pf-backfill-lhv-once` for
+  September 18 at 19:45 Riga, after the regular import's cooldown; it stops
+  the LHV timer, runs `backfill-cli`, and starts the timer again.
+- Katya's Monobank: had been latched `review_required` since September 15 after
+  one failed run whose cause the scheduler does not keep. Her token still
+  answers, and the import ran cleanly against a restored copy (7 accounts, 28
+  changes), so the latch was removed; the timer's next run succeeded at 18:29
+  Riga and the two-day gap is inside the rolling window.
+- Swedbank: on the six-hour cadence since a rate limit on September 16 set its
+  sticky conservative marker; last success 13:34 Riga today.
+- Wise (both), Revolut, Rodion's Monobank: succeeding every half hour.
 
 LHV is still waiting on the owner: choose LHV on Bank connections (the country
 now fills in as `EE`) and approve at the bank. The `enablebanking-rodion-lhv`
 timer keeps ending `consent_pending` until then.
 
-The release before it, **a7ff4ba08008f2afc3dcc1f7c150d119312d3582**, is described
-below together with the earlier releases of the day.
+The releases before it, **ed4d96d5660b548dbd30a1f939a9a28703dcfb69** and
+**a7ff4ba08008f2afc3dcc1f7c150d119312d3582**, are described below together with
+the earlier releases of the day.
 
 **a7ff4ba08008f2afc3dcc1f7c150d119312d3582**, live since September 17, 2026 at
 schema version 48, deployed with `deploy/release.sh` as the fourteenth release
