@@ -293,9 +293,9 @@ export default function Operations() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  render={<a href="/connections" />}
+                  render={<a href="/imports" />}
                 >
-                  Manage approvals
+                  All imports and statistics
                   <ArrowUpRight className="ml-2 size-3.5" />
                 </Button>
               </div>
@@ -372,8 +372,8 @@ export default function Operations() {
                     No bank import has run yet
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Bank approvals and import setup can be checked on the
-                    connections page.
+                    Every connection and its history is on the Bank imports
+                    page; approvals are on Bank connections.
                   </p>
                 </div>
               )}

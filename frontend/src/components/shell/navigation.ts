@@ -6,6 +6,7 @@ import {
   Banknote,
   ChartNoAxesCombined,
   Coins,
+  DatabaseZap,
   FileText,
   Landmark,
   LayoutDashboard,
@@ -56,6 +57,7 @@ export const screenGroups: ScreenGroup[] = [
     label: 'System',
     items: [
       { href: '/reports', label: 'Reports', icon: FileText },
+      { href: '/imports', label: 'Bank imports', icon: DatabaseZap },
       { href: '/ops', label: 'System health', icon: Activity },
     ],
   },

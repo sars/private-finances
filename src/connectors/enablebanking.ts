@@ -89,12 +89,13 @@ export function accountLabel(
   const provider = [details.details, details.product]
     .filter((value) => typeof value === 'string' && value.trim())
     .map((value) => text(value))[0];
-  if (isMultiCurrency(currency)) {
-    const named = provider?.trim();
-    return named && named.toLowerCase() !== bankLabel(bank).toLowerCase()
-      ? `${bankLabel(bank)} ${named.toLowerCase() === 'current' ? 'current account' : named}`
-      : `${bankLabel(bank)} multi-currency`;
-  }
+  // An account holding several currencies is named after the bank alone.
+  // The household's Swedbank account arrived as "Swedbank XXX · CURRENT" and
+  // was renamed twice before it read "Swedbank"; the LHV account arrived
+  // with the holder's own name as the provider's only descriptor, and a
+  // person's name is not an account name. What the provider calls such an
+  // account is kept in `source_details` of its payments, not in its label.
+  if (isMultiCurrency(currency)) return bankLabel(bank);
   const base = `${bankLabel(bank)} ${currency}`;
   if (!provider) return base;
   const noise = new Set([

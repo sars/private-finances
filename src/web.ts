@@ -41,6 +41,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { parseFilters, filterTransactions } from './filters.js';
 import { pageTransactions, parsePageQuery } from './transaction-page.js';
 import { Repository, Conflict } from './repository.js';
+import { importStatus } from './import-status.js';
 import { expenseSummary, type Owner } from './domain.js';
 import {
   BANKS,
@@ -93,6 +94,7 @@ const frontendRoutes = new Set([
   '/analytics',
   '/receipts',
   '/connections',
+  '/imports',
   '/review',
   '/transactions',
   '/categories',
@@ -783,6 +785,10 @@ export function web(
         json(200, await llmBudgetSummary(repo.db));
         return;
       }
+      if (req.method === 'GET' && route === '/api/imports') {
+        json(200, await importStatus(repo.db));
+        return;
+      }
       if (req.method === 'GET' && route === '/api/ops') {
         json(200, {
           ...(await repo.health()),
@@ -1435,6 +1441,7 @@ export function web(
           ? 409
           : route === '/health/ready' ||
               route === '/api/ops' ||
+              route === '/api/imports' ||
               route === '/api/llm-budget' ||
               route === '/ops'
             ? 503

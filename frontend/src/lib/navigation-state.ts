@@ -11,6 +11,7 @@ export const appPaths = [
   '/accounts',
   '/reports',
   '/connections',
+  '/imports',
   '/settings',
 ];
 export function isAppPath(path: string) {

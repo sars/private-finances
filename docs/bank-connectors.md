@@ -39,3 +39,16 @@ spending, but can already be categorized and linked to receipts; see
 
 References: https://enablebanking.com/docs/api/reference/ and
 https://api.monobank.ua/docs/index.html (reviewed 2026-09-11).
+
+## Seeing what the imports did
+
+The Bank imports screen (`/imports`, `frontend/src/Imports.tsx`) reads
+`/api/imports`, built by `src/import-status.ts` from the importer's own record:
+`bank_sync_runs` for each connection's state and last complete run,
+`bank_import_windows` for how many payments each run changed and when, the
+accounts each connection reaches with what they hold, and `bank_consents` for
+how long the provider's approval lasts. It records nothing itself. A connection
+whose scheduler has stopped shows as a last run growing old; the scheduler's
+latch and cooldown files on the server are deliberately not read by the web
+process. System health links here in place of the approvals form, which stays
+on Bank connections.
