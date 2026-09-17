@@ -127,6 +127,31 @@ CHECK
   sudo -n -u postgres dropdb private_finances_migration_check
   rm -f /tmp/pf-rehearsal.dump /tmp/pf-migrate-check.mjs"
 
+# The build and the rehearsal take minutes, long enough for another agent to
+# release in the meantime. On September 17, 2026 exactly that happened: the
+# ancestry check above passed against one release, another session switched to
+# a newer one during the rehearsal, and the switch below then quietly withdrew
+# it. So the running release is read again here, and the same rule applies.
+step 'confirming the running release has not moved'
+deployed_now=$(ssh -o BatchMode=yes "$host" \
+  "sudo -n grep -o 'RELEASE_SHA=[0-9a-f]*' /etc/private-finances/app.env | cut -d= -f2")
+if [ "$deployed_now" != "$deployed" ]; then
+  echo "the running release moved from $deployed to $deployed_now during the build"
+  if [ "$deployed_now" = "$sha" ]; then
+    echo "$sha is already the running release"
+    exit 0
+  fi
+  if [ -z "$allow_rollback" ]; then
+    git fetch -q origin
+    git cat-file -e "$deployed_now^{commit}" 2>/dev/null &&
+      git merge-base --is-ancestor "$deployed_now" "$sha" || {
+      echo "refusing: $sha does not contain the running release $deployed_now; release a commit that does" >&2
+      exit 65
+    }
+  fi
+  deployed=$deployed_now
+fi
+
 # Imports write while they run and the worker holds leases; both pause for the
 # switch so no process is left speaking the previous schema. The enabled set is
 # read from systemd's own wants directory, so a re-run after a stopped attempt

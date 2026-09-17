@@ -9,17 +9,35 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**46cdb02aef90831341cce4a2ea1c93a97568f6ae**, live since September 17, 2026 at
-schema version 48, deployed with `deploy/release.sh` as the eleventh release
-that day. It carries the Analytics rebuild (PR #40) and, from another session,
-LHV as a bank reachable through the provider (PR #39, migration 48). The full
-suite passed on the server first; the migration was rehearsed on a restored copy
-of the real database, reaching schema 48 in 39 milliseconds with 4,140
-transactions, 140 active refund links, no expense without a category and
-nothing filed on a heading. After the switch both services were active and the
-log shows no error. See the entry below.
+**7359ae93ac9c11766754d8e11397db38a43ef604**, live since September 17, 2026 at
+schema version 48, deployed with `deploy/release.sh` as the thirteenth release
+that day. It is `origin/main` after the Analytics rebuild (PR #40), LHV as a
+bank reachable through the provider (PR #39, migration 48) and the status entry
+for the eleventh release (PR #41). The migration was rehearsed on a restored
+copy of the real database, reaching schema 48 with 4,140 transactions, 140
+active refund links, no expense without a category and nothing filed on a
+heading; after the switch both services were active and the log shows no error.
 
-The release before it, **b947646947271a9fe9ea7aca51264b43640397b7**, went live
+It was released to repair the twelfth release, **070aa5f3a64b7fdb81a15f40c664f3102b0b7703**
+(the LHV merge alone), which for about ten minutes had withdrawn the Analytics
+rebuild: the release script checked the running release only at its start,
+another session switched to 46cdb02 during the twelve-minute build and
+rehearsal, and the switch then went ahead against a release it had never
+compared with. The script now reads the running release again immediately
+before pausing imports and refuses under the same rule. Schema did not move
+during the detour, both releases being at 48.
+
+LHV is waiting on the owner. The provider registers the bank as "LHV Pank" for
+Estonia (personal accounts, redirect approval, up to 180 days of consent,
+marked beta on the provider's side); the application shows it as LHV and will
+name its accounts "LHV EUR". The `enablebanking-rodion-lhv` timer is enabled
+with the half-hourly drop-in and both markers, and every run so far ends as
+`consent_pending` — no latch, no cooldown — until the owner approves access
+from Bank connections with country `EE`, after which the first import follows
+within thirty minutes. The owner was told in Telegram.
+
+Before those, **46cdb02aef90831341cce4a2ea1c93a97568f6ae** was the eleventh release
+that day, and **b947646947271a9fe9ea7aca51264b43640397b7** went live
 on September 17, 2026 at schema version 47 as the tenth release that day. Its
 two migrations (the Swedbank account is called `Swedbank`; an
 explanation records who answered) were rehearsed first on a restored copy of the
@@ -194,8 +212,9 @@ rather than growing.
 ## Live capabilities
 
 Private Tailscale HTTPS deployment with per-owner authentication. Bank imports run
-on enabled systemd timers for five instances: Enable Banking `rodion-wise`,
-`rodion-revolut` and `katya-wise`, plus Monobank `rodion` and `katya`. Daily
+on enabled systemd timers for seven instances: Enable Banking `rodion-wise`,
+`rodion-revolut`, `rodion-swedbank`, `katya-wise` and `rodion-lhv` (waiting on
+the owner's approval), plus Monobank `rodion` and `katya`. Daily
 commercial FX ingestion, household report delivery, Telegram clarification
 questions with owner replies and confirmation, bounded AI categorization, and
 receipt photos through the paired family Telegram chat are all working. Home and
