@@ -529,3 +529,55 @@ test('free text under a suggestion is recorded and answered, not dropped', async
     await s.db.close();
   }
 });
+
+test('an answer the model step cannot use is logged and answered, not left silent', async () => {
+  const s = await setup();
+  try {
+    await s.db.transaction(initializeReplyWorkflow);
+    assert.equal(
+      await s.question.receive(update(1, 'Business, for advertising')),
+      'accepted',
+    );
+    const broken = new TelegramReplyWorkflow(
+      s.db,
+      { ...settings, publicOrigin: 'https://finances.example' },
+      s.transport,
+      async () =>
+        new Classifier(
+          s.db,
+          {
+            apiKey: 'synthetic-key',
+            model: 'gpt-5.4-mini-2026-03-17',
+            maxRequestsPerDay: 5,
+            maxInputChars: 4000,
+            maxOutputTokens: 512,
+            timeoutMs: 1000,
+            categories: hierarchicalCategoryPaths(
+              await s.categories.listNodes(),
+            ),
+          },
+          async () => ({ status: 'completed', output: [] }),
+        ),
+    );
+    assert.equal(await broken.processOne(), 'failed');
+    assert.equal(
+      await new TelegramClarifications(
+        s.db,
+        settings,
+        s.transport,
+      ).dispatchNoteOne(),
+      'sent',
+    );
+    assert.equal(s.replies[0]!.to, 1);
+    assert.match(
+      s.replies[0]!.text,
+      /could not turn this answer into a decision/,
+    );
+    assert.match(
+      s.replies[0]!.text,
+      new RegExp(`https://finances.example/review\\?id=${s.row.id}`),
+    );
+  } finally {
+    await s.db.close();
+  }
+});

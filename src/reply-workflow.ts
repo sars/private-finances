@@ -128,7 +128,7 @@ export class TelegramReplyWorkflow {
       );
       const waiting = (
         await tx.query(
-          `SELECT w.*,p.input_text FROM telegram_reply_workflows w JOIN telegram_proposal_inputs p ON p.id=w.input_id
+          `SELECT w.*,p.input_text,p.message_id AS input_message_id FROM telegram_reply_workflows w JOIN telegram_proposal_inputs p ON p.id=w.input_id
         WHERE w.chat_id=$1 AND w.state='waiting' AND w.retry_after<=now() ORDER BY w.created_at,w.id LIMIT 1 FOR UPDATE OF w`,
           [this.settings.chatId],
         )
@@ -142,7 +142,7 @@ export class TelegramReplyWorkflow {
       }
       const input = (
         await tx.query(
-          `SELECT p.id AS input_id,p.input_text,p.owner,o.transaction_id,o.revision FROM telegram_proposal_inputs p
+          `SELECT p.id AS input_id,p.input_text,p.owner,p.message_id AS input_message_id,o.transaction_id,o.revision FROM telegram_proposal_inputs p
         JOIN telegram_outbox o ON o.id=p.outbox_id WHERE o.chat_id=$1 AND o.state='sent' AND NOT EXISTS(SELECT 1 FROM telegram_reply_workflows w WHERE w.input_id=p.id)
         ORDER BY p.created_at,p.id LIMIT 1`,
           [this.settings.chatId],
@@ -186,14 +186,49 @@ export class TelegramReplyWorkflow {
         retry_after=CASE WHEN $2='waiting' THEN now()+interval '1 hour' ELSE NULL END WHERE id=$1 AND state='processing' AND lease_until>=now()`,
         [item.id, state, result.status === 'proposed' ? result.id : null],
       );
+      if (state === 'failed')
+        await this.answerFailed(
+          item,
+          result.status === 'failed'
+            ? (result.reason ?? 'classifier_failed')
+            : result.status,
+        );
       return state;
-    } catch {
+    } catch (error) {
       await this.db.query(
         "UPDATE telegram_reply_workflows SET state='failed',lease_until=NULL WHERE id=$1 AND state='processing'",
         [item.id],
       );
+      await this.answerFailed(
+        item,
+        error instanceof Error ? error.message.slice(0, 80) : 'unknown',
+      );
       return 'failed';
     }
+  }
+  /**
+   * An answer the model step could not turn into a decision. Two of them on
+   * 17 September 2026 left a `failed` row and nothing else: no log line and
+   * nothing in the chat, so the person who answered saw "nothing happened".
+   * The reason is logged (a code, never the answer or the provider's text)
+   * and the person is told to decide the payment themselves.
+   */
+  private async answerFailed(item: Row, reason: string): Promise<void> {
+    process.stdout.write(
+      `${JSON.stringify({
+        event: 'telegram_reply_failed',
+        workflowId: String(item.id),
+        transactionId: String(item.transaction_id),
+        reason,
+      })}\n`,
+    );
+    if (!positiveId(item.input_message_id)) return;
+    await queueTelegramNote(
+      this.db,
+      this.settings.chatId,
+      Number(item.input_message_id),
+      `I could not turn this answer into a decision, so nothing was saved. Please decide the payment in Private Finances.${reviewLink(this.settings, String(item.transaction_id))}`,
+    );
   }
   async dispatchOne(): Promise<string> {
     const item = await this.db.transaction(async (tx) => {

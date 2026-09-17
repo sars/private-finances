@@ -55,3 +55,18 @@ What to change, owner, status: done in code. Wider lesson: a consumer that
 shares a transaction with the ones after it must not take a shared key before
 it knows the message is its own, and the worker's real receiver chain needs a
 test of its own, not only each receiver alone.
+
+## Addendum, the same evening
+
+With f97abac live the owner answered the Facebook question and again saw
+nothing. This time the answer was accepted and linked, and the failure was one
+step later: the model returned kind `non_personal` with a category for
+"business, for advertising", `validate()` in `src/classifier.ts` rejected any
+category beside a non-personal kind, and `processOne` set the workflow to
+`failed` with no log line and no message. Two identical answers, two `failed`
+rows, two measured model requests. Fixed by dropping the category for a
+non-personal kind instead of failing, asking the model for null there, logging
+`telegram_reply_failed` with the classifier's own code, and answering the
+person under their message. Tests: `test/classifier.test.ts` "a category
+beside a non-personal kind is dropped" and `test/reply-workflow.test.ts` "an
+answer the model step cannot use is logged and answered".
