@@ -265,9 +265,9 @@ export default function Receipts() {
                 {receipt.settlement_difference && (
                   <div
                     role="note"
-                    className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+                    className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
                   >
-                    <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                     <div className="min-w-0">
                       <p className="font-medium">
                         This payment settled at a different amount than the

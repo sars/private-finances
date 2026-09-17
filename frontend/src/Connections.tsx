@@ -334,7 +334,7 @@ export default function Connections() {
                               variant="outline"
                               className={
                                 expired || connection.status === 'failed'
-                                  ? 'text-amber-700 dark:text-amber-400'
+                                  ? 'text-warning'
                                   : ''
                               }
                             >
@@ -352,7 +352,7 @@ export default function Connections() {
                             {expiry(connection.expiry)}
                           </p>
                           {expired && (
-                            <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+                            <p className="mt-3 text-xs text-warning">
                               Start a new bank approval above to renew access.
                             </p>
                           )}

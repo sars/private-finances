@@ -64,10 +64,7 @@ function Reductions({
             {item.provisional ? ' · still settling' : ''}
           </p>
           {item.discrepancy && (
-            <p
-              role="status"
-              className="text-xs text-amber-700 dark:text-amber-400"
-            >
+            <p role="status" className="text-xs text-warning">
               An amount changed after this refund was linked. The link is kept;
               review both transaction histories.
             </p>

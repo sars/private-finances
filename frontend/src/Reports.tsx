@@ -251,8 +251,8 @@ export default function Reports() {
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-relaxed">
-                    <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs leading-relaxed">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                     <span>
                       {snapshot.report.incompleteness.unresolvedCount}{' '}
                       unresolved · {snapshot.report.incompleteness.pendingCount}{' '}

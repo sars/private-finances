@@ -399,10 +399,10 @@ export default function Fx() {
           <>
             <div
               role="status"
-              className={`flex items-start gap-3 rounded-lg border p-4 text-sm ${totals.missing ? 'border-amber-500/30 bg-amber-500/5' : 'bg-muted/30'}`}
+              className={`flex items-start gap-3 rounded-lg border p-4 text-sm ${totals.missing ? 'border-warning/30 bg-warning/5' : 'bg-muted/30'}`}
             >
               {totals.missing ? (
-                <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
               ) : (
                 <Coins className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               )}
@@ -532,7 +532,7 @@ export default function Fx() {
                                     : ''}
                                 </p>
                                 {month.missing > 0 && (
-                                  <p className="mt-0.5 text-amber-700 dark:text-amber-400">
+                                  <p className="mt-0.5 text-warning">
                                     {month.missing} missing rate
                                     {month.missing === 1 ? '' : 's'}
                                   </p>
@@ -552,7 +552,7 @@ export default function Fx() {
                                     )}
                             </p>
                             {month.missing > 0 && month.covered > 0 && (
-                              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                              <p className="mt-1 text-xs text-warning">
                                 Partial total
                               </p>
                             )}
@@ -628,7 +628,7 @@ export default function Fx() {
                             </p>
                             <details className="mt-2 text-xs text-muted-foreground">
                               <summary
-                                className={`w-fit cursor-pointer rounded-sm py-1 focus-visible:outline-2 focus-visible:outline-ring ${row.convertedAmountMinor === null ? 'text-amber-700 dark:text-amber-400' : ''}`}
+                                className={`w-fit cursor-pointer rounded-sm py-1 focus-visible:outline-2 focus-visible:outline-ring ${row.convertedAmountMinor === null ? 'text-warning' : ''}`}
                               >
                                 {row.method
                                   ? methods[row.method]
@@ -687,7 +687,7 @@ export default function Fx() {
                                 In {totals.currency}
                               </p>
                               <p
-                                className={`mt-1 break-words font-semibold tabular-nums ${row.convertedAmountMinor === null ? 'text-amber-700 dark:text-amber-400' : ''}`}
+                                className={`mt-1 break-words font-semibold tabular-nums ${row.convertedAmountMinor === null ? 'text-warning' : ''}`}
                               >
                                 {row.convertedAmountMinor === null
                                   ? 'Missing rate'

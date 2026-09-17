@@ -156,7 +156,7 @@ export function ReplyCard({
           {reply.input_text}
         </p>
         <p
-          className={`text-xs ${status.needsAttention ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}
+          className={`text-xs ${status.needsAttention ? 'text-warning' : 'text-muted-foreground'}`}
         >
           {status.workflow}
         </p>

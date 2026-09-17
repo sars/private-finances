@@ -18,6 +18,13 @@ FINANCE = SRC / "components" / "finance"
 ENTRY_BUDGET_GZIP = 150 * 1024
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}(?![0-9a-zA-Z])|#[0-9a-fA-F]{3}(?![0-9a-zA-Z_-])")
+# Tailwind's own palette is a colour outside the tokens as much as a hex value
+# is; warnings use `warning`, deltas `positive`/`negative`, series `chart-*`.
+PALETTE = re.compile(
+    r"\b(?:text|bg|border|ring|fill|stroke|from|to|via)-"
+    r"(?:amber|emerald|red|blue|green|yellow|gray|slate|zinc|neutral|stone|"
+    r"orange|lime|teal|cyan|sky|indigo|violet|purple|fuchsia|pink|rose)-\d+\b"
+)
 RECHARTS_IMPORT = re.compile(r"""from\s+['"]recharts""")
 
 
@@ -31,6 +38,8 @@ def source_rules() -> list[str]:
         for line_number, line in enumerate(text.splitlines(), 1):
             if HEX.search(line) and 'href="#' not in line:
                 errors.append(f"{rel}:{line_number}: raw colour; use a token from index.css")
+            if PALETTE.search(line) and (SRC / "components" / "ui") not in path.parents:
+                errors.append(f"{rel}:{line_number}: palette colour class; use a token (warning, positive, negative, chart-*)")
         if "Intl.NumberFormat" in text and path != FORMAT:
             errors.append(f"{rel}: Intl.NumberFormat belongs in lib/format.ts")
         if RECHARTS_IMPORT.search(text) and CHARTS not in path.parents:
