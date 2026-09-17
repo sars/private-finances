@@ -6,7 +6,7 @@ import { Repository } from '../src/repository.js';
 import { Categories } from '../src/categories.js';
 import { web } from '../src/web.js';
 
-const { accountIdentity, accountToneClasses } = await import(
+const { accountIdentity } = await import(
   new URL('../../frontend/src/lib/account-identity.ts', import.meta.url).href
 );
 const { bookedMoment } = await import(
@@ -92,25 +92,25 @@ test('an Enable Banking record carries its purpose, type and value date', () => 
 });
 
 test('an account is recognisable from what the owner named it, not only from the connector', () => {
+  const black = accountIdentity('monobank', 'UAH', 'Monobank black');
+  assert.equal(black.bank, 'monobank');
+  assert.equal(black.product, 'black');
   assert.equal(
-    accountIdentity('monobank', 'UAH', 'Monobank black').tone,
-    'ink',
+    accountIdentity('monobank', 'UAH', 'Monobank white').product,
+    'white',
   );
   assert.equal(
-    accountIdentity('monobank', 'UAH', 'Monobank white').tone,
-    'paper',
+    accountIdentity('enablebanking', 'USD', 'Revolut USD').bank,
+    'revolut',
   );
-  assert.equal(
-    accountIdentity('enablebanking', 'USD', 'Revolut USD').tone,
-    'violet',
-  );
-  assert.equal(accountIdentity('manual_cash', 'UAH', null).tone, 'amber');
+  assert.equal(accountIdentity('manual_cash', 'UAH', null).bank, 'cash');
   assert.equal(accountIdentity('manual_cash', 'UAH', null).name, 'Cash');
   assert.equal(accountIdentity('monobank', 'EUR', '').name, 'Monobank');
   // The owner banks with Revolut, not with the aggregator that fetched the row,
   // so the integration's name never reaches a label or a tooltip.
   const aggregated = accountIdentity('enablebanking', 'USD', '');
   assert.equal(aggregated.name, 'USD account');
+  assert.equal(aggregated.bank, null);
   assert.ok(!/enable/i.test(aggregated.name + aggregated.detail));
   const revolut = accountIdentity('enablebanking', 'USD', 'Revolut USD');
   assert.equal(revolut.name, 'Revolut USD');
@@ -121,18 +121,6 @@ test('an account is recognisable from what the owner named it, not only from the
     accountIdentity('monobank', 'EUR', 'Black card').detail,
     'Monobank · EUR',
   );
-  assert.equal(
-    accountIdentity('monobank', 'UAH', 'Monobank black').icon,
-    'card',
-  );
-  assert.equal(accountIdentity('manual_cash', 'UAH', null).icon, 'cash');
-  // Every tone a chip can carry has to have a look defined for it.
-  for (const source of ['monobank', 'enablebanking', 'manual_cash', 'other'])
-    for (const label of ['', 'Monobank black', 'Revolut USD', 'Біла картка'])
-      assert.ok(
-        accountToneClasses[accountIdentity(source, 'UAH', label).tone],
-        `${source} ${label}`,
-      );
 });
 
 test('a card payment shows its clock time; a statement line only claims a day', () => {
