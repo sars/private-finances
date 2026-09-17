@@ -288,7 +288,7 @@ export function web(
         req.method === 'GET' &&
         config.frontendDirectory &&
         (frontendRoutes.has(route) ||
-          /^\/transactions\/[0-9a-f-]{36}\/history$/.test(route) ||
+          /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(route) ||
           route.startsWith('/assets/') ||
           rootFile)
       ) {

@@ -36,6 +36,7 @@ const Receipts = lazy(() => import('./Receipts'));
 const Categories = lazy(() => import('./Categories'));
 const Review = lazy(() => import('./Review'));
 const Transactions = lazy(() => import('./Transactions'));
+const Payment = lazy(() => import('./Payment'));
 const Operations = lazy(() => import('./Operations'));
 const Fx = lazy(() => import('./Fx'));
 const Analytics = lazy(() => import('./Analytics'));
@@ -355,6 +356,11 @@ routes.push(
     getParentRoute: () => rootRoute,
     path: '/transactions/$id/history',
     component: () => <History />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/transactions/$id',
+    component: () => <Payment />,
   }),
 );
 const router = createRouter({

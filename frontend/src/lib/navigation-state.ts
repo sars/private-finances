@@ -16,7 +16,7 @@ export const appPaths = [
 export function isAppPath(path: string) {
   return (
     appPaths.includes(path) ||
-    /^\/transactions\/[0-9a-f-]{36}\/history$/.test(path)
+    /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(path)
   );
 }
 export function stringSearch(

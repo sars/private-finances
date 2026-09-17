@@ -22,6 +22,12 @@ and the same list component, the household by default. Its URL carries `from`,
 `refunds`, `tag` and the four `include*` visibility overrides; Analytics drill
 links are URLs of this form. The amount bounds are typed in the display
 currency and sent as minor units.
+
+A payment has two pages. `/transactions/:id` shows it — header, explanations,
+receipt, refunds, bank record — with Decision history and Review this payment
+in its header; `/review?id=` is where it is decided. Both read the owner-scoped
+`detailOnly=1` review endpoint, and `/transactions/:id/history` returns to the
+payment page.
 Display values come from backend `reporting` conversions; original bank amounts
 remain explicit, missing rates are visible, and estimates are marked. Pending
 bank status and financial eligibility are not rewritten by this frontend work.

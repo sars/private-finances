@@ -1,10 +1,12 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import {
   ArrowLeft,
   Clock,
   FolderTree,
+  History,
   Hourglass,
   Info,
+  ListChecks,
   MessageCircle,
   Repeat2,
   Tag as TagIcon,
@@ -19,6 +21,7 @@ import {
   type Submit,
   type Transaction,
 } from '@/lib/transactions';
+import { owners } from '@/lib/account-visuals';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,7 +33,7 @@ import {
   type Step,
   type Tag,
 } from './decision-card';
-import { DirectionMark, DisplayAmount, HistoryLink, ReplyCard } from './pieces';
+import { DirectionMark, DisplayAmount, ReplyCard } from './pieces';
 import { ReceiptEvidence } from './receipt-evidence';
 import { RefundPanel } from './refund-panel';
 
@@ -65,6 +68,114 @@ function Pill({
   );
 }
 
+/**
+ * The payment's header: what it was, what it cost, when, which account and
+ * whose, and how it is filed. The same on both pages, because recognising the
+ * payment comes first whether one is deciding or looking.
+ */
+export function PaymentHeader({
+  transaction: t,
+  data,
+  displayCurrency,
+  eyebrow,
+}: {
+  transaction: Transaction;
+  data: ReviewData;
+  displayCurrency: string;
+  eyebrow: string;
+}) {
+  const moment = bookedMoment(t.bookedAt, t.source);
+  const tags = data.tags[t.id] ?? [];
+  const pattern = t.spendingPattern?.pattern;
+  return (
+    <header className="space-y-4 rounded-lg border p-4 sm:p-5">
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
+        <h1 className="text-2xl font-semibold tracking-tight break-words">
+          {t.description || 'Payment'}
+        </h1>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <DirectionMark amountMinor={t.amountMinor} />
+        <DisplayAmount
+          transaction={t}
+          reporting={data.reporting}
+          requested={displayCurrency}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+          <Clock aria-hidden="true" className="size-3.5" />
+          <time dateTime={moment.iso}>
+            {moment.day}
+            {moment.time ? ` · ${moment.time}` : ''}
+          </time>
+        </span>
+        <AccountChip
+          source={t.source}
+          currency={t.currency}
+          label={t.spendingPolicy?.accountLabel}
+          owner={t.owner}
+        />
+        <span className="text-xs text-muted-foreground">
+          {owners[t.owner].name}’s account
+        </span>
+        {t.status === 'pending' && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+            <Hourglass aria-hidden="true" className="size-3" />
+            Bank processing
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill icon={Wallet} label="Type" value={kinds[t.kind]} />
+        <Pill
+          icon={FolderTree}
+          label="Category"
+          value={t.category ?? 'not set yet'}
+          muted={!t.category}
+        />
+        {pattern && pattern !== 'unreviewed' && (
+          <Pill
+            icon={Repeat2}
+            label="Pattern"
+            value={pattern === 'routine' ? 'Routine' : 'Exceptional'}
+          />
+        )}
+        {tags.length > 0 ? (
+          tags.map((tag) => (
+            <Badge key={tag.id} variant="secondary" className="gap-1 py-1">
+              <TagIcon aria-hidden="true" className="size-3" />
+              {tag.name}
+            </Badge>
+          ))
+        ) : (
+          <span className="text-xs text-muted-foreground">No tags</span>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function PendingNote() {
+  return (
+    <Alert>
+      <Info />
+      <AlertDescription>
+        The bank is still processing this payment and may change its amount when
+        it settles. The money has already left the account, so it counts as
+        spending; you can explain and categorise it now.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/**
+ * The review page: the decision first, on the left and widest, and beside it
+ * the evidence that informs it — receipt, refunds, the bank record. Saved
+ * explanations sit inside the decision block, so one that did not work is in
+ * view when the next is written.
+ */
 export function TransactionDetail({
   transaction: t,
   data,
@@ -98,30 +209,37 @@ export function TransactionDetail({
   submit: Submit;
   submitSteps: (steps: Step[], message: string) => Promise<void>;
 }) {
-  const moment = bookedMoment(t.bookedAt, t.source);
   const tags = data.tags[t.id] ?? [];
   const replies = repliesForTransaction(data.replies, t.id);
   const reportingRow =
     data.reporting?.currency === displayCurrency
       ? data.reporting.rows.find((row) => row.id === t.id)
       : undefined;
-  const pattern = t.spendingPattern?.pattern;
   const cash = t.source === 'manual_cash';
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="ghost" onClick={onBack} disabled={busy}>
           <ArrowLeft className="size-4" />
-          Back to transactions
+          Back to review
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={refreshing}
-          onClick={onRefresh}
-        >
-          Refresh payment
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<a href={`/transactions/${encodeURIComponent(t.id)}`} />}
+          >
+            Payment page
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            Refresh payment
+          </Button>
+        </div>
       </div>
       {notice && (
         <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm">
@@ -134,119 +252,14 @@ export function TransactionDetail({
           below; refresh before saving.
         </p>
       )}
-
-      <header className="space-y-4 rounded-lg border p-4 sm:p-5">
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">
-            Payment review
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight break-words">
-            {t.description || 'Payment'}
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <DirectionMark amountMinor={t.amountMinor} />
-          <DisplayAmount
-            transaction={t}
-            reporting={data.reporting}
-            requested={displayCurrency}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <Clock aria-hidden="true" className="size-3.5" />
-            <time dateTime={moment.iso}>
-              {moment.day}
-              {moment.time ? ` · ${moment.time}` : ''}
-            </time>
-          </span>
-          <AccountChip
-            source={t.source}
-            currency={t.currency}
-            label={t.spendingPolicy?.accountLabel}
-            owner={t.owner}
-          />
-          {t.status === 'pending' && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-              <Hourglass aria-hidden="true" className="size-3" />
-              Bank processing
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill icon={Wallet} label="Type" value={kinds[t.kind]} />
-          <Pill
-            icon={FolderTree}
-            label="Category"
-            value={t.category ?? 'not set yet'}
-            muted={!t.category}
-          />
-          {pattern && pattern !== 'unreviewed' && (
-            <Pill
-              icon={Repeat2}
-              label="Pattern"
-              value={pattern === 'routine' ? 'Routine' : 'Exceptional'}
-            />
-          )}
-          {tags.length > 0 ? (
-            tags.map((tag) => (
-              <Badge key={tag.id} variant="secondary" className="gap-1 py-1">
-                <TagIcon aria-hidden="true" className="size-3" />
-                {tag.name}
-              </Badge>
-            ))
-          ) : (
-            <span className="text-xs text-muted-foreground">No tags</span>
-          )}
-        </div>
-      </header>
-
-      {t.status === 'pending' && (
-        <Alert>
-          <Info />
-          <AlertDescription>
-            The bank is still processing this payment and may change its amount
-            when it settles. The money has already left the account, so it
-            counts as spending; you can explain and categorise it now.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.95fr)]">
-        <div className="min-w-0 space-y-5">
-          <section
-            aria-label="Your explanations"
-            className="space-y-3 rounded-lg border p-4 sm:p-5"
-          >
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <MessageCircle className="size-4" />
-              Your explanations
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Everything you saved in Telegram or this app stays here, including
-              confirmed and rejected suggestions.
-            </p>
-            {replies.length ? (
-              replies.map((reply) => (
-                <ReplyCard
-                  key={`${reply.source ?? 'telegram'}:${reply.id}`}
-                  reply={reply}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No explanation saved yet. Tell us what this payment was for.
-              </p>
-            )}
-          </section>
-          <ReceiptEvidence id={t.id} actor={identity.actor} />
-          <RefundPanel transaction={t} busy={busy} submit={submit} />
-          <BankRecord key={t.id} id={t.id} cash={cash} />
-          <HistoryLink
-            id={t.id}
-            label="Everything that happened to this payment"
-          />
-        </div>
+      <PaymentHeader
+        transaction={t}
+        data={data}
+        displayCurrency={displayCurrency}
+        eyebrow="Payment review"
+      />
+      {t.status === 'pending' && <PendingNote />}
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
         <div className="min-w-0 rounded-lg border p-4 sm:p-5">
           <DecisionCard
             key={`${t.id}:${t.revision}`}
@@ -275,6 +288,113 @@ export function TransactionDetail({
             submit={submit}
             submitSteps={submitSteps}
           />
+        </div>
+        <div className="min-w-0 space-y-5">
+          <ReceiptEvidence id={t.id} actor={identity.actor} />
+          <RefundPanel transaction={t} busy={busy} submit={submit} />
+          <BankRecord key={t.id} id={t.id} cash={cash} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The payment page: the facts, then what is known about the payment —
+ * explanations, receipt, refunds — and the bank record beside them. No form;
+ * deciding is the review page's job, one click away.
+ */
+export function PaymentView({
+  transaction: t,
+  data,
+  identity,
+  displayCurrency,
+  busy,
+  refreshing,
+  onRefresh,
+  submit,
+  back,
+}: {
+  transaction: Transaction;
+  data: ReviewData;
+  identity: Bootstrap;
+  displayCurrency: string;
+  busy: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
+  submit: Submit;
+  /** Where "Back" goes: the list the reader came from. */
+  back: ReactNode;
+}) {
+  const replies = repliesForTransaction(data.replies, t.id);
+  const cash = t.source === 'manual_cash';
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {back}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            render={
+              <a href={`/transactions/${encodeURIComponent(t.id)}/history`} />
+            }
+          >
+            <History className="size-4" />
+            Decision history
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            Refresh payment
+          </Button>
+          <Button
+            size="sm"
+            render={
+              <a
+                href={`/review?id=${encodeURIComponent(t.id)}&display=${displayCurrency}`}
+              />
+            }
+          >
+            <ListChecks className="size-4" />
+            Review this payment
+          </Button>
+        </div>
+      </div>
+      <PaymentHeader
+        transaction={t}
+        data={data}
+        displayCurrency={displayCurrency}
+        eyebrow="Payment"
+      />
+      {t.status === 'pending' && <PendingNote />}
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.95fr)]">
+        <div className="min-w-0 space-y-5">
+          {replies.length > 0 && (
+            <section
+              aria-label="Your explanations"
+              className="space-y-3 rounded-lg border p-4 sm:p-5"
+            >
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <MessageCircle className="size-4" />
+                Your explanations
+              </h2>
+              {replies.map((reply) => (
+                <ReplyCard
+                  key={`${reply.source ?? 'telegram'}:${reply.id}`}
+                  reply={reply}
+                />
+              ))}
+            </section>
+          )}
+          <ReceiptEvidence id={t.id} actor={identity.actor} />
+          <RefundPanel transaction={t} busy={busy} submit={submit} />
+        </div>
+        <div className="min-w-0 space-y-5">
+          <BankRecord key={t.id} id={t.id} cash={cash} />
         </div>
       </div>
     </div>

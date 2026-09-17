@@ -1,10 +1,14 @@
 # The transaction review page
 
-The page at `/review?id=…` is where a single payment is understood and decided.
-Its layout follows the order a person actually reads in: recognise the payment,
-see what is already known about it, then decide. On a phone everything flows in
-one column; on a wide screen the evidence sits on the left and the decision on
-the right.
+The page at `/review?id=…` is where a single payment is decided. Since
+September 17, 2026 it is one of two pages for a payment: this one leads with
+the decision, and `/transactions/:id` leads with the facts and has no form.
+Both open with the same header — description, amount, the moment, the account
+badge and whose account it is, type, category, pattern and tags. On the review
+page the decision block is the left, widest column, with everything already
+said about the payment inside it above the explanation box, so an explanation
+that did not work is in view when the next one is written; receipt, refunds and
+the bank record sit beside it. On a phone everything flows in one column.
 
 ## Recognising the payment
 

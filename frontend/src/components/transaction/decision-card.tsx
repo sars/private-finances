@@ -32,6 +32,7 @@ import {
 } from '@/components/combobox';
 import { Choice } from '@/components/finance';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { ReplyCard } from './pieces';
 
 export type CategoryNode = {
   id: string;
@@ -320,13 +321,29 @@ export function DecisionCard({
   const disabled = busy || explaining;
   return (
     <div className="space-y-5">
+      {savedExplanations.length > 0 && (
+        <section aria-label="Your explanations so far" className="space-y-2">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <MessageCircle className="size-4" />
+            What you have said so far
+          </h2>
+          {savedExplanations.map((reply) => (
+            <ReplyCard
+              key={`${reply.source ?? 'telegram'}:${reply.id}`}
+              reply={reply}
+            />
+          ))}
+        </section>
+      )}
       <form onSubmit={saveExplanation} className="space-y-3">
         <div className="grid gap-2">
           <Label
             htmlFor={`${id}-explanation`}
             className="text-base font-semibold"
           >
-            What was this payment for?
+            {savedExplanations.length
+              ? 'Explain it again, or differently'
+              : 'What was this payment for?'}
           </Label>
           <p className="text-sm text-muted-foreground">
             Explain it in your own words. We save your explanation first, then

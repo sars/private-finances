@@ -546,7 +546,7 @@ export default function Transactions() {
                 variant="outline"
                 render={
                   <a
-                    href={`/review?id=${encodeURIComponent(t.id)}&display=${displayCurrency}`}
+                    href={`/transactions/${encodeURIComponent(t.id)}?display=${displayCurrency}`}
                   />
                 }
               >
