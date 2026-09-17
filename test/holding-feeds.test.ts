@@ -28,6 +28,10 @@ const statementXml = `<?xml version="1.0" encoding="UTF-8"?>
 </OpenPositions>
 <CashReport>
 <CashReportCurrency accountId="U0000000" currency="BASE_SUMMARY" endingCash="17205.55" levelOfDetail="BaseCurrency" />
+<ConversionRates>
+<ConversionRate reportDate="20260917" fromCurrency="EUR" toCurrency="USD" rate="1.17" />
+<ConversionRate reportDate="20260917" fromCurrency="GBP" toCurrency="USD" rate="1.35" />
+</ConversionRates>
 <CashReportCurrency accountId="U0000000" currency="USD" endingCash="17205.55" levelOfDetail="Currency" />
 <CashReportCurrency accountId="U0000000" currency="EUR" endingSettledCash="0" levelOfDetail="Currency" />
 <CashReportCurrency accountId="U0000000" currency="USD" endingCash="1" levelOfDetail="LOT" />
@@ -62,7 +66,24 @@ test('a Flex statement yields summary positions with prices and real-currency ca
     { currency: 'USD', endingCash: '17205.55' },
     { currency: 'EUR', endingCash: '0' },
   ]);
-  assert.deepEqual(statement.sections, ['OpenPositions', 'CashReport']);
+  assert.deepEqual(statement.sections, [
+    'OpenPositions',
+    'CashReport',
+    'ConversionRates',
+  ]);
+  assert.equal(statement.baseCurrency, 'USD');
+  assert.equal(statement.baseCash, '17205.55');
+  assert.deepEqual(statement.cashRowCurrencies, ['BASE_SUMMARY', 'EUR', 'USD']);
+  // A query with only the base summary and a known base currency still yields cash.
+  const baseOnly = parseFlexStatement(
+    statementXml.replace(
+      /<CashReportCurrency[^>]*currency="(USD|EUR)"[^>]*\/>\n?/g,
+      '',
+    ),
+  );
+  assert.deepEqual(baseOnly.cash, []);
+  assert.equal(baseOnly.baseCash, '17205.55');
+  assert.equal(baseOnly.baseCurrency, 'USD');
   assert.deepEqual(statement.cashFields, [
     'accountId',
     'currency',

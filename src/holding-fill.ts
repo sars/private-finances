@@ -177,14 +177,21 @@ export async function applyFlexStatement(
   for (const holding of fed) {
     const reference = (holding.feedRef ?? holding.denomination).toUpperCase();
     if (reference === 'CASH') {
-      const cash = statement.cash.find(
-        (c) => c.currency === holding.denomination,
-      );
-      if (!cash) {
+      // A per-currency row when the query has them; otherwise the base
+      // summary, which is cash in the base currency and nothing else.
+      const cash =
+        statement.cash.find((c) => c.currency === holding.denomination)
+          ?.endingCash ??
+        (!statement.cash.length &&
+        statement.baseCash !== null &&
+        statement.baseCurrency === holding.denomination
+          ? statement.baseCash
+          : null);
+      if (cash === null) {
         skip(summary, 'no_cash_row');
         continue;
       }
-      await w.write(summary, holding, asOf, cash.endingCash, 'ibkr');
+      await w.write(summary, holding, asOf, cash, 'ibkr');
       continue;
     }
     const position = symbols.get(reference);

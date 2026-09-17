@@ -115,6 +115,12 @@ export interface FlexCash {
 export interface FlexStatement {
   positions: FlexPosition[];
   cash: FlexCash[];
+  /** The account's base currency, when the statement's conversion rates name one. */
+  baseCurrency: string | null;
+  /** The Cash Report's base-currency summary, when the query has only that. */
+  baseCash: string | null;
+  /** The currency labels the cash rows carry (codes or a summary label), for the check. */
+  cashRowCurrencies: string[];
   /** Section names seen in the statement, for a check that names no figure. */
   sections: string[];
   /** Attribute names on the cash rows, so a query missing a field is visible. */
@@ -174,22 +180,37 @@ export function parseFlexStatement(xml: string): FlexStatement {
     });
   }
   const cash: FlexCash[] = [];
+  let baseCash: string | null = null;
+  const cashRowCurrencies = new Set<string>();
   for (const row of elements(xml, 'CashReportCurrency')) {
-    // The cash report labels its per-currency rows "Currency" and its total
-    // "BaseCurrency"; positions use "SUMMARY" and "LOT". Only a real
-    // currency's own row is cash in that currency.
-    const detail = (row.levelOfDetail ?? '').toUpperCase();
-    if (detail && detail !== 'SUMMARY' && detail !== 'CURRENCY') continue;
     const currency = (row.currency ?? '').trim().toUpperCase();
+    if (currency) cashRowCurrencies.add(currency);
     // "Ending Cash" when the query includes it, else "Ending Settled Cash";
     // a query with neither has no cash to read.
     const endingCash =
       decimal(row.endingCash) ?? decimal(row.endingSettledCash);
-    // The report's "BASE_SUMMARY" row totals every currency in the base one
-    // and would double the cash; only real currencies are wanted.
-    if (!/^[A-Z]{3}$/.test(currency) || endingCash === null) continue;
+    if (endingCash === null) continue;
+    // The "BASE_SUMMARY" row totals every currency in the base one. It would
+    // double the cash beside per-currency rows, so it is kept apart and used
+    // only when the query has no per-currency rows at all.
+    if (currency === 'BASE_SUMMARY') {
+      baseCash = endingCash;
+      continue;
+    }
+    // The cash report labels its per-currency rows "Currency"; positions use
+    // "SUMMARY" and "LOT". Only a real currency's own row is cash in it.
+    const detail = (row.levelOfDetail ?? '').toUpperCase();
+    if (detail && detail !== 'SUMMARY' && detail !== 'CURRENCY') continue;
+    if (!/^[A-Z]{3}$/.test(currency)) continue;
     cash.push({ currency, endingCash });
   }
+  // The conversion rates all convert into the account's base currency.
+  const bases = new Set(
+    elements(xml, 'ConversionRate')
+      .map((row) => (row.toCurrency ?? '').trim().toUpperCase())
+      .filter((code) => /^[A-Z]{3}$/.test(code)),
+  );
+  const baseCurrency = bases.size === 1 ? [...bases][0]! : null;
   // Attribute names of the cash rows, for a check that names no figure.
   const cashFields = [
     ...new Set(
@@ -208,6 +229,9 @@ export function parseFlexStatement(xml: string): FlexStatement {
   return {
     positions,
     cash,
+    baseCurrency,
+    baseCash,
+    cashRowCurrencies: [...cashRowCurrencies].sort(),
     sections,
     cashFields,
     fromDate: flexDate(statement.fromDate),

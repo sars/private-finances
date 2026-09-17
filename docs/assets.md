@@ -142,7 +142,9 @@ address or a figure. `--check` only tries the broker and exchange credentials
 and prints a status word each, with the statement's shape — how many
 positions, which cash currencies, which attribute names the cash rows carry,
 which sections — and the exchange's asset count, never a figure. Cash is read
-from "Ending Cash" or, failing that, "Ending Settled Cash". Credentials are files in
+from "Ending Cash" or, failing that, "Ending Settled Cash"; when the query's
+Cash Report carries only the base-currency summary, that row is the cash in
+the base currency the statement's conversion rates name. Credentials are files in
 `CREDENTIALS_DIRECTORY`, present or absent: `ibkr-flex-token` with
 `ibkr-flex-query` (the Flex Web Service token and the Query ID of an Activity
 Flex Query in XML with Open Positions at summary level — Symbol, Position,
