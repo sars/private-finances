@@ -223,14 +223,47 @@ async function workflowHealth(
 
 export class Repository {
   constructor(readonly db: Database) {}
-  async list(owner?: Owner): Promise<Transaction[]> {
-    const result = await this.db.query(
-      `SELECT t.*, a.label AS policy_account_label,a.purpose AS policy_account_purpose, to_jsonb(a)->>'revision' AS policy_account_revision
+  /** Every column a listed payment needs, with the account policy beside it.
+   * `t` is the payment and `sp` its spending pattern, so a caller's WHERE
+   * clause may refer to both. */
+  private static readonly projection = `SELECT t.*, a.label AS policy_account_label,a.purpose AS policy_account_purpose, to_jsonb(a)->>'revision' AS policy_account_revision
       FROM transactions t LEFT JOIN own_accounts a ON a.owner=t.owner AND a.source=t.source AND a.account_id=t.account_id
-      WHERE ($1::text IS NULL OR t.owner=$1) ORDER BY t.booked_at DESC,t.id`,
-      [owner ?? null],
+      LEFT JOIN spending_patterns sp ON sp.transaction_id=t.id`;
+  async list(owner?: Owner): Promise<Transaction[]> {
+    return this.select('($1::text IS NULL OR t.owner=$1)', [owner ?? null]);
+  }
+  /**
+   * The payments a WHERE clause selects, newest first, enriched exactly as
+   * `list` enriches them. The clause is written against `t` (the payment) and
+   * `sp` (its spending pattern) with `$n` placeholders into `params`; a limit
+   * cuts the page after ordering, so a caller pages with a keyset clause
+   * rather than an offset.
+   */
+  async select(
+    where: string,
+    params: unknown[],
+    limit?: number,
+  ): Promise<Transaction[]> {
+    const result = await this.db.query(
+      `${Repository.projection} WHERE ${where} ORDER BY t.booked_at DESC,t.id${
+        limit === undefined ? '' : ` LIMIT ${Math.trunc(limit)}`
+      }`,
+      params,
     );
-    const rows = result.rows.map((row) =>
+    return this.enrich(result.rows);
+  }
+  /** How many payments a WHERE clause selects, for the clause `select` takes. */
+  async count(where: string, params: unknown[]): Promise<number> {
+    const result = await this.db.query(
+      `SELECT count(*) AS total FROM transactions t
+      LEFT JOIN own_accounts a ON a.owner=t.owner AND a.source=t.source AND a.account_id=t.account_id
+      LEFT JOIN spending_patterns sp ON sp.transaction_id=t.id WHERE ${where}`,
+      params,
+    );
+    return Number(result.rows[0]!.total);
+  }
+  private async enrich(raw: Row[]): Promise<Transaction[]> {
+    const rows = raw.map((row) =>
       applySpendingPolicy(
         map(row),
         row.policy_account_purpose

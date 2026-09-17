@@ -25,10 +25,12 @@ query/CPU attribution and sufficient percentile sampling are still needed.
   Preserve API contracts, owner permissions, exact arithmetic, audit history,
   idempotency, transaction/lock ordering and human overrides. Verify equivalence
   and failure paths after each extraction, not a whole-backend rewrite.
-- [ ] **PF-010/012 / BE-3: optimize measured bottlenecks.** Pagination, aggregation,
-  indexes and further batching only where the baseline justifies them; verify
-  identical counts/totals and query plans. Review worker retry/error boundaries
-  alongside the affected service, without combining unrelated financial changes.
+- [ ] **PF-010/012 / BE-3: optimize measured bottlenecks.** Aggregation and
+  further batching only where the baseline justifies them; verify identical
+  counts/totals and query plans. Review worker retry/error boundaries alongside
+  the affected service, without combining unrelated financial changes. Delivered
+  on September 17, 2026: `/api/transactions` selects, filters and cuts a page in
+  SQL with the indexes of migration 45; see [performance](performance.md).
 
 Already delivered: review suggestion/tag batching (synthetic query count 28 → 3),
 separate payment detail requests and fingerprinted private asset caching. These do
@@ -184,9 +186,10 @@ and deployed; read it before touching incoming money or spending totals.
   investments, reversals, FX and estimates. The workbook is comparison evidence,
   not new bank rows or unquestioned truth. Refresh queue counts before work; old
   counts such as 204 unclear/85 estimates are historical snapshots, not live status.
-- [ ] **PF-005 / HIST-2: recent manual review and older estimates.** Prioritize
-  unknown amounts above 3,000 UAH; use evidence-backed estimates for older smaller
-  payments and show their uncertainty separately. Keep 2025 archived, not deleted.
+- [ ] **PF-005 / HIST-2: recent manual review and older estimates.** Use
+  evidence-backed estimates for older payments and show their uncertainty
+  separately; the 3,000 UAH priority line was retired on September 17, 2026.
+  Keep 2025 archived, not deleted.
 - [ ] **PF-005 / HIST-3: one-time payment-context investigation — awaiting exports.**
   Use owner-provided email, Telegram, WhatsApp, Viber and SMS exports where available;
   search available card/reference/name/date/amount evidence, retain source pointers
@@ -194,8 +197,8 @@ and deployed; read it before touching incoming money or spending totals.
   communication-search feature. Verify treasury-payment purpose and known family
   support/insurance exceptions rather than generalizing all same-name payments.
 
-Home and Analytics, selected periods/global currency, historical estimate separation
-and the priority review filter are already delivered. Further changes should solve
+Home and Analytics, selected periods/global currency and historical estimate
+separation are already delivered. Further changes should solve
 an identified gap, not restart the dashboard redesign.
 
 ## 5. Receipt quality and item-level reporting

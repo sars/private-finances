@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  withinReviewWindow,
-  reviewPriority,
-  reviewWindow,
-} from '../src/review-window.js';
+import { withinReviewWindow, reviewWindow } from '../src/review-window.js';
 test('review periods use Riga boundaries and keep 2025 in archive only', () => {
   const now = new Date('2026-09-12T10:00:00Z');
   const check = (
@@ -20,12 +16,6 @@ test('review periods use Riga boundaries and keep 2025 in archive only', () => {
   assert.equal(check('2025-01-01T00:00:00Z', 'all'), true);
   assert.throws(() => reviewWindow('wrong'));
 });
-test('priority is strictly above 3000 UAH and missing conversion stays visible', () => {
-  assert.equal(reviewPriority('-300000'), 'normal');
-  assert.equal(reviewPriority('-300001'), 'large');
-  assert.equal(reviewPriority(null), 'missing_fx');
-});
-
 test('runtime cutoff leaves archived payments without new AI work', async () => {
   const { memoryDatabase, migrate } = await import('../src/database.js');
   const { Repository } = await import('../src/repository.js');

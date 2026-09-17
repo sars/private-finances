@@ -17,6 +17,41 @@ Fingerprint-named JavaScript/CSS assets use private immutable browser caching.
 Authentication is checked before serving assets; HTML, APIs, unversioned assets
 and receipt images retain no-store. A deployment produces new asset names.
 
+## The paged transaction list
+
+Since September 17, 2026 `GET /api/transactions` no longer returns an owner's
+whole ledger. `src/transaction-page.ts` turns every filter into a WHERE clause,
+orders newest first and cuts the page with a keyset (`cursor` is the id of the
+last row shown, `limit` defaults to 50 and may not exceed 200), so only the rows
+on the page are enriched with account policy, spending pattern, refunds, tags,
+rule suggestions, AI triage, the display conversion and historical estimates.
+The response carries `total` and `nextCursor`.
+
+The grammar is the one `/api/analytics` speaks — `owner` (absent means the
+household), `from`, `to`, `category`, `pattern`, `scope`, `display` — plus what a
+list needs: `review=1` for outflows still waiting for a decision, `q` for a
+description fragment, `kinds`, `tag`, `receipts=with|without`,
+`refunds=with|without`, `min`/`max` as minor units of `display` compared with
+the magnitude of what a payment finally cost after refunds, and the household
+visibility overrides `includeNonPersonal`, `includeTransfers`, `includeRefunds`
+and `includeZeroAmount`.
+
+Two predicates keep their single implementation in code rather than being
+rewritten in SQL: a linked refund credit is hidden unless a link disagrees with a
+later correction, and a purchase is hidden as having come to nothing only when
+its net after refunds is zero without such a disagreement. Both are computed over
+the few linked payments and their ids handed to SQL. The amount range needs the
+reporting conversion, so when it is set the candidates are converted first and
+the page cut afterwards. `test/transaction-page.test.ts` walks every page of a
+matrix of queries and requires the result to equal, in order, what the in-memory
+pipeline over `repo.list()` selects.
+
+Migration 45 adds the indexes this needs: `transactions(booked_at DESC, id)`,
+`transactions(owner, booked_at DESC, id)`, a partial index for the review
+predicate, `audit_events(transaction_id, created_at)` and
+`receipt_jobs(transaction_id)`. `/api/review`, `/api/analytics` and
+`/api/overview` still read the ledger as before; moving them is separate work.
+
 ## Remaining backend work
 
 The batching above is a completed optimization, not a completed backend refactor.

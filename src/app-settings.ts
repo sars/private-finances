@@ -133,7 +133,7 @@ export function resultingAmountMinor(t: Transaction): bigint {
  * case that needs a person, so it keeps the payment in the list rather than
  * hiding a figure nobody has reconciled (ADR 0007).
  */
-function settledToNothing(t: Transaction): boolean {
+export function settledToNothing(t: Transaction): boolean {
   return (
     (!t.refund ||
       t.refund.reductions.every((item) => item.discrepancy === null)) &&

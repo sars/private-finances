@@ -8,11 +8,7 @@ import {
 } from './app-settings.js';
 import { Receipts } from './receipts.js';
 import { historicalReporting } from './historical-reporting.js';
-import {
-  reviewWindow,
-  withinReviewWindow,
-  reviewPriority,
-} from './review-window.js';
+import { reviewWindow, withinReviewWindow } from './review-window.js';
 import { needsSpendingReview } from './spending-review.js';
 import { transactionDetails } from './transaction-details.js';
 import { Refunds } from './refunds.js';
@@ -43,6 +39,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { parseFilters, filterTransactions } from './filters.js';
+import { pageTransactions, parsePageQuery } from './transaction-page.js';
 import { Repository, Conflict } from './repository.js';
 import { expenseSummary, type Owner } from './domain.js';
 import { BANK_NAMES, isBankName, type BankName } from './connectors/banks.js';
@@ -498,9 +495,6 @@ export function web(
                 transactions.some((t) => t.id === r.transaction_id),
               )
             : records;
-        const priorities = Object.fromEntries(
-          uah.rows.map((t) => [t.id, reviewPriority(t.convertedAmountMinor)]),
-        );
         const service = new Categories(repo.db);
         const { suggestions, tags } = await service.reviewContext(
           actor,
@@ -523,7 +517,6 @@ export function web(
               missingReason: r.missingReason,
             })),
           },
-          priorities,
           historicalEstimates: (
             await historicalReporting(repo, transactions, uah)
           ).rows,
@@ -1209,6 +1202,99 @@ export function web(
         json(405, { error: 'method_not_allowed', requestId });
         return;
       }
+      if (route === '/api/transactions') {
+        // One page, chosen and cut by the database, in the grammar Analytics
+        // speaks plus what a list needs; see transaction-page.ts. The rows
+        // are enriched only for the page: their tags and rule suggestions,
+        // any pending AI triage, the display conversion and the historical
+        // estimates that the review screen shows as badges.
+        const query = parsePageQuery(url.searchParams);
+        const preferences = reviewPreferences(
+          await readAppSettings(repo.db),
+          url.searchParams,
+        );
+        const page = await pageTransactions(repo, query, preferences);
+        const ids = page.transactions.map((t) => t.id);
+        const owners = [...new Set(page.transactions.map((t) => t.owner))];
+        const service = new Categories(repo.db);
+        const suggestions: Record<string, unknown> = {};
+        const tags: Record<string, unknown> = {};
+        for (const member of owners) {
+          const context = await service.reviewContext(
+            member,
+            page.transactions
+              .filter((t) => t.owner === member)
+              .map((t) => t.id),
+          );
+          Object.assign(suggestions, context.suggestions);
+          Object.assign(tags, context.tags);
+        }
+        const triage = (
+          await Promise.all(
+            owners.map((member) =>
+              new TransactionTriage(repo.db, () => undefined).list(member),
+            ),
+          )
+        )
+          .flat()
+          .filter((row) => ids.includes(String(row.transaction_id)));
+        const receipts = ids.length
+          ? Object.fromEntries(
+              (
+                await repo.db.query(
+                  `SELECT transaction_id,count(*) AS total FROM receipt_jobs
+                   WHERE state='matched' AND transaction_id=ANY($1::uuid[]) GROUP BY transaction_id`,
+                  [ids],
+                )
+              ).rows.map((row) => [
+                String(row.transaction_id),
+                Number(row.total),
+              ]),
+            )
+          : {};
+        // The amount filter converts the page itself; otherwise convert here.
+        // Historical estimates are judged in UAH whatever is displayed.
+        const converted =
+          query.display && !page.reporting
+            ? await convertedSpending(repo, page.transactions, query.display)
+            : undefined;
+        const reporting = page.reporting ?? converted;
+        const uah =
+          converted && query.display === 'UAH'
+            ? converted
+            : reporting
+              ? await convertedSpending(repo, page.transactions, 'UAH')
+              : undefined;
+        json(200, {
+          transactions: page.transactions,
+          total: page.total,
+          nextCursor: page.nextCursor,
+          reviewPreferences: preferences,
+          ...(reporting
+            ? {
+                reporting: {
+                  currency: reporting.currency,
+                  rows: reporting.rows.map((r) => ({
+                    id: r.id,
+                    convertedAmountMinor: r.convertedAmountMinor,
+                    netAmountMinor: r.netAmountMinor,
+                    method: r.method,
+                    provenance: r.provenance,
+                    missingReason: r.missingReason,
+                  })),
+                },
+                historicalEstimates: (
+                  await historicalReporting(repo, page.transactions, uah!)
+                ).rows,
+              }
+            : {}),
+          triage,
+          suggestions,
+          tags,
+          receipts,
+        });
+        return;
+      }
       const owner = url.searchParams.get('owner') || undefined;
       if (owner && owner !== 'rodion' && owner !== 'katya')
         throw new Error('invalid_owner');
@@ -1217,10 +1303,6 @@ export function web(
         await repo.list(owner as Owner | undefined),
         filters,
       );
-      if (route === '/api/transactions') {
-        json(200, { transactions: rows });
-        return;
-      }
       if (route === '/api/analytics') {
         // The same rows and the same conversion as the list above, grouped;
         // a drill link built from this grammar lists what made the figure.

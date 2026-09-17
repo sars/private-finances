@@ -73,7 +73,6 @@ export default function Review() {
   const all = url.all !== '0';
   const windowFilter = url.window;
 
-  const priorityOnly = url.priority === '1';
   const exceptionalOnly = url.exceptional === '1';
   const search = url.q ?? '';
   const selectedId = url.id ?? null;
@@ -83,8 +82,6 @@ export default function Review() {
     patch({ window: value, id: undefined });
   const setIncludeRefunds = (value: boolean) =>
     patch({ includeRefunds: value ? '1' : '0' });
-  const setPriorityOnly = (value: boolean) =>
-    patch({ priority: value ? '1' : undefined });
   const setExceptionalOnly = (value: boolean) =>
     patch({ exceptional: value ? '1' : undefined });
   const setSearch = (value: string) => patch({ q: value || undefined }, true);
@@ -179,7 +176,6 @@ export default function Review() {
   };
   const visible = (data?.transactions ?? []).filter(
     (t) =>
-      (!priorityOnly || data?.priorities?.[t.id] !== 'normal') &&
       (!exceptionalOnly || t.spendingPattern?.pattern === 'exceptional') &&
       t.description.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
@@ -504,17 +500,6 @@ export default function Review() {
             <div className="flex flex-wrap items-end gap-2">
               <Button
                 size="sm"
-                variant={priorityOnly ? 'secondary' : 'outline'}
-                onClick={() => {
-                  setPriorityOnly(!priorityOnly);
-                  setLimit(12);
-                }}
-                aria-pressed={priorityOnly}
-              >
-                Over 3,000 UAH / missing rate
-              </Button>
-              <Button
-                size="sm"
                 variant={exceptionalOnly ? 'secondary' : 'outline'}
                 onClick={() => {
                   setExceptionalOnly(!exceptionalOnly);
@@ -528,9 +513,8 @@ export default function Review() {
             </div>
           </FilterBar>
           <p className="text-xs text-muted-foreground">
-            Calendar periods use Europe/Riga. Prioritize large unclear payments;
-            missing exchange rates stay in this priority view. Historical
-            estimates will remain separate from confirmed spending.
+            Calendar periods use Europe/Riga. Historical estimates remain
+            separate from confirmed spending.
           </p>
           {loading ? (
             <div
@@ -628,14 +612,6 @@ export default function Review() {
                                   {estimate.method === 'mcc'
                                     ? 'MCC'
                                     : 'AI suggestion'}
-                                </Badge>
-                              )}
-                              {data.priorities?.[t.id] === 'large' && (
-                                <Badge variant="outline">Over 3,000 UAH</Badge>
-                              )}
-                              {data.priorities?.[t.id] === 'missing_fx' && (
-                                <Badge variant="outline">
-                                  Missing UAH rate
                                 </Badge>
                               )}
                               {t.status === 'pending' && (

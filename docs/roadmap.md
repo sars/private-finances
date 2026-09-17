@@ -28,7 +28,8 @@ Clear transactions now receive category suggestions before Telegram question sel
 first-run owner catalogs are initialized. The owner authorized automatic classification of clear expenses on September 12;
 the tested policy is deployed. Ambiguous cases remain for review.
 Home and Analytics now separate confirmed spending from historical estimates.
-Recent review, a 3,000 UAH priority filter and 2025 archive reduce the active queue.
+Recent review and the 2025 archive reduce the active queue; the 3,000 UAH priority
+filter was retired on September 17, 2026.
 Telegram JPEG/PNG receipts are live.
 
 ## Current implementation increment

@@ -9,8 +9,8 @@ transactions were deleted.
 
 Review opens the previous calendar month, with separate current-month, older 2026,
 and archive views. Search repeated merchant descriptions to review similar items.
-The priority filter uses strictly greater than 3,000 UAH, calculated with daily
-conversion; missing rates are also high priority. Telegram automatic questions now
+The 3,000 UAH priority filter was retired on September 17, 2026 at the owner's
+instruction; a large payment is reviewed like any other. Telegram automatic questions now
 select only the current month; historical investigation stays in the app. Existing
 sent messages are not erased, and manual Telegram queue actions remain available.
 

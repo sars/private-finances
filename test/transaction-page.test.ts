@@ -1,233 +1,473 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectTransactionDetails } from '../src/transaction-details.js';
+import { randomUUID } from 'node:crypto';
 import { memoryDatabase, migrate } from '../src/database.js';
-import { Repository } from '../src/repository.js';
+import { Repository, type Transaction } from '../src/repository.js';
 import { Categories } from '../src/categories.js';
+import { SpendingPatterns } from '../src/spending-pattern.js';
+import { Refunds } from '../src/refunds.js';
+import { FxRates } from '../src/fx-rates.js';
+import { filterTransactions, parseFilters } from '../src/filters.js';
+import { needsSpendingReview } from '../src/spending-review.js';
+import {
+  hiddenByReviewPreferences,
+  readAppSettings,
+  reviewPreferences,
+} from '../src/app-settings.js';
+import {
+  pageTransactions,
+  parsePageQuery,
+  rigaDayStart,
+} from '../src/transaction-page.js';
 import { web } from '../src/web.js';
 
-const { accountIdentity, accountToneClasses } = await import(
-  new URL('../../frontend/src/lib/account-identity.ts', import.meta.url).href
-);
-const { bookedMoment } = await import(
-  new URL('../../frontend/src/lib/transactions.ts', import.meta.url).href
-);
-const { searchMatch } = await import(
-  new URL('../../frontend/src/lib/search-match.ts', import.meta.url).href
-);
-
-const mono = {
-  id: 'synthetic',
-  source: 'monobank',
-  amount_minor: '-16219',
-  currency: 'UAH',
-  status: 'booked',
-  description: 'Synthetic purchase',
-  account_label: 'Monobank black',
-};
-
-test('the review page is handed named bank facts, not a label list it has to parse', () => {
-  const { summary } = projectTransactionDetails({
-    ...mono,
-    source_details: {
-      counterName: 'Synthetic recipient',
-      counterIban: 'UA123456789012345678901234567',
-      comment: 'Synthetic purpose',
-      mcc: 5812,
-      operationAmount: -350,
-      currencyCode: 978,
-      cashbackAmount: 120,
-    },
-  });
-  assert.equal(summary.counterparty.role, 'Recipient');
-  assert.equal(summary.counterparty.name, 'Synthetic recipient');
-  assert.equal(summary.counterparty.iban, 'UA12 •••• 4567');
-  assert.equal(summary.counterparty.card, null);
-  assert.equal(summary.purpose, 'Synthetic purpose');
-  assert.equal(summary.mcc?.code, '5812');
-  assert.equal(summary.mcc?.meaning, 'Eating places and restaurants');
-  assert.equal(summary.originalAmount, '−3.50 EUR');
-  assert.equal(summary.cashback, '1.20 UAH');
-});
-
-test('an original amount in the account currency says nothing, so it is left out of the formatted view', () => {
-  const result = projectTransactionDetails({
-    ...mono,
-    source_details: { operationAmount: -16219, currencyCode: 980 },
-  });
-  assert.equal(result.summary.originalAmount, null);
-  // It stays in the complete field list, which is the bank record as sent.
-  assert.ok(
-    result.fields.some(
-      (field) =>
-        field.label === 'Original purchase amount' &&
-        field.value === '−162.19 UAH',
-    ),
-  );
-});
-
-test('an Enable Banking record carries its purpose, type and value date', () => {
-  const { summary } = projectTransactionDetails({
-    id: 'synthetic',
-    source: 'enablebanking',
-    amount_minor: '-4500',
+/**
+ * The paged endpoint must select exactly the rows the in-memory pipeline
+ * selects, in the same order, however the page is cut. So the expected set is
+ * always computed by the existing functions over `repo.list()`, and the SQL
+ * has to agree with them.
+ */
+async function seed(repo: Repository) {
+  const db = repo.db;
+  const rows: Record<string, string>[] = [];
+  let i = 0;
+  const add = (
+    owner: 'rodion' | 'katya',
+    amountMinor: string,
+    bookedAt: string,
+    extra: Partial<{
+      currency: string;
+      description: string;
+      status: 'booked' | 'pending';
+    }> = {},
+  ) =>
+    rows.push({
+      source: 'synthetic',
+      sourceId: 'p' + i++,
+      accountId: owner + '-card',
+      owner,
+      currency: extra.currency ?? 'UAH',
+      amountMinor,
+      description: extra.description ?? `Synthetic shop ${i}`,
+      bookedAt,
+      status: extra.status ?? 'booked',
+    });
+  // Either side of a Riga midnight (UTC+3 at the end of August).
+  add('rodion', '-1000', '2026-08-31T20:59:59Z', { description: 'Late Rimi' });
+  add('rodion', '-1100', '2026-08-31T21:00:00Z', { description: 'Early Rimi' });
+  // A moment shared by three payments, so the keyset has to break ties by id.
+  for (const owner of ['rodion', 'katya', 'rodion'] as const)
+    add(owner, '-500', '2026-09-05T09:00:00Z', { description: 'Tied Wolt' });
+  add('katya', '-7000', '2026-09-06T10:00:00Z', {
     currency: 'EUR',
-    status: 'booked',
-    description: 'Synthetic card payment',
-    account_label: 'Revolut EUR',
-    source_details: {
-      creditor: { name: 'Synthetic merchant' },
-      creditor_account: { iban: 'LT123456789012345678' },
-      creditor_agent: { name: 'Synthetic bank' },
-      remittance_information: ['Order 42'],
-      bank_transaction_code: { description: 'Card payment' },
-      value_date: '2026-09-02',
-    },
+    description: 'Katya IKEA',
   });
-  assert.equal(summary.counterparty.name, 'Synthetic merchant');
-  assert.equal(summary.counterparty.bank, 'Synthetic bank');
-  assert.equal(summary.purpose, 'Order 42');
-  assert.equal(summary.bankTransactionType, 'Card payment');
-  assert.equal(summary.valueDate, '2026-09-02');
+  add('katya', '4000', '2026-09-08T10:00:00Z', {
+    currency: 'EUR',
+    description: 'IKEA refund',
+  });
+  add('rodion', '-2500', '2026-09-07T10:00:00Z', {
+    description: 'Fully refunded jacket',
+  });
+  add('rodion', '2500', '2026-09-09T10:00:00Z', {
+    description: 'Jacket refund',
+  });
+  add('rodion', '0', '2026-09-09T11:00:00Z', { description: 'Card check' });
+  add('rodion', '-300', '2026-09-10T08:00:00Z', {
+    status: 'pending',
+    description: 'Hold at Narvesen',
+  });
+  add('rodion', '-900', '2026-09-10T09:00:00Z', {
+    currency: 'GBP',
+    description: 'London coffee',
+  });
+  add('katya', '-1500', '2026-09-11T09:00:00Z', { description: 'Katya taxi' });
+  add('rodion', '50000', '2026-09-12T09:00:00Z', { description: 'Salary' });
+  for (let n = 0; n < 20; n++)
+    add(
+      n % 2 ? 'katya' : 'rodion',
+      String(-100 - n),
+      `2026-07-${String(1 + n).padStart(2, '0')}T12:00:00Z`,
+      { description: n % 3 ? 'Circle K' : 'Maxima' },
+    );
+  await repo.importBatch(rows);
+  const all = await repo.list();
+  const byDescription = (d: string) =>
+    all
+      .filter((t) => t.description === d)
+      .sort((a, b) => (a.id < b.id ? -1 : 1));
+  const categories = new Categories(db);
+  const nodes = await categories.listNodes();
+  const leaf = nodes.find((n) => n.assignable && n.path.includes(' / '))!;
+  const otherLeaf = nodes.find(
+    (n) =>
+      n.assignable &&
+      n.path !== leaf.path &&
+      !n.path.startsWith(leaf.path.split(' / ')[0]!),
+  )!;
+  const decide = async (
+    t: Transaction,
+    kind: string,
+    category: string | null,
+  ) =>
+    repo.classify(
+      t.id,
+      t.revision,
+      { kind, category, reason: 'synthetic decision' },
+      t.owner,
+    );
+  const [lateRimi] = byDescription('Late Rimi');
+  const [earlyRimi] = byDescription('Early Rimi');
+  await decide(lateRimi!, 'personal_expense', leaf.path);
+  await decide(earlyRimi!, 'personal_expense', otherLeaf.path);
+  for (const t of all.filter((t) => t.description === 'Maxima'))
+    await decide(t, 'personal_expense', leaf.path);
+  await decide(byDescription('Salary')[0]!, 'non_personal', null);
+  await decide(byDescription('Card check')[0]!, 'internal_transfer', null);
+  await decide(
+    byDescription('Katya taxi')[0]!,
+    'personal_expense',
+    'Unspecified',
+  );
+  const patterns = new SpendingPatterns(db);
+  const refreshed = await repo.list();
+  const jacket = refreshed.find(
+    (t) => t.description === 'Fully refunded jacket',
+  )!;
+  await patterns.set(
+    jacket.id,
+    jacket.revision,
+    'rodion',
+    'exceptional',
+    'synthetic',
+  );
+  const tag = await categories.saveTag('holiday');
+  const katyaIkea = refreshed.find((t) => t.description === 'Katya IKEA')!;
+  await categories.setTags('katya', katyaIkea.id, [tag.id]);
+  const refunds = new Refunds(db);
+  await refunds.link({
+    debitId: jacket.id,
+    creditId: refreshed.find((t) => t.description === 'Jacket refund')!.id,
+    expectedDebitRevision: jacket.revision,
+    expectedCreditRevision: 0,
+    owner: 'rodion',
+    reason: 'synthetic full refund',
+  });
+  await refunds.link({
+    debitId: katyaIkea.id,
+    creditId: refreshed.find((t) => t.description === 'IKEA refund')!.id,
+    expectedDebitRevision: katyaIkea.revision,
+    expectedCreditRevision: 0,
+    owner: 'katya',
+    reason: 'synthetic partial refund',
+  });
+  await db.query(
+    `INSERT INTO receipt_jobs(id,owner,chat_id,message_id,file_id,state,transaction_id)
+     VALUES($1,'rodion','chat',1,'file','matched',$2)`,
+    [randomUUID(), lateRimi!.id],
+  );
+  await new FxRates(db).insert({
+    source: 'synthetic-market',
+    base: 'EUR',
+    target: 'UAH',
+    rate: '50',
+    asOf: '2026-09-06',
+    retrievedAt: '2026-09-07T00:00:00Z',
+    version: 1,
+    provenance: 'Synthetic daily rate',
+  });
+  return { leaf, otherLeaf, tag };
+}
+
+/** What the in-memory pipeline says the query should list, in list order. */
+async function expected(repo: Repository, query: string) {
+  const params = new URLSearchParams(query);
+  const owner = params.get('owner') as 'rodion' | 'katya' | null;
+  const preferences = reviewPreferences(await readAppSettings(repo.db), params);
+  const listed = await repo.list(owner ?? undefined);
+  const hiddenRefunds = new Set(
+    preferences.hideRefunds
+      ? listed
+          .filter(
+            (t) =>
+              t.refund?.role === 'refund' &&
+              t.refund.reductions.every((item) => item.discrepancy === null),
+          )
+          .map((t) => t.id)
+      : [],
+  );
+  const kinds = params.get('kinds')?.split(',');
+  const q = params.get('q')?.toLowerCase();
+  return filterTransactions(listed, parseFilters(params))
+    .filter(
+      (t) =>
+        !hiddenByReviewPreferences(t, preferences) &&
+        !hiddenRefunds.has(t.id) &&
+        (params.get('review') !== '1' || needsSpendingReview(t, true, true)) &&
+        (!kinds || kinds.includes(t.kind)) &&
+        (!q || t.description.toLowerCase().includes(q)),
+    )
+    .map((t) => t.id);
+}
+
+async function paged(repo: Repository, query: string, limit: number) {
+  const ids: string[] = [];
+  let cursor: string | null = null;
+  let total = -1;
+  for (let guard = 0; guard < 100; guard++) {
+    const params = new URLSearchParams(query);
+    params.set('limit', String(limit));
+    if (cursor) params.set('cursor', cursor);
+    const page = await pageTransactions(
+      repo,
+      parsePageQuery(params),
+      reviewPreferences(await readAppSettings(repo.db), params),
+    );
+    if (total === -1) total = page.total;
+    else assert.equal(page.total, total, 'total is stable across pages');
+    assert.ok(page.transactions.length <= limit);
+    ids.push(...page.transactions.map((t) => t.id));
+    cursor = page.nextCursor;
+    if (!cursor) break;
+  }
+  return { ids, total };
+}
+
+test('a Riga day starts at the right instant either side of the clock change', () => {
+  assert.equal(rigaDayStart('2026-08-31'), '2026-08-30T21:00:00.000Z');
+  assert.equal(rigaDayStart('2026-12-01'), '2026-11-30T22:00:00.000Z');
+  // The night the clocks go back: the day still begins at Riga midnight.
+  assert.equal(rigaDayStart('2026-10-25'), '2026-10-24T21:00:00.000Z');
+  assert.equal(rigaDayStart('2026-10-26'), '2026-10-25T22:00:00.000Z');
 });
 
-test('an account is recognisable from what the owner named it, not only from the connector', () => {
-  assert.equal(
-    accountIdentity('monobank', 'UAH', 'Monobank black').tone,
-    'ink',
-  );
-  assert.equal(
-    accountIdentity('monobank', 'UAH', 'Monobank white').tone,
-    'paper',
-  );
-  assert.equal(
-    accountIdentity('enablebanking', 'USD', 'Revolut USD').tone,
-    'violet',
-  );
-  assert.equal(accountIdentity('manual_cash', 'UAH', null).tone, 'amber');
-  assert.equal(accountIdentity('manual_cash', 'UAH', null).name, 'Cash');
-  assert.equal(accountIdentity('monobank', 'EUR', '').name, 'Monobank');
-  // The owner banks with Revolut, not with the aggregator that fetched the row,
-  // so the integration's name never reaches a label or a tooltip.
-  const aggregated = accountIdentity('enablebanking', 'USD', '');
-  assert.equal(aggregated.name, 'USD account');
-  assert.ok(!/enable/i.test(aggregated.name + aggregated.detail));
-  const revolut = accountIdentity('enablebanking', 'USD', 'Revolut USD');
-  assert.equal(revolut.name, 'Revolut USD');
-  assert.ok(!/enable/i.test(revolut.name + revolut.detail));
-  // The currency is not repeated when the owner's own name already says it.
-  assert.equal(revolut.detail, '');
-  assert.equal(
-    accountIdentity('monobank', 'EUR', 'Black card').detail,
-    'Monobank · EUR',
-  );
-  assert.equal(
-    accountIdentity('monobank', 'UAH', 'Monobank black').icon,
-    'card',
-  );
-  assert.equal(accountIdentity('manual_cash', 'UAH', null).icon, 'cash');
-  // Every tone a chip can carry has to have a look defined for it.
-  for (const source of ['monobank', 'enablebanking', 'manual_cash', 'other'])
-    for (const label of ['', 'Monobank black', 'Revolut USD', 'Біла картка'])
-      assert.ok(
-        accountToneClasses[accountIdentity(source, 'UAH', label).tone],
-        `${source} ${label}`,
-      );
-});
-
-test('a card payment shows its clock time; a statement line only claims a day', () => {
-  const card = bookedMoment('2026-09-14T18:45:00.000Z', 'monobank');
-  assert.equal(card.day, '14 Sept 2026');
-  assert.equal(card.time, '21:45');
-  assert.equal(
-    bookedMoment('2026-09-14T18:45:00.000Z', 'enablebanking').time,
-    null,
-  );
-  assert.equal(
-    bookedMoment('2026-09-14T00:00:00.000Z', 'manual_cash').time,
-    null,
-  );
-  // An unparseable timestamp is shown as it arrived rather than invented.
-  assert.equal(bookedMoment('not a date', 'monobank').day, 'not a date');
-  assert.equal(bookedMoment('not a date', 'monobank').time, null);
-});
-
-test('the tag editor saves the whole set, while the plain form still adds one', async () => {
+test('every page of the SQL list agrees with the in-memory filters, in order', async () => {
   const db = memoryDatabase();
   await migrate(db);
   const repo = new Repository(db);
-  await repo.importBatch([
-    {
-      source: 'synthetic',
-      sourceId: 'a',
-      accountId: 'a',
-      owner: 'rodion',
-      amountMinor: '-100',
-      currency: 'UAH',
-      bookedAt: '2026-08-01T12:00:00Z',
-      description: 'Synthetic payment',
-    },
-  ]);
-  const payment = (await repo.list('rodion'))[0]!;
-  const categories = new Categories(db);
-  const groceries = await categories.saveTag('Groceries');
-  const gift = await categories.saveTag('Gift');
-  const trip = await categories.saveTag('Trip');
-  const config = { port: 0, mode: 'demo' as const, release: 'test' };
-  const server = web(repo, config, () => {});
-  await new Promise<void>((resolve) =>
-    server.listen(0, '127.0.0.1', () => resolve()),
-  );
-  config.port = (server.address() as { port: number }).port;
-  const base = `http://127.0.0.1:${config.port}`;
-  const names = async () =>
-    (await categories.tags('rodion', payment.id)).map((tag) => tag.name).sort();
+  const { leaf, tag } = await seed(repo);
+  const branch = leaf.path.split(' / ')[0]!;
+  const queries = [
+    '',
+    'owner=rodion',
+    'owner=katya',
+    'review=1',
+    'review=1&owner=katya',
+    'from=2026-09-01',
+    'to=2026-08-31',
+    'from=2026-09-05&to=2026-09-05',
+    `category=${encodeURIComponent(leaf.path)}`,
+    `category=${encodeURIComponent(branch)}`,
+    'pattern=exceptional',
+    'pattern=unreviewed&owner=rodion',
+    'scope=spending',
+    'scope=excluded&includeNonPersonal=1&includeTransfers=1',
+    'scope=unresolved',
+    'kinds=personal_expense,non_personal&includeNonPersonal=1',
+    'q=rimi',
+    'q=IKEA',
+    'currency=EUR',
+    'includeRefunds=1',
+    'includeZeroAmount=1',
+    'includeZeroAmount=1&includeRefunds=1&includeNonPersonal=1&includeTransfers=1',
+    'includeZeroAmount=0&includeRefunds=0',
+  ];
   try {
-    const bootstrap = (await (await fetch(base + '/api/bootstrap')).json()) as {
-      csrf: string;
-    };
-    const post = (values: Record<string, string>) =>
-      fetch(base + '/tags', {
-        method: 'POST',
-        body: new URLSearchParams({ csrf: bootstrap.csrf, ...values }),
-        redirect: 'manual',
-      });
-    await post({ id: payment.id, tagId: groceries.id });
-    await post({ id: payment.id, tagId: gift.id });
-    assert.deepEqual(await names(), ['Gift', 'Groceries']);
-    // The editor saves what it shows, so a tag it dropped has to disappear.
-    await post({ id: payment.id, tagIds: [groceries.id, trip.id].join(',') });
-    assert.deepEqual(await names(), ['Groceries', 'Trip']);
-    // Removing the last tag is a real save, not an empty request to ignore.
-    await post({ id: payment.id, tagIds: '' });
-    assert.deepEqual(await names(), []);
+    for (const query of queries) {
+      const want = await expected(repo, query);
+      for (const limit of [3, 7, 200]) {
+        const got = await paged(repo, query, limit);
+        assert.deepEqual(got.ids, want, `${query} with pages of ${limit}`);
+        assert.equal(got.total, want.length, `${query} total`);
+        assert.equal(new Set(got.ids).size, got.ids.length, `${query} unique`);
+      }
+    }
+    // The side filters that the in-memory pipeline never had.
+    const all = await repo.list();
+    const tagged = (await paged(repo, `tag=${tag.id}`, 50)).ids;
+    assert.deepEqual(
+      tagged,
+      all.filter((t) => t.description === 'Katya IKEA').map((t) => t.id),
+    );
+    const withReceipt = (await paged(repo, 'receipts=with', 50)).ids;
+    assert.deepEqual(
+      withReceipt,
+      all.filter((t) => t.description === 'Late Rimi').map((t) => t.id),
+    );
+    const withRefund = (
+      await paged(repo, 'refunds=with&includeRefunds=1&includeZeroAmount=1', 50)
+    ).ids;
+    assert.deepEqual(
+      new Set(
+        all.filter((t) => withRefund.includes(t.id)).map((t) => t.description),
+      ),
+      new Set([
+        'Katya IKEA',
+        'IKEA refund',
+        'Fully refunded jacket',
+        'Jacket refund',
+      ]),
+    );
+    // The household default hides the credit and the purchase that came to nothing.
+    const defaults = (await paged(repo, '', 50)).ids;
+    for (const hidden of [
+      'Jacket refund',
+      'Fully refunded jacket',
+      'Card check',
+      'Salary',
+    ])
+      assert.ok(
+        !all
+          .filter((t) => t.description === hidden)
+          .some((t) => defaults.includes(t.id)),
+        `${hidden} is hidden by default`,
+      );
+    // The review list: unresolved outflows, the hold, the root catch-all; not income, not decided rows.
+    const reviewIds = (await paged(repo, 'review=1', 50)).ids;
+    const review = all.filter((t) => reviewIds.includes(t.id));
+    assert.ok(review.some((t) => t.description === 'Hold at Narvesen'));
+    assert.ok(review.some((t) => t.description === 'Katya taxi'));
+    assert.ok(!review.some((t) => t.description === 'Salary'));
+    assert.ok(!review.some((t) => t.description === 'Late Rimi'));
+    assert.ok(review.every((t) => BigInt(t.amountMinor) < 0n));
   } finally {
-    // `fetch` keeps its sockets alive, so closing waits forever without this.
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
     await db.close();
   }
 });
 
-test('a category search shows what was typed, and ranks a leading match first', () => {
-  const groceries = (search: string) =>
-    searchMatch('Food / Groceries', search, ['Food', 'Groceries']);
-  const parking = (search: string) =>
-    searchMatch('Transport / Car / Parking', search, [
-      'Transport',
-      'Car',
-      'Parking',
-    ]);
-  // What the owner types has to appear; a loose letter sequence is not a match.
-  assert.ok(groceries('groc') > 0);
-  assert.equal(parking('groc'), 0);
-  assert.ok(parking('park') > 0);
-  // Every word must be found, so a second word narrows rather than widens.
-  assert.ok(groceries('food groc') > 0);
-  assert.equal(groceries('food parking'), 0);
-  // A match at the start outranks one buried in the middle.
-  assert.ok(groceries('food') > groceries('roceries'));
-  // An empty search keeps everything, and case never decides.
-  assert.equal(groceries('   '), 1);
-  assert.ok(groceries('GROCERIES') > 0);
+test('the amount range compares what a payment finally cost, in the display currency', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  const repo = new Repository(db);
+  await seed(repo);
+  try {
+    const preferences = reviewPreferences(
+      await readAppSettings(db),
+      new URLSearchParams(),
+    );
+    const run = (query: string) =>
+      pageTransactions(
+        repo,
+        parsePageQuery(new URLSearchParams(query)),
+        preferences,
+      );
+    // Katya's IKEA purchase: 70.00 EUR less a 40.00 EUR refund = 30.00 EUR, at 50 = 1,500.00 UAH.
+    const around = await run('display=UAH&min=149000&max=151000');
+    assert.deepEqual(
+      around.transactions.map((t) => t.description),
+      ['Katya IKEA'],
+    );
+    assert.equal(around.total, 1);
+    assert.equal(around.reporting?.currency, 'UAH');
+    assert.equal(around.reporting?.rows[0]?.netAmountMinor, '-150000');
+    // The gross 70.00 EUR would be 3,500.00 UAH; that is not what it cost.
+    const gross = await run('display=UAH&min=340000&max=360000');
+    assert.equal(gross.total, 0);
+    // A payment without a conversion (GBP has no rate) never satisfies a bound.
+    const everything = await run('display=UAH&min=0');
+    assert.ok(!everything.transactions.some((t) => t.currency === 'GBP'));
+    assert.ok(everything.total > 10);
+    // Paging through an amount-filtered list is the same keyset walk.
+    const first = await run('display=UAH&min=0&limit=5');
+    assert.equal(first.transactions.length, 5);
+    assert.ok(first.nextCursor);
+    const second = await run(
+      `display=UAH&min=0&limit=5&cursor=${first.nextCursor}`,
+    );
+    assert.equal(second.transactions[0]!.id, everything.transactions[5]!.id);
+    assert.equal(second.total, everything.total);
+  } finally {
+    await db.close();
+  }
+});
+
+test('the endpoint pages the household, enriches only the page and rejects bad grammar', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  const repo = new Repository(db);
+  const { tag } = await seed(repo);
+  const config = { port: 0, mode: 'demo' as const, release: 'test' };
+  const server = web(repo, config, () => {});
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  config.port = (server.address() as { port: number }).port;
+  const base = `http://127.0.0.1:${config.port}/api/transactions`;
+  const get = async (query: string) => {
+    const response = await fetch(`${base}?${query}`);
+    return { status: response.status, body: await response.json() };
+  };
+  try {
+    const page = await get(
+      'display=UAH&limit=4&includeRefunds=1&includeZeroAmount=1',
+    );
+    assert.equal(page.status, 200);
+    assert.equal(page.body.transactions.length, 4);
+    assert.equal(typeof page.body.total, 'number');
+    assert.ok(page.body.nextCursor);
+    assert.equal(page.body.reporting.currency, 'UAH');
+    assert.equal(page.body.reporting.rows.length, 4);
+    assert.ok(Array.isArray(page.body.historicalEstimates));
+    assert.ok(Array.isArray(page.body.triage));
+    // Both members' payments, each with its tags looked up under its own owner.
+    const owners = new Set(
+      page.body.transactions.map((t: Transaction) => t.owner),
+    );
+    assert.deepEqual(owners, new Set(['rodion', 'katya']));
+    const ikea = await get(`tag=${tag.id}&display=EUR`);
+    assert.equal(ikea.body.transactions.length, 1);
+    assert.equal(ikea.body.transactions[0].owner, 'katya');
+    assert.deepEqual(
+      ikea.body.tags[ikea.body.transactions[0].id].map(
+        (t: { name: string }) => t.name,
+      ),
+      ['holiday'],
+    );
+    assert.ok(ikea.body.suggestions[ikea.body.transactions[0].id]);
+    const receipted = await get('receipts=with');
+    assert.equal(receipted.body.receipts[receipted.body.transactions[0].id], 1);
+    // The whole list walks out through the cursor without repeats.
+    const seen = new Set<string>();
+    let cursor = '';
+    let total = 0;
+    do {
+      const step = await get(`limit=6${cursor ? '&cursor=' + cursor : ''}`);
+      total = step.body.total;
+      for (const t of step.body.transactions) {
+        assert.ok(!seen.has(t.id));
+        seen.add(t.id);
+      }
+      cursor = step.body.nextCursor ?? '';
+    } while (cursor);
+    assert.equal(seen.size, total);
+    assert.equal(seen.size, (await expected(repo, '')).length);
+    // Only the signed-in member when asked, as the review screen does by default.
+    const mine = await get('owner=rodion&review=1');
+    assert.ok(
+      mine.body.transactions.every((t: Transaction) => t.owner === 'rodion'),
+    );
+    assert.equal(
+      mine.body.total,
+      (await expected(repo, 'owner=rodion&review=1')).length,
+    );
+    for (const bad of [
+      'owner=someone',
+      'kinds=purchase',
+      'cursor=not-a-uuid',
+      'limit=0',
+      'limit=500',
+      'limit=abc',
+      'min=100',
+      'min=abc&display=UAH',
+      'min=300&max=100&display=UAH',
+      'receipts=maybe',
+      'refunds=maybe',
+      'tag=holiday',
+      'display=uah',
+      'from=2026-13-01',
+    ])
+      assert.equal((await get(bad)).status, 400, bad);
+    assert.equal((await get('review=1')).status, 200);
+  } finally {
+    await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
+    await db.close();
+  }
 });
