@@ -9,8 +9,31 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**f97abac0338d062e21f94a16bd6094171fe51beb**, live since September 17, 2026 at
-schema version 52, deployed with `deploy/release.sh`. It carries PR #54, the
+**4f19583752d532842c41c78114260a1376bd08bb**, live since September 18, 2026 at
+schema version 53, deployed with `deploy/release.sh`. It carries two things.
+PR #57 closes the last silent path for a Telegram answer: with f97abac live
+the owner answered the Facebook question "business, for advertising" and again
+saw nothing, because the model returned a non-personal kind with a category,
+the validator refused the pair although the schema allowed it, and the
+workflow row went `failed` with no log line and no message. A category beside
+a non-personal kind is now dropped, a failed model step logs
+`telegram_reply_failed` with the classifier's own code, and the person is told
+under their message to decide the payment in the app, with the link. A failed
+answer is not retried; answering again starts a fresh one. The release also
+carries the Balances page (commit ac8df3a, merged to main without a pull
+request; see [balances](balances.md)): every account's last stated balance
+with its age, a household total at the daily rates, per-person card order, and
+migration 53 with `account_balances` and `ui_layouts`. The rehearsal on a
+restored copy of the real database reached schema 53 in 36 milliseconds with
+4,165 transactions, 140 active refund links, no expense without a category and
+nothing filed on a heading; on the server 561 application tests passed, 4
+skipped. The release completed in one run; after the switch both services are
+active, the seven import timers are back, the Telegram worker restarted
+cleanly and the ledger holds 4,165 transactions. The Facebook question and
+the two "Iнше" questions from 17 September are still open in the chat.
+
+The release before it, **f97abac0338d062e21f94a16bd6094171fe51beb**, went live
+on September 17, 2026 at schema version 52. It carries PR #54, the
 fix for lost Telegram answers: on 17 September three answers a household
 member gave the bot reached nothing because the refund-question receiver
 consumed each update before checking it was its own, and the clarification
