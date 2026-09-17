@@ -6,6 +6,8 @@ import { useSearchPatch, useUrlSearch } from './lib/navigation';
 import { useDisplayCurrency } from './lib/display-currency';
 import { exponentOf } from './lib/format';
 import {
+  accountOptions,
+  useHouseholdAccounts,
   usePaymentContext,
   usePaymentPages,
   type PaymentFilters,
@@ -93,7 +95,9 @@ export default function Transactions() {
     url.refunds === 'with' || url.refunds === 'without' ? url.refunds : 'all';
   const category = url.category ?? '';
   const tag = url.tag ?? '';
+  const account = url.account ?? '';
   const search = url.q ?? '';
+  const householdAccounts = useHouseholdAccounts(actor);
   const [draft, setDraft] = useDebouncedField(search, (value) =>
     patch({ q: value || undefined }, true),
   );
@@ -143,6 +147,7 @@ export default function Transactions() {
     from,
     to,
     ...(who === 'all' ? {} : { owner: who }),
+    ...(account ? { account } : {}),
     ...(search ? { q: search } : {}),
     ...(category ? { category } : {}),
     ...(kind === 'all' ? {} : { kinds: kind }),
@@ -187,6 +192,7 @@ export default function Transactions() {
     [session.error, pages.error, categories.error].find(Boolean)?.message ?? '';
   const filtered = Boolean(
     who !== 'all' ||
+    account ||
     category ||
     kind !== 'all' ||
     pattern !== 'all' ||
@@ -297,6 +303,20 @@ export default function Transactions() {
                     : owners[member].name,
               })),
             ]}
+          />
+        </Field>
+        <Field label="Account" htmlFor="transactions-account">
+          <Choice
+            id="transactions-account"
+            className="w-full sm:w-56"
+            value={account || 'all'}
+            onChange={(value) =>
+              patch({ account: value === 'all' ? undefined : value })
+            }
+            options={accountOptions(householdAccounts.data, {
+              rodion: owners.rodion.name,
+              katya: owners.katya.name,
+            })}
           />
         </Field>
         <Field

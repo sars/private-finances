@@ -32,6 +32,7 @@ export const paymentParams = [
   'scope',
   'currency',
   'q',
+  'account',
   'kinds',
   'tag',
   'receipts',
@@ -63,6 +64,42 @@ export function paymentSearch(
   params.set('limit', String(limit));
   if (cursor) params.set('cursor', cursor);
   return params.toString();
+}
+
+/** An account as the household names it, for the account filter. */
+export type HouseholdAccount = {
+  source: string;
+  accountId: string;
+  owner: 'rodion' | 'katya';
+  label: string;
+  purpose: string;
+};
+
+/** Both members' accounts, once per session; the filter lists them by name. */
+export function useHouseholdAccounts(actor: string | undefined) {
+  return useQuery({
+    queryKey: ['household-accounts', actor],
+    enabled: Boolean(actor),
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }) =>
+      (await apiGet<{ household: HouseholdAccount[] }>('/api/accounts', signal))
+        .household,
+  });
+}
+
+/** Options for an account filter: every account, then each by its name and
+ * whose it is, in the household's order. */
+export function accountOptions(
+  accounts: HouseholdAccount[] | undefined,
+  names: Record<'rodion' | 'katya', string>,
+) {
+  return [
+    { value: 'all', label: 'Every account' },
+    ...(accounts ?? []).map((a) => ({
+      value: a.accountId,
+      label: `${a.label} · ${names[a.owner]}`,
+    })),
+  ];
 }
 
 export function usePaymentPages(

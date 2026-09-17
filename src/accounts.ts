@@ -177,6 +177,15 @@ export class Accounts {
     ).rows.map(map);
   }
 
+  /** Both members' accounts, for a filter over the household's payments. */
+  async household(): Promise<Account[]> {
+    return (
+      await this.db.query(
+        'SELECT * FROM own_accounts ORDER BY owner,label,source,account_id',
+      )
+    ).rows.map(map);
+  }
+
   async withImpact(actor: Owner) {
     const accounts = await this.list(actor);
     const history = (

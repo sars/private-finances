@@ -46,6 +46,9 @@ export type PageQuery = Filters & {
   review: boolean;
   /** Case-insensitive fragment of the description. */
   q?: string;
+  /** One account, by the importer's account id; the label is the owner's
+   * own name for it and changes, the id does not. */
+  account?: string;
   kinds?: Kind[];
   /** A tag id the payment must carry. */
   tag?: string;
@@ -68,6 +71,8 @@ export function parsePageQuery(params: URLSearchParams): PageQuery {
   const filters = parseFilters(params);
   const q = params.get('q')?.trim() || undefined;
   if (q && q.length > 200) throw new Error('invalid_search');
+  const account = params.get('account') || undefined;
+  if (account && account.length > 200) throw new Error('invalid_account');
   const kindsText = params.get('kinds') || undefined;
   const kinds = kindsText?.split(',').map((k) => k.trim());
   if (kinds && (!kinds.length || kinds.some((k) => !KINDS.includes(k as Kind))))
@@ -105,6 +110,7 @@ export function parsePageQuery(params: URLSearchParams): PageQuery {
     owner: owner as Owner | undefined,
     review: params.get('review') === '1',
     q,
+    account,
     kinds: kinds as Kind[] | undefined,
     tag,
     receipts: presence('receipts'),
@@ -211,6 +217,7 @@ export async function pageClause(
   if (query.kinds) c.add((n) => `t.kind=ANY(${n(query.kinds)}::text[])`);
   if (query.q)
     c.add((n) => `position(lower(${n(query.q)}) in lower(t.description)) > 0`);
+  if (query.account) c.add((n) => `t.account_id=${n(query.account)}`);
   if (query.tag)
     c.add(
       (n) =>

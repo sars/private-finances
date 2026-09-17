@@ -384,6 +384,7 @@ export function web(
         json(200, {
           accounts: await service.withImpact(actor),
           suggestions: await service.suggestions(actor),
+          household: await service.household(),
         });
         return;
       }
