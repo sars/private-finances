@@ -38,7 +38,6 @@ export interface HistoricalSpendingEstimate {
   /** A heuristic/model score, not a calibrated probability of correctness. */
   confidence: number | null;
   reason: string;
-  reviewPriority: 'large' | 'missing_fx' | 'normal' | null;
   provenance: {
     mcc: number | null;
     proposalId: string | null;
@@ -123,7 +122,6 @@ export function estimateHistoricalSpending(
     method: null,
     confidence: null,
     reason: 'outside_historical_scope',
-    reviewPriority: null,
     provenance: {
       ...window,
       mcc,
@@ -145,8 +143,6 @@ export function estimateHistoricalSpending(
   )
     return result;
   result.status = 'needs_review';
-  result.reviewPriority =
-    uah === null ? 'missing_fx' : BigInt(uah) < -300000n ? 'large' : 'normal';
   if (uah === null || BigInt(uah) >= 0n) {
     result.reason = 'missing_or_invalid_daily_uah_conversion';
     return result;
@@ -202,33 +198,26 @@ export function estimateHistoricalSpending(
     result.reason = 'conflicting_merchant_and_model_evidence';
     return result;
   }
-  // Large payments need a specific MCC corroborating the cached proposal, not a guess alone.
-  if (
-    validProposal &&
-    (result.reviewPriority !== 'large' || broadCategory === proposal.category)
-  ) {
+  // The 3,000 UAH line that once demanded a specific merchant for a large
+  // payment was retired at the owner's instruction on September 17, 2026: a
+  // large payment is estimated from the same evidence as any other.
+  if (validProposal) {
     return {
       ...result,
       status: 'estimated',
       category: proposal.category,
       confidence: proposal.confidence,
       method: 'cached_model',
-      reviewPriority: null,
       reason: 'unconfirmed_cached_model_estimate',
     };
   }
-  if (
-    broadCategory &&
-    input.categoryPaths.includes(broadCategory) &&
-    result.reviewPriority !== 'large'
-  ) {
+  if (broadCategory && input.categoryPaths.includes(broadCategory)) {
     return {
       ...result,
       status: 'estimated',
       category: broadCategory,
       confidence: 0.6,
       method: 'mcc',
-      reviewPriority: null,
       reason: 'merchant_business_category_estimate_not_item_identification',
     };
   }

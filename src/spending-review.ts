@@ -1,7 +1,7 @@
 import type { Transaction } from './repository.js';
 /** The catch-all leaf at the root of the tree. A payment filed here carries no
  * meaning, unlike `Food / Unspecified`, which at least names a branch. */
-const MEANINGLESS_CATEGORY = 'Unspecified';
+export const MEANINGLESS_CATEGORY = 'Unspecified';
 /** Spending review excludes income, zero movements and account exclusions. Browsing may opt into unbooked holds.
  *
  * `includeUnspecified` also returns payments already classified into the root

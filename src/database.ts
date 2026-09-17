@@ -685,6 +685,34 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (44)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=45'))
+        .rows.length
+    ) {
+      // The list screens stop receiving the whole ledger: `transaction-page`
+      // selects and cuts a page in SQL, newest first, so the table gets the
+      // indexes that order and predicate need. Until now `transactions` had
+      // only its primary key and the natural key led by `source`, and
+      // `audit_events.transaction_id` was a foreign key with no index, so a
+      // payment's history and the triage listing scanned the whole table.
+      await tx.query(
+        'CREATE INDEX IF NOT EXISTS transactions_booked ON transactions(booked_at DESC, id)',
+      );
+      await tx.query(
+        'CREATE INDEX IF NOT EXISTS transactions_owner_booked ON transactions(owner, booked_at DESC, id)',
+      );
+      await tx.query(
+        `CREATE INDEX IF NOT EXISTS transactions_needs_review ON transactions(booked_at DESC, id)
+         WHERE amount_minor < 0 AND (kind='unresolved' OR provisional OR category='Unspecified')`,
+      );
+      await tx.query(
+        'CREATE INDEX IF NOT EXISTS audit_events_transaction ON audit_events(transaction_id, created_at)',
+      );
+      await tx.query(
+        'CREATE INDEX IF NOT EXISTS receipt_jobs_transaction ON receipt_jobs(transaction_id)',
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (45)');
+    }
   });
 }
 

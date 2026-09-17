@@ -109,7 +109,6 @@ export type ReviewData = {
     reason: string;
     confidence: number | null;
   }>;
-  priorities?: Record<string, 'large' | 'missing_fx' | 'normal'>;
   triage?: Array<{
     transaction_id: string;
     revision: number;

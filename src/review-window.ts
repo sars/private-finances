@@ -38,9 +38,3 @@ export function withinReviewWindow(
     return time >= Date.parse(period.to) && time <= now.getTime();
   return day >= '2026-01-01' && time < Date.parse(period.from);
 }
-export function reviewPriority(
-  uahMinor: string | null,
-): 'large' | 'missing_fx' | 'normal' {
-  if (uahMinor === null) return 'missing_fx';
-  return BigInt(uahMinor) < -300000n ? 'large' : 'normal';
-}

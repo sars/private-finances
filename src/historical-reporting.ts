@@ -1,4 +1,3 @@
-import { reviewPriority } from './review-window.js';
 import { Categories, assignablePaths, categoryPath } from './categories.js';
 import { convertedSpending } from './analytics.js';
 import {
@@ -81,9 +80,6 @@ export async function historicalReporting(
       day < window.cutoffDate
     ) {
       projection.status = 'needs_review';
-      projection.reviewPriority = reviewPriority(
-        fx?.convertedAmountMinor ?? null,
-      );
       projection.reason = 'protected_manual_decision_or_stale_evidence';
     }
     return projection;

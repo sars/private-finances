@@ -128,12 +128,11 @@ test('large unknown payments and transfer MCCs remain review even with confident
       'needs_review',
     );
   }
+  // The 3,000 UAH line was retired on September 17, 2026: a large payment is
+  // estimated from the same evidence as a small one.
   const input = example();
   input.transaction.amountMinor = '-300001';
-  assert.equal(
-    estimateHistoricalSpending(input, options).reviewPriority,
-    'large',
-  );
+  assert.equal(estimateHistoricalSpending(input, options).status, 'estimated');
   input.transaction.amountMinor = '-300000';
   assert.equal(estimateHistoricalSpending(input, options).status, 'estimated');
   input.transaction.description = 'Переказ на картку';
@@ -142,14 +141,13 @@ test('large unknown payments and transfer MCCs remain review even with confident
     'needs_review',
   );
 });
-test('missing exact daily UAH conversion cannot bypass manual prioritization', () => {
+test('missing exact daily UAH conversion keeps a payment in review', () => {
   const input = example();
   input.transaction.currency = 'EUR';
   input.uah.amountMinor = null;
-  assert.equal(
-    estimateHistoricalSpending(input, options).reviewPriority,
-    'missing_fx',
-  );
+  const result = estimateHistoricalSpending(input, options);
+  assert.equal(result.status, 'needs_review');
+  assert.equal(result.reason, 'missing_or_invalid_daily_uah_conversion');
 });
 test('current plausible proposal can estimate; stale, renamed, conflict and malformed scores cannot', () => {
   const input = example();
@@ -216,9 +214,8 @@ test('large estimates require both specific merchant MCC and matching cached pro
     },
   };
   assert.equal(estimateHistoricalSpending(input, options).status, 'estimated');
+  // Since September 17, 2026 the amount no longer demands a specific merchant:
+  // the cached proposal alone estimates a large payment as it does a small one.
   input.sourceDetails = {};
-  assert.equal(
-    estimateHistoricalSpending(input, options).reviewPriority,
-    'large',
-  );
+  assert.equal(estimateHistoricalSpending(input, options).status, 'estimated');
 });
