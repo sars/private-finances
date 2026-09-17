@@ -56,7 +56,7 @@ Cash withdrawal reconciliation remains deferred; it is distinct from entering pu
 
 ## Household assets (PF-020)
 
-Step one is merged as code, not yet deployed: holdings with dated, versioned
+Step one is deployed (release 1ef7b68, schema 51, September 17, 2026): holdings with dated, versioned
 snapshots, exact valuation through the stored daily bank quotes and per-symbol
 prices, the `/assets` screen, and the import of the owner's spreadsheet
 history. Automatic bank balances, the monthly Telegram round with movement
