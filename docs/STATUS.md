@@ -9,8 +9,34 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**1ef7b68b790c84f9d9ad9653f580a7fe3ff8ac45**, live since September 17, 2026 at
-schema version 51, deployed with `deploy/release.sh` by the owner. It carries
+**f97abac0338d062e21f94a16bd6094171fe51beb**, live since September 17, 2026 at
+schema version 52, deployed with `deploy/release.sh`. It carries PR #54, the
+fix for lost Telegram answers: on 17 September three answers a household
+member gave the bot reached nothing because the refund-question receiver
+consumed each update before checking it was its own, and the clarification
+consumer then dropped the answer as a duplicate without a log line. The
+receiver now consumes only what it matches; every household message leaves an
+outcome on its `telegram_updates` row and the poller logs every outcome other
+than accepted; a reply aimed at one of the bot's messages that reaches no open
+question, or whose payment moved on, is answered under it with why through the
+new `telegram_notes` queue; and each question and receipt names the payment's
+account and the bank's merchant category. Migration 52 creates that one empty
+table. The rehearsal on a restored copy of the real database reached schema 52
+in 31 milliseconds with 4,165 transactions, 140 active refund links, no
+expense without a category and nothing filed on a heading; on the server 559
+application tests passed, 4 skipped. The first attempt stopped at "pausing
+imports and the worker" because a Monobank import was running; the second run
+completed once it had finished. After the switch both services are active,
+the seven import timers are back, the Telegram worker started cleanly, the
+ledger holds 4,165 transactions and `telegram_notes` exists and is empty.
+The three questions from 17 September are still open in the chat and can be
+answered again by either member; the two "Iнше" payments the owner named as
+the intercom fee are unresolved until someone does. Details in
+[the incident](incidents/2026-09-17-answers-taken-by-refund-flow.md) and
+[Telegram replies](telegram-replies.md).
+
+The release before it, **1ef7b68b790c84f9d9ad9653f580a7fe3ff8ac45**, went live
+on September 17, 2026 at schema version 51, deployed by the owner. It carries
 the household-assets increment (PR #51; see [assets](assets.md)): holdings
 with dated, versioned snapshots, per-symbol prices, the `/assets` screen and
 the spreadsheet import. Migration 51 adds three tables and touches nothing
@@ -308,24 +334,6 @@ whose purchase is on no account we sync, and a 6.00 EUR Riga parking reversal
 with no charge at all. What the matcher still will not decide is recorded in
 [refunds](refunds.md) rather than tracked here, so this section stays current
 rather than growing.
-
-### Implemented, not yet released
-
-A fix for lost Telegram answers, in a pull request from branch
-`worktree-fix+telegram-reply-feedback`, awaits review and release. On 17
-September 2026 three answers a household member gave the bot reached nothing:
-the refund-question receiver consumed each update before checking it was its
-own, so the clarification consumer saw a duplicate and dropped it unlogged. The
-receiver now consumes only what it matches; every household message leaves an
-outcome on its `telegram_updates` row and a log line; a reply the bot cannot
-link to an open question is answered under it with why (`telegram_notes`,
-schema 52); and each question and receipt names the payment's account and the
-bank's merchant category. Details in
-[the incident](incidents/2026-09-17-answers-taken-by-refund-flow.md) and
-[Telegram replies](telegram-replies.md). After release: the three questions
-from 17 September are still open in the chat and can be answered again; the
-owner named the two "Iнше" payments as the intercom fee, which also fits the
-bank's category for them.
 
 ## Live capabilities
 
