@@ -222,7 +222,7 @@ the decision, and a view page that leads with the facts.
 
 - Step 1, merged as PR #30: the endpoint pages, filters and counts in SQL;
   the 3,000 UAH priority is retired everywhere.
-- Step 2: `/review` is the review list — only payments still waiting for a
+- Step 2, merged as PR #31: `/review` is the review list — only payments still waiting for a
   decision, the signed-in member's by default, a search box, no period and no
   visibility toggles (none of them can change a review list). Rows are
   `PaymentRow` on `PagedList`: the account badge with its holder, the day and
@@ -231,7 +231,7 @@ the decision, and a view page that leads with the facts.
   of what waits for the signed-in member. Explanations and AI history stay as
   tabs here and are fetched only when opened. The payment page under
   `/review?id=` is unchanged until step 4.
-- Step 3: `/transactions`, the browsing list on the same `PagedList` and
+- Step 3, merged as PR #32: `/transactions`, the browsing list on the same `PagedList` and
   `PaymentRow`, household by default. The `PeriodPicker` (presets and a
   custom range) and a search box are always in view; behind one Filters
   button sit category (whole branch or leaf), type, pattern, an amount range
@@ -240,7 +240,7 @@ the decision, and a view page that leads with the facts.
   reset. Choosing a type the household hides shows it. Analytics drill links
   land here with the member, period and category prefix. Add cash expense
   lives here, not on Review.
-- Step 4: the payment page split in two. The review page stays at
+- Step 4, merged as PR #33: the payment page split in two. The review page stays at
   `/review?id=` so Telegram's links keep working; its decision block is the
   left, widest column, with what has been said so far inside it above the
   explanation box, and the evidence — receipt, refunds, the bank record —
@@ -249,3 +249,5 @@ the decision, and a view page that leads with the facts.
   the bank record on the right without its cashback line, and Decision
   history and Review this payment in the header. Decision history's back link
   returns to the payment page.
+- All four steps are deployed as `943f05a` on September 17, 2026 (schema 45);
+  see STATUS.
