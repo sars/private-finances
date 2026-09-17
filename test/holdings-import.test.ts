@@ -35,6 +35,15 @@ const document = {
       invested: true,
       liquid: false,
     },
+    {
+      name: 'Bond issue',
+      denomination: 'UAH',
+      kind: 'bond',
+      invested: true,
+      liquid: true,
+      owner: 'katya',
+      maturesOn: '2026-11-18',
+    },
   ],
   snapshots: [
     { name: 'Wallet USD', asOf: '2025-11-28', quantity: '1000' },
@@ -76,6 +85,7 @@ test('a prepared document is validated for shape, loaded once, and a second run 
       prices: [{ symbol: 'UAH', asOf: '2025-11-28', usdPerUnit: 0.025 }],
     },
     { ...document, holdings: [{ ...document.holdings[0], kind: 'castle' }] },
+    { ...document, holdings: [{ ...document.holdings[0], maturesOn: 5 }] },
   ])
     assert.throws(() => parseImportDocument(broken), /import_/);
   const db = memoryDatabase();
@@ -83,8 +93,8 @@ test('a prepared document is validated for shape, loaded once, and a second run 
     await migrate(db);
     const first = await importHoldings(db, parseImportDocument(document));
     assert.deepEqual(first, {
-      holdingsCreated: 4,
-      holdingsSeen: 4,
+      holdingsCreated: 5,
+      holdingsSeen: 5,
       snapshotsWritten: 6,
       snapshotsUnchanged: 0,
       pricesWritten: 3,
@@ -93,14 +103,18 @@ test('a prepared document is validated for shape, loaded once, and a second run 
     const second = await importHoldings(db, parseImportDocument(document));
     assert.deepEqual(second, {
       holdingsCreated: 0,
-      holdingsSeen: 4,
+      holdingsSeen: 5,
       snapshotsWritten: 0,
       snapshotsUnchanged: 6,
       pricesWritten: 0,
       pricesUnchanged: 3,
     });
     const service = new Holdings(db);
-    assert.equal((await service.list()).length, 4);
+    assert.equal((await service.list()).length, 5);
+    assert.equal(
+      (await service.list()).find((h) => h.name === 'Bond issue')!.maturesOn,
+      '2026-11-18',
+    );
     assert.deepEqual(await service.snapshotDates(), [
       '2025-11-28',
       '2025-12-26',

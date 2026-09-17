@@ -21,7 +21,8 @@ Layout this reads, and nothing else about the workbook:
 
 An optional mapping file, kept outside Git, refines what the sheet cannot say:
     {"<sheet name>": {"name": "…", "kind": "bank", "group": "…",
-                      "owner": "rodion", "archived": true, "skip": false}}
+                      "owner": "rodion", "maturesOn": "2026-11-18",
+                      "archived": true, "skip": false}}
 
 Requires openpyxl (`python3 -m pip install --user openpyxl`).
 """
@@ -125,7 +126,7 @@ def read_assets(sheet, mapping: dict):
             "invested": bool(rules.get("invested", invested)),
             "liquid": bool(rules.get("liquid", liquid)),
         }
-        for key in ("group", "owner", "note"):
+        for key in ("group", "owner", "note", "maturesOn"):
             if rules.get(key) is not None:
                 holding[key] = rules[key]
         if rules.get("archived"):

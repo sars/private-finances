@@ -24,6 +24,7 @@ export interface ImportDocument {
     note?: string | null;
     archived?: boolean;
     sortOrder?: number;
+    maturesOn?: string | null;
   }>;
   snapshots: Array<{ name: string; asOf: string; quantity: string }>;
   prices: Array<{ symbol: string; asOf: string; usdPerUnit: string }>;
@@ -57,7 +58,10 @@ export function parseImportDocument(raw: unknown): ImportDocument {
       typeof holding.invested !== 'boolean' ||
       typeof holding.liquid !== 'boolean' ||
       (holding.kind !== undefined &&
-        !HOLDING_KINDS.includes(holding.kind as HoldingKind))
+        !HOLDING_KINDS.includes(holding.kind as HoldingKind)) ||
+      (holding.maturesOn !== undefined &&
+        holding.maturesOn !== null &&
+        typeof holding.maturesOn !== 'string')
     )
       throw new Error('import_invalid_holding');
   }
@@ -117,6 +121,7 @@ export async function importHoldings(
       note: entry.note ?? null,
       archived: entry.archived ?? false,
       sortOrder: entry.sortOrder ?? 0,
+      maturesOn: entry.maturesOn ?? null,
     });
     byName.set(created.name, created);
     summary.holdingsCreated += 1;
