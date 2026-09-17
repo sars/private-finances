@@ -9,8 +9,25 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**c6bf2f2b73b1bc4ff1434be2ade5bebfc3c77502**, live since September 18, 2026 at
-schema version 53, deployed with `deploy/release.sh`. It changes one file
+**872511b79eb289cea78e57ad79bedfd117c29118**, live since September 18, 2026 at
+schema version 53, deployed with `deploy/release.sh`. It carries PR #59: the
+reaction a saved Telegram answer receives is 👍, because Telegram accepts only
+a fixed set of emoji from a bot and refused the 🙌 used since the flow shipped
+with `REACTION_INVALID`; the refusal was swallowed as a courtesy, so with every
+other path fixed the owner still saw "no reaction" on three answers that had
+in fact been saved and confirmed. A probe from the server showed 🙌 refused
+and 👍 accepted on the same message. A refused reaction is now logged as
+`telegram_reaction_failed`. No migration: the rehearsal on a restored copy
+reached schema 53 in 37 milliseconds with 4,165 transactions, 140 active
+refund links, no expense without a category and nothing filed on a heading;
+570 application tests passed on the server, 4 skipped. The release completed
+in one run; after the switch both services are active, the seven import
+timers are back, the Telegram worker restarted cleanly and the ledger holds
+4,165 transactions. The Facebook question and the two "Iнше" questions from
+17 September are answered and decided.
+
+The release before it, **c6bf2f2b73b1bc4ff1434be2ade5bebfc3c77502**, went live
+on September 18, 2026 at schema version 53. It changes one file
 against the release before it — this document — and is recorded because the
 running release must be one anybody can name. On the server 570 application
 tests passed, 4 skipped; the rehearsal on a restored copy of the real database
