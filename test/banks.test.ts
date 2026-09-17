@@ -59,7 +59,8 @@ test('a bank the provider registers under a longer name is still named as the ow
     accountLabel('lhv', 'EUR', { product: 'Current account' }),
     'LHV EUR',
   );
-  assert.equal(accountLabel('lhv', 'XXX'), 'LHV multi-currency');
+  assert.equal(accountLabel('lhv', 'XXX'), 'LHV');
+  assert.equal(accountLabel('lhv', 'XXX', { details: 'Rodion Salnik' }), 'LHV');
   for (const bank of BANKS) assert.ok(bank.label.length <= bank.name.length);
 });
 

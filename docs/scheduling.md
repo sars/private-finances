@@ -63,7 +63,9 @@ longer valid (for example until a new migration's recovery drill passes).
 
 Allowed instances: `monobank-rodion`, `monobank-katya`, and
 `enablebanking-<rodion|katya>-<wise|revolut|swedbank|lhv>`, following the slugs in
-`src/connectors/banks.ts`. Each bank is isolated. Enable only the specific timer whose credentials, owner,
+`src/connectors/banks.ts`. LHV keeps the default six-hour cadence — no
+`half-hourly` marker — because the bank enforces the PSD2 allowance of four
+unattended calls a day per account (see historical-imports.md). Each bank is isolated. Enable only the specific timer whose credentials, owner,
 account scope and pilot reconciliation have been verified. Example after all
 gates: `systemctl enable --now private-finances-sync@monobank-rodion.timer`.
 Enable Banking additionally needs that owner's valid consent session.

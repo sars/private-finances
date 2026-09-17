@@ -780,6 +780,24 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (49)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=50'))
+        .rows.length
+    ) {
+      // The first LHV account arrived holding several currencies, with the
+      // holder's own name as the provider's only descriptor, and registered
+      // under a generated label made of the bank and that name. The owner
+      // opened the account for the household's personal spending. Only a
+      // label the importer generated and nobody has edited is renamed.
+      await tx.query(
+        `UPDATE own_accounts a SET label='LHV', purpose='personal', revision=a.revision+1
+         WHERE a.source='enablebanking' AND a.revision=0 AND a.purpose='unreviewed'
+           AND a.label LIKE 'LHV %' AND a.label NOT LIKE 'LHV ___'
+           AND EXISTS (SELECT 1 FROM bank_import_windows w
+                       WHERE w.account_id=a.account_id AND w.connection LIKE 'enablebanking:%:lhv')`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (50)');
+    }
   });
 }
 

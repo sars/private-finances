@@ -64,15 +64,15 @@ test('XXX is the provider saying the account holds no single currency', () => {
   assert.equal(isMultiCurrency('EUR'), false);
 });
 
-test('a multi-currency account is named for what it is, never "Swedbank XXX"', () => {
+test('a multi-currency account is named after the bank alone, never "Swedbank XXX"', () => {
   assert.equal(
     accountLabel('swedbank', 'XXX', { product: 'CURRENT' }),
-    'Swedbank current account',
+    'Swedbank',
   );
-  assert.equal(accountLabel('swedbank', 'XXX'), 'Swedbank multi-currency');
+  assert.equal(accountLabel('swedbank', 'XXX'), 'Swedbank');
   assert.equal(
     accountLabel('swedbank', 'XXX', { details: 'Savings' }),
-    'Swedbank Savings',
+    'Swedbank',
   );
   // A single-currency account is untouched by any of this.
   assert.equal(accountLabel('wise', 'USD'), 'Wise USD');
@@ -91,7 +91,7 @@ test('payments on a multi-currency account keep each their own currency', async 
   );
   const [account] = await bank.accounts();
   assert.equal(account!.currency, 'XXX');
-  assert.equal(account!.label, 'Swedbank current account');
+  assert.equal(account!.label, 'Swedbank');
   const rows = await bank.transactions(
     account!,
     new Date('2026-08-17'),
