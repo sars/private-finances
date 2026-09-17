@@ -316,15 +316,22 @@ export class TelegramReplyWorkflow {
     });
     if (!item) return 'idle';
     // A reaction is a courtesy that must never hold up the decision, which is
-    // already committed; the reply that follows carries the real answer.
+    // already committed; the reply that follows carries the real answer. It is
+    // 👍 because Telegram lets a bot react only with a fixed set of emoji: the
+    // 🙌 used until 18 September 2026 was refused as REACTION_INVALID on every
+    // saved answer, and the refusal was swallowed here, so nobody knew.
     if (positiveId(item.row.input_message_id))
       await this.transport
         .react(
           this.settings.chatId,
           Number(item.row.input_message_id),
-          item.outcome === 'applied' ? '🙌' : '👀',
+          item.outcome === 'applied' ? '👍' : '👀',
         )
-        .catch(() => undefined);
+        .catch(() =>
+          process.stdout.write(
+            `${JSON.stringify({ event: 'telegram_reaction_failed', workflowId: String(item.row.id) })}\n`,
+          ),
+        );
     return item.outcome;
   }
   /**
