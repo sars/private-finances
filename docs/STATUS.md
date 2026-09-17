@@ -9,12 +9,30 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-Merged after this release and not yet deployed: nothing at the time of
-writing. The household-assets increment (PF-020 step one, migration 51, the
-`/assets` screen; see [assets](assets.md)) is on its pull request and awaits
-review; its migration adds three tables and touches nothing existing. The
-owner's spreadsheet history is loaded with `holdings-import-cli` after the
-switch, not by the migration.
+**1ef7b68b790c84f9d9ad9653f580a7fe3ff8ac45**, live since September 17, 2026 at
+schema version 51, deployed with `deploy/release.sh` by the owner. It carries
+the household-assets increment (PR #51; see [assets](assets.md)): holdings
+with dated, versioned snapshots, per-symbol prices, the `/assets` screen and
+the spreadsheet import. Migration 51 adds three tables and touches nothing
+existing; the rehearsal on a restored copy of the real database reached schema
+51 in 72 milliseconds with 4,165 transactions, 140 active refund links, no
+expense without a category and nothing filed on a heading. On the server 556
+application tests passed, 4 skipped.
+
+The first attempt stopped at "pausing imports and the worker": the LHV and
+Monobank timers had fired at the moment the script reached that step and one
+import outlasted the five-minute wait, so the script exited without switching
+and left the timers and the Telegram worker stopped, as designed. The second
+run, minutes later, found nothing running and completed. After the switch the
+owner loaded the spreadsheet history with `holdings-import-cli` through
+`systemd-run` with the application's environment file — 92 holdings, 1,202
+snapshots over 21 dates and 188 prices, counts confirmed in the database. A
+first attempt had passed `DATABASE_URL` through `env` from a `grep` of the
+file, which kept the value's quotes and failed peer authentication; the
+documented command now lets systemd parse the file.
+
+The release before it, **2c30f679341d7002e70328d0a20430197fa9a0f3**, is
+described below.
 
 **2c30f679341d7002e70328d0a20430197fa9a0f3**, live since September 17, 2026 at
 schema version 50, deployed with `deploy/release.sh`. Two fixes on Spending

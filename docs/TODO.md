@@ -36,13 +36,14 @@ Already delivered: review suggestion/tag batching (synthetic query count 28 → 
 separate payment detail requests and fingerprinted private asset caching. These do
 not establish overall production latency or complete backend refactoring.
 
-## 1b. Household assets — step one merged, steps two to four open
+## 1b. Household assets — step one deployed, steps two to four open
 
 See [assets](assets.md) for the model and the plan.
 
 - [x] **PF-020 / AS-1: holdings, snapshots, prices, screen, history import.**
   Migration 51; `/assets`; `scripts/holdings_from_spreadsheet.py` and
-  `holdings-import-cli`. Not yet deployed; the owner's history not yet loaded.
+  `holdings-import-cli`. Deployed September 17, 2026 as 1ef7b68; the owner's
+  history is loaded.
 - [ ] **PF-020 / AS-2: automatic balances.** Monobank balance from client-info
   less the credit limit; Enable Banking balances for Wise, Revolut, Swedbank and
   LHV; a last-Thursday 10:05 Riga job that opens the month's snapshot.

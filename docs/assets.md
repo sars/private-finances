@@ -6,8 +6,8 @@ spreadsheet the owner kept by hand, moved into the application: the same
 model, the same history, and the manual work squeezed down to the figures
 nobody can read for us.
 
-Status, September 18, 2026: step one is implemented and tested, not yet
-deployed. It is the model, the screen, the import of the spreadsheet's history
+Status, September 17, 2026: step one is deployed as release 1ef7b68 at schema
+51 and the spreadsheet history is loaded — the model, the screen, the import
 and the daily-rate valuation. Automatic balances, the monthly Telegram round
 and the brokerage, exchange and wallet feeds are the following steps, listed
 at the end.
@@ -99,11 +99,17 @@ python3 -m pip install --user openpyxl
 python3 scripts/holdings_from_spreadsheet.py ~/Downloads/Assets.xlsx /tmp/holdings.json \
   --mapping ~/.config/private-finances/holdings-mapping.json
 scp /tmp/holdings.json radar:/tmp/holdings.json
-ssh radar "sudo -n bash -c 'set -a; . /etc/private-finances/app.env; set +a; \
-  cd /opt/private-finances/current && node dist/src/holdings-import-cli.js /tmp/holdings.json'; \
-  rm /tmp/holdings.json"
+ssh radar "chmod 644 /tmp/holdings.json && sudo -n systemd-run --wait --pipe --collect \
+  --uid=private-finances -p EnvironmentFile=/etc/private-finances/app.env \
+  -p WorkingDirectory=/opt/private-finances/current \
+  /usr/bin/node dist/src/holdings-import-cli.js /tmp/holdings.json; rm -f /tmp/holdings.json"
 rm /tmp/holdings.json
 ```
+
+`systemd-run` reads the environment file the way the service does, so the
+quoted `DATABASE_URL` arrives intact and the socket's peer authentication
+sees the application user. Passing the value through `env` from a `grep` of
+the file keeps the quotes and fails authentication.
 
 The spreadsheet's own rates — units per USD on each snapshot date — are
 imported as prices with the source `spreadsheet`, so the history is valued
