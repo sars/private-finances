@@ -29,7 +29,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Choice, PageHeader } from '@/components/finance';
+import { AccountBadge, Choice, PageHeader } from '@/components/finance';
+import { accountIdentity } from '@/lib/account-identity';
+import { currencyFromLabel, owners, tileFor } from '@/lib/account-visuals';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Owner = 'rodion' | 'katya';
@@ -98,6 +100,11 @@ const kindText: Record<string, string> = {
   unresolved: 'Needs clarification',
   personal_expense: 'Possible personal expense',
 };
+/** The bank as the owner knows it; never the connector that fetched the rows. */
+function bankName(account: Account) {
+  const { bank } = accountIdentity(account.source, '', account.label);
+  return bank ? tileFor(bank, 'standard').name : 'Bank account';
+}
 function safeRequestId(response: Response) {
   const id = response.headers.get('X-Request-Id');
   return id && /^[a-zA-Z0-9-]{1,80}$/.test(id) ? ` Reference: ${id}.` : '';
@@ -399,15 +406,24 @@ export default function Accounts() {
                     >
                       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-3">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                            <Landmark className="size-5 text-muted-foreground" />
-                          </div>
+                          <AccountBadge
+                            source={account.source}
+                            label={account.label}
+                            owner={account.owner}
+                            currency={
+                              currencyFromLabel(account.label) ??
+                              (account.impact?.byCurrency.length === 1
+                                ? account.impact.byCurrency[0].currency
+                                : null)
+                            }
+                            size="lg"
+                          />
                           <div className="min-w-0">
                             <CardTitle className="break-words text-base leading-snug">
                               {account.label}
                             </CardTitle>
-                            <p className="mt-1 truncate text-xs capitalize text-muted-foreground">
-                              {account.source}
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                              {bankName(account)} · {owners[account.owner].name}
                             </p>
                           </div>
                         </div>

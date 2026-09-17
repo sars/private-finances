@@ -1,5 +1,6 @@
-import { Banknote, CreditCard, Landmark } from 'lucide-react';
-import { accountIdentity, accountToneClasses } from '@/lib/account-identity';
+import { AccountBadge } from '@/components/finance';
+import { accountIdentity } from '@/lib/account-identity';
+import type { Owner } from '@/lib/account-visuals';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -8,22 +9,24 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-const icons = { card: CreditCard, bank: Landmark, cash: Banknote };
-
 /** Which of the household's accounts paid, recognisable without reading. */
 export function AccountChip({
   source,
   currency,
   label,
+  owner,
   className,
 }: {
   source: string | undefined;
   currency: string;
   label: string | null | undefined;
+  owner?: Owner | null;
   className?: string;
 }) {
   const identity = accountIdentity(source, currency, label);
-  const Icon = icons[identity.icon];
+  const mentionsCurrency = identity.name
+    .toLocaleUpperCase()
+    .includes(currency.toLocaleUpperCase());
   return (
     <TooltipProvider>
       <Tooltip>
@@ -37,16 +40,19 @@ export function AccountChip({
             />
           }
         >
-          <span
-            aria-hidden="true"
-            className={cn(
-              'flex size-6 items-center justify-center rounded-full',
-              accountToneClasses[identity.tone],
-            )}
-          >
-            <Icon className="size-3.5" />
-          </span>
+          <AccountBadge
+            source={source}
+            currency={currency}
+            label={label}
+            owner={owner}
+            size="sm"
+          />
           <span className="font-medium">{identity.name}</span>
+          {mentionsCurrency ? null : (
+            <span className="text-xs font-medium text-muted-foreground">
+              {currency}
+            </span>
+          )}
         </TooltipTrigger>
         <TooltipContent>{identity.detail || identity.name}</TooltipContent>
       </Tooltip>
