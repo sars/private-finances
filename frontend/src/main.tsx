@@ -192,8 +192,11 @@ function App() {
           table (the analytics heat grid over a month of days) would widen the
           page instead of scrolling inside its own wrapper. */}
       <SidebarInset id="main" className="min-w-0 pb-20 md:pb-0">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
-          <SidebarTrigger className="-ml-1" />
+        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b bg-background/95 px-4 pt-[env(safe-area-inset-top)] backdrop-blur">
+          {/* The phone already opens this sidebar from the tab bar's More
+              button; a second trigger here would be a website's duplicate
+              nav control, not a native app's. */}
+          <SidebarTrigger className="-ml-1 hidden md:inline-flex" />
           <span className="hidden text-xs text-muted-foreground sm:inline">
             Household workspace · Europe/Riga
           </span>
@@ -225,7 +228,10 @@ function App() {
           >
             <Outlet />
           </Suspense>
-          <footer className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t py-5 text-xs text-muted-foreground">
+          {/* A website's closing bar, not a native app's; System health is
+              already one tap away from the sidebar, so this only earns its
+              place on desktop, where there is no tab bar underneath it. */}
+          <footer className="mt-10 hidden flex-wrap items-center justify-between gap-3 border-t py-5 text-xs text-muted-foreground md:flex">
             <span>Private Finances · Household workspace</span>
             <a
               className="inline-flex items-center gap-1.5 hover:text-foreground"
