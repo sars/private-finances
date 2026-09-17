@@ -6,9 +6,15 @@ navigation. Existing internal anchors are intercepted only for registered same-
 origin screens; downloads, modified clicks, external links and bank-consent actions
 retain browser behavior. Unknown routes are not treated as app navigation.
 
-Transactions is the first query-backed screen. Filters, tab, selected payment and
-display currency belong to the URL; Back/Forward restores them. A selected payment
-uses the separate owner-scoped `detailOnly=1` endpoint and does not reload the list.
+Review (`/review`) was the first query-backed screen and is now the review list:
+payments still waiting for a decision, read page by page from `/api/transactions`
+with `review=1` through an infinite query and a virtualised list (`PagedList`), so
+the document holds only the rows in view however far the list goes. Its filters
+(`who`, `q`), tab and selected payment belong to the URL; Back/Forward restores
+them, and the search box writes to the URL only once typing pauses. A selected
+payment uses the separate owner-scoped `detailOnly=1` endpoint and does not
+reload the list. The count beside Review in the sidebar and the phone tab bar is
+the same endpoint asked for one row.
 Display values come from backend `reporting` conversions; original bank amounts
 remain explicit, missing rates are visible, and estimates are marked. Pending
 bank status and financial eligibility are not rewritten by this frontend work.

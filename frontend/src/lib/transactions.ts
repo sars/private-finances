@@ -20,6 +20,9 @@ export type Transaction = {
   category: string | null;
   status?: 'booked' | 'pending';
   revision: number;
+  /** Placed where its evidence pointed, counted, and still waiting for a
+   * decision (ADR 0008). */
+  provisional?: boolean;
   spendingPolicy?: {
     excluded: boolean;
     accountLabel: string | null;

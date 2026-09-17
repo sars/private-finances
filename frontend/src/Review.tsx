@@ -1,35 +1,35 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet, useSession, invalidateFinancialData } from './lib/query';
 import { useUrlSearch, useSearchPatch } from './lib/navigation';
-import { reviewSearch } from './lib/navigation-state';
 import { useDisplayCurrency } from './lib/display-currency';
+import {
+  usePaymentContext,
+  usePaymentPages,
+  type PaymentFilters,
+} from './lib/payments';
 import { kinds, type Action, type ReviewData } from './lib/transactions';
-import { useState } from 'react';
+import { owners } from './lib/account-visuals';
+import { useEffect, useState } from 'react';
 import {
   CheckCheck,
-  ChevronDown,
   CircleAlert,
   Inbox,
   MessageCircle,
   RefreshCw,
-  Repeat2,
-  ShieldCheck,
   Sparkles,
-  Tag,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Choice,
+  EmptyState,
   Field,
   FilterBar,
+  PagedList,
   PageHeader,
-  TransactionRow,
 } from '@/components/finance';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TransactionDetail } from '@/components/transaction/detail';
@@ -38,99 +38,67 @@ import type {
   Step,
   Tag as TagRow,
 } from '@/components/transaction/decision-card';
-import {
-  DirectionMark,
-  DisplayAmount,
-  HistoryLink,
-  ReplyCard,
-} from '@/components/transaction/pieces';
+import { HistoryLink, ReplyCard } from '@/components/transaction/pieces';
+import { PaymentRow } from '@/components/transaction/payment-row';
 
-function Empty({
-  icon,
-  title,
-  text,
-}: {
-  icon: 'inbox' | 'message' | 'sparkles';
-  title: string;
-  text: string;
-}) {
-  const Icon =
-    icon === 'inbox' ? Inbox : icon === 'message' ? MessageCircle : Sparkles;
-  return (
-    <div className="rounded-lg border border-dashed px-6 py-12 text-center">
-      <Icon className="mx-auto mb-3 size-7 text-muted-foreground" />
-      <h2 className="text-sm font-medium">{title}</h2>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-        {text}
-      </p>
-    </div>
-  );
+/** The search box writes to the URL only once typing pauses. */
+function useDebouncedField(
+  value: string,
+  onCommit: (value: string) => void,
+  delay = 250,
+) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    if (draft === value) return;
+    const timer = setTimeout(() => onCommit(draft), delay);
+    return () => clearTimeout(timer);
+  }, [draft, value, onCommit, delay]);
+  return [draft, setDraft] as const;
 }
 
 export default function Review() {
-  const url = reviewSearch(useUrlSearch());
+  const url = useUrlSearch();
   const patch = useSearchPatch();
-  const all = url.all !== '0';
-  const windowFilter = url.window;
-
-  const exceptionalOnly = url.exceptional === '1';
-  const search = url.q ?? '';
   const selectedId = url.id ?? null;
-  const setAll = (value: boolean) =>
-    patch({ all: value ? '1' : '0', id: undefined });
-  const setWindowFilter = (value: string) =>
-    patch({ window: value, id: undefined });
-  const setIncludeRefunds = (value: boolean) =>
-    patch({ includeRefunds: value ? '1' : '0' });
-  const setExceptionalOnly = (value: boolean) =>
-    patch({ exceptional: value ? '1' : undefined });
-  const setSearch = (value: string) => patch({ q: value || undefined }, true);
   const setSelectedId = (value: string | null) =>
     patch({ id: value ?? undefined }, value === null);
   const session = useSession();
   const identity = session.data;
-  const includeRefunds =
-    url.includeRefunds !== undefined
-      ? url.includeRefunds === '1'
-      : !(identity?.reviewDefaults?.hideRefunds ?? true);
-  const includeNonPersonal =
-    url.includeNonPersonal !== undefined
-      ? url.includeNonPersonal === '1'
-      : !(identity?.reviewDefaults?.hideNonPersonal ?? true);
-  const includeZeroAmount =
-    url.includeZeroAmount !== undefined
-      ? url.includeZeroAmount === '1'
-      : !(identity?.reviewDefaults?.hideZeroAmount ?? true);
-  const includeTransfers =
-    url.includeTransfers !== undefined
-      ? url.includeTransfers === '1'
-      : !(identity?.reviewDefaults?.hideInternalTransfers ?? true);
   const actor = identity?.actor;
   const { currency: displayCurrency } = useDisplayCurrency();
-  const filters = {
-    window: windowFilter,
-    all: all ? '1' : '0',
+
+  // Whose payments: the signed-in member's by default, either's or both.
+  const who =
+    url.who === 'rodion' || url.who === 'katya' || url.who === 'all'
+      ? url.who
+      : (actor ?? 'all');
+  const search = url.q ?? '';
+  const [draft, setDraft] = useDebouncedField(search, (value) =>
+    patch({ q: value || undefined }, true),
+  );
+  const filters: PaymentFilters = {
+    review: '1',
     display: displayCurrency,
-    ...(url.includeRefunds !== undefined
-      ? { includeRefunds: url.includeRefunds }
-      : {}),
-    ...(url.includeNonPersonal !== undefined
-      ? { includeNonPersonal: url.includeNonPersonal }
-      : {}),
-    ...(url.includeZeroAmount !== undefined
-      ? { includeZeroAmount: url.includeZeroAmount }
-      : {}),
-    ...(url.includeTransfers !== undefined
-      ? { includeTransfers: url.includeTransfers }
-      : {}),
+    ...(who === 'all' ? {} : { owner: who }),
+    ...(search ? { q: search } : {}),
   };
-  const review = useQuery({
-    queryKey: ['review', actor, filters],
-    enabled: Boolean(actor),
+  const pages = usePaymentPages(actor, filters, !selectedId);
+  const context = usePaymentContext(pages.data?.pages);
+  const payments = pages.data?.pages.flatMap((page) => page.transactions) ?? [];
+  const total = pages.data?.pages[0]?.total ?? 0;
+
+  const tab = ['payments', 'replies', 'proposals'].includes(url.tab ?? '')
+    ? url.tab!
+    : 'payments';
+  // Saved explanations and AI history are the reviewer's record; they are
+  // fetched only when their tab is open, since the review endpoint still
+  // reads the whole ledger to answer.
+  const record = useQuery({
+    queryKey: ['review', actor, { window: 'all', all: '0' }],
+    enabled: Boolean(actor) && tab !== 'payments' && !selectedId,
     queryFn: ({ signal }) =>
-      apiGet<ReviewData>('/api/review?' + new URLSearchParams(filters), signal),
-    placeholderData: (previous, query) =>
-      query?.queryKey[1] === actor ? previous : undefined,
+      apiGet<ReviewData>('/api/review?window=all&all=0', signal),
   });
   const detail = useQuery({
     queryKey: ['review-detail', actor, selectedId, displayCurrency],
@@ -158,31 +126,19 @@ export default function Review() {
         signal,
       ),
   });
-  const data = review.data;
   const nodes = categories.data?.nodes ?? [];
   const allTags = categories.data?.tags ?? [];
-  const loading = session.isPending || review.isPending;
-  const fetching = review.isFetching;
+  const loading = session.isPending || (pages.isPending && !selectedId);
   const error =
-    [session.error, review.error, categories.error].find(Boolean)?.message ??
-    '';
+    [session.error, pages.error, categories.error].find(Boolean)?.message ?? '';
   const [notice, setNotice] = useState('');
-  const [limit, setLimit] = useState(12);
   const [historyLimit, setHistoryLimit] = useState(12);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
   const refresh = () => {
     void invalidateFinancialData();
   };
-  const visible = (data?.transactions ?? []).filter(
-    (t) =>
-      (!exceptionalOnly || t.spendingPattern?.pattern === 'exceptional') &&
-      t.description.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-  );
-  const selectedData = detail.data ?? data;
-  const selected =
-    detail.data?.transactions.find((t) => t.id === selectedId) ??
-    data?.transactions.find((t) => t.id === selectedId);
+  const selected = detail.data?.transactions.find((t) => t.id === selectedId);
 
   /**
    * Several saves can make up one decision. They run in order because a
@@ -242,10 +198,10 @@ export default function Review() {
     submitSteps([{ action, values }], messages[action]);
 
   if (selectedId)
-    return selected && identity && selectedData ? (
+    return selected && identity && detail.data ? (
       <TransactionDetail
         transaction={selected}
-        data={selectedData}
+        data={detail.data}
         identity={identity}
         nodes={nodes}
         allTags={allTags}
@@ -273,51 +229,36 @@ export default function Review() {
           <Button onClick={() => void detail.refetch()}>Retry</Button>
         )}
         <Button variant="ghost" onClick={() => setSelectedId(null)}>
-          Back to transactions
+          Back to review
         </Button>
       </section>
     );
+
+  const whoOptions = [
+    ...(['rodion', 'katya'] as const).map((member) => ({
+      value: member,
+      label:
+        member === actor ? `${owners[member].name} (me)` : owners[member].name,
+    })),
+    { value: 'all', label: 'Both of us' },
+  ];
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Transactions"
-        description="Your payments, including pending card charges. Needs review lists the ones still waiting for a decision."
+        title="Review"
+        description="Payments still waiting for a decision, newest first. Decide each one here or answer in Telegram."
         actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              render={<a href={'/cash?display=' + displayCurrency} />}
-            >
-              Add cash expense
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={fetching || busy}
-              onClick={() => refresh()}
-            >
-              <RefreshCw className={fetching ? 'animate-spin' : ''} />
-              Refresh
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pages.isFetching || busy}
+            onClick={() => refresh()}
+          >
+            <RefreshCw className={pages.isFetching ? 'animate-spin' : ''} />
+            Refresh
+          </Button>
         }
       />
-      <div className="flex items-start gap-2.5 rounded-lg border bg-muted/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-        <p>
-          Only your payments appear here. Uncertain suggestions need your
-          confirmation; clear expenses can be categorized automatically.
-          {identity && !identity.features.ai
-            ? ' AI suggestions are not configured yet.'
-            : ''}
-        </p>
-      </div>
-      {fetching && data && (
-        <p role="status" className="text-xs text-muted-foreground">
-          Updating payments…
-        </p>
-      )}
       {notice && (
         <div
           role="status"
@@ -342,28 +283,26 @@ export default function Review() {
         </div>
       )}
       <Tabs
-        value={
-          ['payments', 'replies', 'proposals'].includes(url.tab ?? '')
-            ? url.tab
-            : 'payments'
-        }
-        onValueChange={(tab) => {
-          patch({ tab });
+        value={tab}
+        onValueChange={(next) => {
+          patch({ tab: next });
           setHistoryLimit(12);
         }}
       >
         <TabsList className="mb-4 h-auto w-full justify-start gap-1 overflow-x-auto sm:w-auto">
           <TabsTrigger value="payments" className="min-h-10">
-            Payments{' '}
-            {data && (
-              <span className="ml-1 text-xs opacity-60">{visible.length}</span>
+            Payments
+            {pages.data && (
+              <span className="ml-1 text-xs opacity-60">{total}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="replies" className="min-h-10">
             <MessageCircle className="size-4" />
             <span>Explanations</span>
-            {data && (
-              <span className="text-xs opacity-60">{data.replies.length}</span>
+            {record.data && (
+              <span className="text-xs opacity-60">
+                {record.data.replies.length}
+              </span>
             )}
           </TabsTrigger>
           <TabsTrigger value="proposals" className="min-h-10">
@@ -372,114 +311,14 @@ export default function Review() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="payments" className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div
-              className="inline-flex rounded-lg border p-1"
-              aria-label="Transaction view"
-            >
-              {[true, false].map((value) => (
-                <Button
-                  key={String(value)}
-                  size="sm"
-                  variant={all === value ? 'secondary' : 'ghost'}
-                  aria-pressed={all === value}
-                  disabled={busy}
-                  onClick={() => {
-                    setAll(value);
-                    setLimit(12);
-                  }}
-                >
-                  {value ? 'All transactions' : 'Needs review'}
-                </Button>
-              ))}
-            </div>
-            <span className="text-xs text-muted-foreground">
-              Amounts in {displayCurrency} · original bank amounts shown below
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg border p-4">
-            <Label className="gap-2 font-normal text-muted-foreground">
-              <Checkbox
-                checked={includeNonPersonal}
-                disabled={busy}
-                onCheckedChange={(checked) =>
-                  patch({ includeNonPersonal: checked ? '1' : '0' })
-                }
-              />
-              Show non-personal payments
-            </Label>
-            <Label className="gap-2 font-normal text-muted-foreground">
-              <Checkbox
-                checked={includeZeroAmount}
-                disabled={busy}
-                onCheckedChange={(checked) => {
-                  patch({ includeZeroAmount: checked ? '1' : '0' });
-                  setLimit(12);
-                }}
-              />
-              Show payments that came to nothing
-            </Label>
-            <Label className="gap-2 font-normal text-muted-foreground">
-              <Checkbox
-                checked={includeTransfers}
-                disabled={busy}
-                onCheckedChange={(checked) =>
-                  patch({ includeTransfers: checked ? '1' : '0' })
-                }
-              />
-              Show confirmed transfers
-            </Label>
-            <Label className="gap-2 font-normal text-muted-foreground">
-              <Checkbox
-                checked={includeRefunds}
-                disabled={busy}
-                onCheckedChange={(checked) => {
-                  setIncludeRefunds(Boolean(checked));
-                  setLimit(12);
-                }}
-              />
-              Show linked refund credits
-            </Label>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() =>
-                patch({
-                  includeNonPersonal: undefined,
-                  includeTransfers: undefined,
-                  includeRefunds: undefined,
-                  includeZeroAmount: undefined,
-                })
-              }
-            >
-              Use household defaults
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            A purchase refunded in full came to nothing, so both it and its
-            refund credit are hidden by default. Both remain in your history.
-          </p>
           <FilterBar>
-            <Field label="Period" htmlFor="review-period">
+            <Field label="Whose" htmlFor="review-who">
               <Choice
-                id="review-period"
-                className="w-full sm:w-56"
-                value={windowFilter}
-                onChange={(value) => {
-                  setWindowFilter(value);
-                  setLimit(12);
-                  setSelectedId(null);
-                }}
-                options={[
-                  { value: 'previous_month', label: 'Previous calendar month' },
-                  {
-                    value: 'current_month',
-                    label: 'This month · new payments',
-                  },
-                  { value: 'historical', label: 'Older 2026 history' },
-                  { value: '2026', label: 'Since January 2026' },
-                  { value: 'all', label: 'All history · includes 2025' },
-                ]}
+                id="review-who"
+                className="w-full sm:w-44"
+                value={who}
+                onChange={(value) => patch({ who: value })}
+                options={whoOptions}
               />
             </Field>
             <Field
@@ -489,191 +328,71 @@ export default function Review() {
             >
               <Input
                 id="review-search"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setLimit(12);
-                }}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
                 placeholder="Search descriptions"
               />
             </Field>
-            <div className="flex flex-wrap items-end gap-2">
-              <Button
-                size="sm"
-                variant={exceptionalOnly ? 'secondary' : 'outline'}
-                onClick={() => {
-                  setExceptionalOnly(!exceptionalOnly);
-                  setLimit(12);
-                }}
-                aria-pressed={exceptionalOnly}
-              >
-                <Repeat2 />
-                Exceptional only
-              </Button>
-            </div>
           </FilterBar>
-          <p className="text-xs text-muted-foreground">
-            Calendar periods use Europe/Riga. Historical estimates remain
-            separate from confirmed spending.
-          </p>
-          {loading ? (
-            <div
-              role="status"
-              aria-label="Loading payments"
-              className="space-y-3"
-            >
-              {[0, 1, 2, 3].map((n) => (
-                <Skeleton key={n} className="h-16 rounded-lg" />
-              ))}
-            </div>
-          ) : (
-            data && (
-              <>
-                {visible.length === 0 && (
-                  <Empty
-                    icon="inbox"
-                    title={
-                      exceptionalOnly
-                        ? 'No exceptional payments in this window'
-                        : all
-                          ? 'No payments yet'
-                          : 'Nothing waiting for a decision'
-                    }
-                    text={
-                      exceptionalOnly
-                        ? 'Payments you mark as exceptional while reviewing them appear here. Widen the period to look further back.'
-                        : all
-                          ? 'Imported payments will appear here for review.'
-                          : 'Every outflow in this window already has a decision. Payments that are still settling keep theirs and stay under All transactions, and the other owner reviews their own payments from their sign-in. Widen the window to look further back.'
-                    }
-                  />
-                )}
-                <Card className="gap-0 py-0 shadow-xs">
-                  <CardContent className="px-4 py-0 sm:px-5">
-                    {visible.slice(0, limit).map((t) => {
-                      const suggestions = data.suggestions[t.id];
-                      const estimate = data.historicalEstimates?.find(
-                        (e) =>
-                          e.transactionId === t.id && e.status === 'estimated',
-                      );
-                      const recognized = data.triage?.find(
-                        (item) =>
-                          item.transaction_id === t.id &&
-                          item.revision === t.revision &&
-                          item.state === 'ready',
-                      );
-                      return (
-                        <TransactionRow
-                          key={t.id}
-                          mark={<DirectionMark amountMinor={t.amountMinor} />}
-                          description={
-                            t.description || 'Payment without a description'
-                          }
-                          meta={
-                            <>
-                              {t.bookedAt.slice(0, 10)} ·{' '}
-                              {t.category ||
-                                (BigInt(t.amountMinor) >= 0n
-                                  ? 'Money in · not spending'
-                                  : 'No category')}
-                            </>
-                          }
-                          amount={
-                            <DisplayAmount
-                              transaction={t}
-                              reporting={data?.reporting}
-                              requested={displayCurrency}
-                              className="text-sm font-semibold"
-                            />
-                          }
-                          badges={
-                            <>
-                              <Badge
-                                variant={
-                                  t.kind === 'unresolved'
-                                    ? 'secondary'
-                                    : 'outline'
-                                }
-                              >
-                                {BigInt(t.amountMinor) >= 0n &&
-                                t.kind === 'unresolved'
-                                  ? 'Money in · not spending'
-                                  : kinds[t.kind]}
-                              </Badge>
-                              {t.spendingPattern?.pattern === 'exceptional' && (
-                                <Badge variant="outline">
-                                  <Repeat2 className="size-3" />
-                                  Exceptional
-                                </Badge>
-                              )}
-                              {estimate && (
-                                <Badge variant="outline">
-                                  Estimated: {estimate.category} ·{' '}
-                                  {estimate.method === 'mcc'
-                                    ? 'MCC'
-                                    : 'AI suggestion'}
-                                </Badge>
-                              )}
-                              {t.status === 'pending' && (
-                                <Badge variant="outline">Bank processing</Badge>
-                              )}
-                              {recognized?.decision && (
-                                <Badge variant="secondary">
-                                  Suggested:{' '}
-                                  {recognized.decision.category ??
-                                    kinds[recognized.decision.kind]}
-                                </Badge>
-                              )}
-                              {suggestions?.rules.length > 0 && (
-                                <Badge variant="outline">
-                                  {suggestions.ambiguous
-                                    ? 'Conflicting suggestions'
-                                    : `${suggestions.rules.length} rule suggestion${suggestions.rules.length === 1 ? '' : 's'}`}
-                                </Badge>
-                              )}
-                              {(data.tags[t.id] || []).map((tag) => (
-                                <Badge
-                                  key={tag.id}
-                                  variant="secondary"
-                                  className="max-w-full break-words whitespace-normal"
-                                >
-                                  <Tag className="size-3" />
-                                  {tag.name}
-                                </Badge>
-                              ))}
-                            </>
-                          }
-                          history={<HistoryLink id={t.id} />}
-                          action={
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedId(t.id);
-                                setActionError('');
-                              }}
-                            >
-                              {BigInt(t.amountMinor) >= 0n
-                                ? 'View details'
-                                : 'Review payment'}
-                            </Button>
-                          }
-                        />
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-                {visible.length > limit && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setLimit((n) => n + 12)}
-                  >
-                    Show more payments <ChevronDown className="size-4" />
-                  </Button>
-                )}
-              </>
-            )
+          {pages.isFetching && pages.data && !pages.isFetchingNextPage && (
+            <p role="status" className="text-xs text-muted-foreground">
+              Updating payments…
+            </p>
           )}
+          <PagedList
+            items={payments}
+            keyOf={(t) => t.id}
+            loading={loading}
+            hasMore={Boolean(pages.hasNextPage)}
+            loadingMore={pages.isFetchingNextPage}
+            onLoadMore={() => void pages.fetchNextPage()}
+            empty={
+              !error && (
+                <EmptyState
+                  icon={Inbox}
+                  className="rounded-lg border border-dashed"
+                  title={
+                    search
+                      ? 'Nothing waiting matches that search'
+                      : 'Nothing waiting for a decision'
+                  }
+                  text={
+                    search
+                      ? 'Every payment still waiting has a different description. Clear the search to see them all.'
+                      : who === 'all'
+                        ? 'Every outflow already has a decision. New payments appear here as the banks deliver them.'
+                        : 'Every outflow on these accounts already has a decision. Choose “Both of us” to see the other member’s payments.'
+                  }
+                />
+              )
+            }
+            footer={
+              payments.length && !pages.hasNextPage
+                ? `All ${total} payments waiting for a decision are listed.`
+                : payments.length
+                  ? `${payments.length} of ${total} listed`
+                  : undefined
+            }
+            renderRow={(t) => (
+              <PaymentRow
+                transaction={t}
+                context={context}
+                displayCurrency={displayCurrency}
+                showKind={false}
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedId(t.id);
+                      setActionError('');
+                    }}
+                  >
+                    Review
+                  </Button>
+                }
+              />
+            )}
+          />
         </TabsContent>
         <TabsContent value="replies" className="space-y-3">
           <p className="mb-4 text-sm text-muted-foreground">
@@ -682,18 +401,18 @@ export default function Review() {
             in the payment history. Use Refresh to check the latest processing
             status.
           </p>
-          {loading ? (
+          {record.isPending ? (
             <Skeleton className="h-32" />
-          ) : data?.replies.length ? (
+          ) : record.data?.replies.length ? (
             <>
-              {data.replies.slice(0, historyLimit).map((r) => (
+              {record.data.replies.slice(0, historyLimit).map((r) => (
                 <ReplyCard
                   key={r.id}
                   reply={r}
                   openPayment={() => setSelectedId(r.transaction_id)}
                 />
               ))}
-              {data.replies.length > historyLimit && (
+              {record.data.replies.length > historyLimit && (
                 <Button
                   variant="outline"
                   onClick={() => setHistoryLimit((n) => n + 12)}
@@ -703,9 +422,10 @@ export default function Review() {
               )}
             </>
           ) : (
-            !error && (
-              <Empty
-                icon="message"
+            !record.error && (
+              <EmptyState
+                icon={MessageCircle}
+                className="rounded-lg border border-dashed"
                 title="No saved explanations yet"
                 text="Reply to a payment question in Telegram, then refresh this view. Your explanation will remain here after review."
               />
@@ -716,11 +436,11 @@ export default function Review() {
           <p className="mb-4 text-sm text-muted-foreground">
             AI suggestions are a starting point. Your decision is always final.
           </p>
-          {loading ? (
+          {record.isPending ? (
             <Skeleton className="h-32" />
-          ) : data?.proposals.length ? (
+          ) : record.data?.proposals.length ? (
             <>
-              {data.proposals.slice(0, historyLimit).map((p) => (
+              {record.data.proposals.slice(0, historyLimit).map((p) => (
                 <Card key={p.id} className="py-0 shadow-xs">
                   <CardContent className="p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -747,7 +467,7 @@ export default function Review() {
                   </CardContent>
                 </Card>
               ))}
-              {data.proposals.length > historyLimit && (
+              {record.data.proposals.length > historyLimit && (
                 <Button
                   variant="outline"
                   onClick={() => setHistoryLimit((n) => n + 12)}
@@ -757,15 +477,12 @@ export default function Review() {
               )}
             </>
           ) : (
-            !error && (
-              <Empty
-                icon="sparkles"
+            !record.error && (
+              <EmptyState
+                icon={Sparkles}
+                className="rounded-lg border border-dashed"
                 title="No AI suggestions yet"
-                text={
-                  identity?.features.ai
-                    ? 'Open a payment to request a suggestion with optional context.'
-                    : 'AI suggestions are not configured yet. You can review payments yourself.'
-                }
+                text="Suggestions appear here after a payment is sent for AI review. Your decisions always take precedence."
               />
             )
           )}

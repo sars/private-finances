@@ -15,6 +15,7 @@ export { BarList, type BarListRow } from './bar-list'; // ranked horizontal bars
 export { CategoryBar, type Segment } from './category-bar'; // one bar split into shares, legend with percentages
 export { TreeTable, type TreeRow } from './tree-table'; // rolled-up tree with totals, expand, drill links
 export { TransactionRow } from './transaction-row'; // one payment in a list: dense on desktop, two lines on the phone
+export { PagedList } from './paged-list'; // a long list: only visible rows in the document, next page on approach
 export { EmptyState } from './empty-state'; // nothing to show, and what to do about it
 export { PageHeader } from './page-header'; // title, one line, actions
 export { AccountBadge } from './account-badge'; // which account: bank glyph on the card's tile, currency, holder; from lib/account-visuals

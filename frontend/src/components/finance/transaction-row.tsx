@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
  */
 export function TransactionRow({
   mark,
+  markOnPhone = false,
   description,
   meta,
   amount,
@@ -15,8 +16,10 @@ export function TransactionRow({
   history,
   action,
 }: {
-  /** Direction or status glyph, hidden on the phone. */
+  /** Direction or status glyph; hidden on the phone unless `markOnPhone`. */
   mark?: ReactNode;
+  /** Keep the mark on the phone, for one that identifies the row (an account). */
+  markOnPhone?: boolean;
   description: ReactNode;
   /** Date, category, account — the small line under the description. */
   meta: ReactNode;
@@ -27,7 +30,15 @@ export function TransactionRow({
 }) {
   return (
     <div className="flex gap-3 border-b py-3 last:border-b-0 sm:gap-4">
-      {mark && <span className="hidden shrink-0 pt-0.5 sm:block">{mark}</span>}
+      {mark && (
+        <span
+          className={
+            markOnPhone ? 'shrink-0 pt-0.5' : 'hidden shrink-0 pt-0.5 sm:block'
+          }
+        >
+          {mark}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

@@ -2,13 +2,13 @@
 // menu all present them. One list, three surfaces.
 import {
   Activity,
-  ArrowLeftRight,
   Banknote,
   ChartNoAxesCombined,
   Coins,
   FileText,
   Landmark,
   LayoutDashboard,
+  ListChecks,
   Receipt,
   Settings,
   Tags,
@@ -35,7 +35,7 @@ export const screenGroups: ScreenGroup[] = [
         label: 'Spending analytics',
         icon: ChartNoAxesCombined,
       },
-      { href: '/review', label: 'Transactions', icon: ArrowLeftRight },
+      { href: '/review', label: 'Review', icon: ListChecks },
       { href: '/receipts', label: 'Receipts', icon: Receipt },
       { href: '/cash', label: 'Cash', icon: Banknote },
     ],

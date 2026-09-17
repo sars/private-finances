@@ -24,6 +24,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/shell/app-sidebar';
+import { useReviewCount } from './lib/payments';
 import { TabBar } from '@/components/shell/tab-bar';
 import './index.css';
 // The command menu and its search library load the first time ⌘K is pressed.
@@ -155,6 +156,10 @@ function App() {
   }, [theme]);
 
   const isAdmin = !!identity?.isAdmin;
+  // What waits for the signed-in member, shown beside Review everywhere the
+  // screens are listed.
+  const reviewCount = useReviewCount(identity?.actor);
+  const counts = { '/review': reviewCount.data };
   return (
     <SidebarProvider>
       <a
@@ -165,6 +170,7 @@ function App() {
       </a>
       <AppSidebar
         isAdmin={isAdmin}
+        counts={counts}
         footer={
           <div className="space-y-3 px-2 pb-2">
             <ThemeControl theme={theme} setTheme={setTheme} />
@@ -244,7 +250,7 @@ function App() {
           </footer>
         </div>
       </SidebarInset>
-      <TabBar />
+      <TabBar counts={counts} />
       {command && (
         <Suspense fallback={null}>
           <CommandMenu
