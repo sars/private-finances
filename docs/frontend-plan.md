@@ -231,8 +231,15 @@ the decision, and a view page that leads with the facts.
   of what waits for the signed-in member. Explanations and AI history stay as
   tabs here and are fetched only when opened. The payment page under
   `/review?id=` is unchanged until step 4.
-- Step 3: `/transactions`, the browsing list, with the period picker and the
-  full filter panel; Analytics drill links land here.
+- Step 3: `/transactions`, the browsing list on the same `PagedList` and
+  `PaymentRow`, household by default. The `PeriodPicker` (presets and a
+  custom range) and a search box are always in view; behind one Filters
+  button sit category (whole branch or leaf), type, pattern, an amount range
+  in the display currency compared with what a payment finally cost,
+  receipts, refunds, tag, and the household visibility toggles with their
+  reset. Choosing a type the household hides shows it. Analytics drill links
+  land here with the member, period and category prefix. Add cash expense
+  lives here, not on Review.
 - Step 4: the payment page split into `/review/:id` (decision first, saved
   explanations inside the decision block) and `/transactions/:id` (facts,
   receipt, refunds, bank record without the cashback line, decision history).

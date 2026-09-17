@@ -8,9 +8,11 @@ and roll-up semantics are ADR 0006's. Status: built in Stage 3 of
 owner, kind), `depth` and `kinds` on top of the existing filter grammar and
 `owner`; the screen is `frontend/src/Analytics.tsx`. Not yet in the grammar:
 `account`, `tag`/`excludeTag`, `provisional` as a filter, and category node ids
-(categories are still path strings), so drill links go to Home's category and
-period filters rather than to Transactions — deliberately, since Analytics
-shows the household and Transactions only the signed-in owner. The
+(categories are still path strings). Drill links go to the Transactions list
+(`/transactions`, since September 17, 2026), which shows the household through
+the same paged endpoint and the same conversion and accepts the period, member
+and category prefix in its URL; a drill's rows sum to the figure it came from,
+minus any payment the household's visibility defaults hide. The
 "show historical estimates" toggle that used to live on the old Analytics alias
 of Home sits at the bottom of this screen and fetches `/api/overview` only when
 switched on. The build steps were B1–B3 of
@@ -71,9 +73,9 @@ synthetic data for every bucket the aggregation returns: the sum of the rows the
 drill link lists equals the figure.
 
 **Toggle dimensions: exclude exceptional; exclude investments, or see them
-separately and over time.** Two controls. *Investments*: hidden (default),
+separately and over time.** Two controls. _Investments_: hidden (default),
 included in the total, or shown as their own series. The same control applies
-to business spending. *Exceptional*: included (default) or excluded, and
+to business spending. _Exceptional_: included (default) or excluded, and
 "only exceptional" for the owner's other question. Needs: `kinds` as a
 multi-value filter and `excludeTag` / `tag` filters. Exceptional becomes a tag
 in A1 of the work plan; until then the control is wired to the existing pattern

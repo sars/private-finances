@@ -2,6 +2,7 @@
 // menu all present them. One list, three surfaces.
 import {
   Activity,
+  ArrowLeftRight,
   Banknote,
   ChartNoAxesCombined,
   Coins,
@@ -36,6 +37,7 @@ export const screenGroups: ScreenGroup[] = [
         icon: ChartNoAxesCombined,
       },
       { href: '/review', label: 'Review', icon: ListChecks },
+      { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
       { href: '/receipts', label: 'Receipts', icon: Receipt },
       { href: '/cash', label: 'Cash', icon: Banknote },
     ],
