@@ -17,3 +17,4 @@ export { TreeTable, type TreeRow } from './tree-table'; // rolled-up tree with t
 export { TransactionRow } from './transaction-row'; // one payment in a list: dense on desktop, two lines on the phone
 export { EmptyState } from './empty-state'; // nothing to show, and what to do about it
 export { PageHeader } from './page-header'; // title, one line, actions
+export { AccountBadge } from './account-badge'; // which account: bank glyph on the card's tile, currency, holder; from lib/account-visuals

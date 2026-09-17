@@ -169,6 +169,25 @@
   --chart-4: #f59e0b;
   --chart-5: #6b7280;
   --chart-6: #06b6d4;
+  /* Account badges (lib/account-visuals.ts): the banks' own colours, so a
+     card is recognised by the colour it has in the wallet. A card does not
+     change colour at night, so these hold in dark mode too. */
+  --account-ink: #ffffff;
+  --account-ink-dark: #15181b;
+  --account-edge: transparent;
+  --account-mono-iron: #4b5059;
+  --account-mono-black: #111315;
+  --account-mono-white: #ffffff;
+  --account-mono-aid: #a8232e;
+  --account-mono-cashback: #0f4c9c;
+  --account-mono-cashback-ink: #ffd54a;
+  --account-mono-fop: #0e6b6b;
+  --account-swedbank: #ff5f00;
+  --account-revolut: #191c1f;
+  --account-wise: #9fe870;
+  --account-wise-ink: #163300;
+  --account-cash: #f1b82d;
+  --account-cash-ink: #3b2a06;
   color-scheme: light;
 }
 .dark {
@@ -190,6 +209,9 @@
   --chart-4: #f59e0b;
   --chart-5: #6b7280;
   --chart-6: #06b6d4;
+  /* The only account token that swaps: a near-black card tile needs an edge
+     to stand on the dark card surface. */
+  --account-edge: #2a3140;
   color-scheme: dark;
 }
 

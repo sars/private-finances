@@ -9,16 +9,17 @@ the Tremor dashboard (dashboard.tremor.so): quiet, dense, numbers loudest.
 Colours exist only as the CSS variables in `src/index.css`; components use the
 semantic Tailwind names and never a raw colour.
 
-| Name                         | Use                                                             |
-| ---------------------------- | --------------------------------------------------------------- |
-| `background` / `foreground`  | page and body text                                              |
-| `card`                       | surfaces: cards, popovers, sheets                               |
-| `primary`                    | one accent: buttons, active state, the main series              |
-| `muted` / `muted-foreground` | secondary surfaces and secondary text                           |
-| `border`                     | every hairline                                                  |
-| `positive` / `negative`      | deltas and status only, never decoration                        |
-| `destructive`                | destructive actions                                             |
-| `chart-1` … `chart-6`        | series, in this order: blue, emerald, violet, amber, gray, cyan |
+| Name                         | Use                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `background` / `foreground`  | page and body text                                                           |
+| `card`                       | surfaces: cards, popovers, sheets                                            |
+| `primary`                    | one accent: buttons, active state, the main series                           |
+| `muted` / `muted-foreground` | secondary surfaces and secondary text                                        |
+| `border`                     | every hairline                                                               |
+| `positive` / `negative`      | deltas and status only, never decoration                                     |
+| `destructive`                | destructive actions                                                          |
+| `chart-1` … `chart-6`        | series, in this order: blue, emerald, violet, amber, gray, cyan              |
+| `--account-*`                | the banks' own card colours, only inside `AccountBadge`; same in both themes |
 
 Radius: `rounded-md` for controls, `rounded-lg` for cards. Shadows: `shadow-xs`
 on cards, nothing larger. Dark mode is a token swap; no `dark:` colour classes
@@ -51,7 +52,10 @@ under 1024 px.
 Compose from `src/components/finance/index.ts` first, `src/components/ui/`
 second. Never edit a file in `components/ui/`; re-add it from the registry.
 Do not write a new component when an existing one takes a prop. Every figure
-that summarises money is a link to the payments behind it.
+that summarises money is a link to the payments behind it. An account is shown
+with `AccountBadge` (bank glyph on the card's tile, currency, holder), whose
+glyphs and colours come only from `lib/account-visuals.ts`; never a Lucide
+icon standing in for a bank.
 
 ## Charts
 
