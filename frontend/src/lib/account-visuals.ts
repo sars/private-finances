@@ -116,7 +116,7 @@ export const tiles: Record<Bank | 'unknown', Partial<Record<Product, Tile>>> = {
     'national-cashback': {
       fill: 'var(--account-mono-cashback)',
       ink: 'var(--account-mono-cashback-ink)',
-      name: 'Mono National cashback',
+      name: 'Mono NC',
     },
     fop: { fill: 'var(--account-mono-fop)', ink, name: 'Mono FOP' },
     standard: {
@@ -192,7 +192,7 @@ export function productFor(bank: Bank | null, label: string): Product {
   if (/\bblack|чорн|черн/.test(text)) return 'black';
   if (/\bwhite|біл|бел/.test(text)) return 'white';
   if (/\baid\b|допомог|помощ/.test(text)) return 'aid';
-  if (/кешб|кэшб|cashback|нацкеш/.test(text)) return 'national-cashback';
+  if (/кешб|кэшб|cashback|нацкеш|\bnc\b/.test(text)) return 'national-cashback';
   if (/\bfop\b|фоп|business|бізнес/.test(text)) return 'fop';
   return 'standard';
 }

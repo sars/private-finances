@@ -65,6 +65,7 @@ test("the household's nine accounts resolve from the names the owner gives them"
     ['monobank', 'Mono Black', 'monobank', 'black'],
     ['monobank', 'Mono White', 'monobank', 'white'],
     ['monobank', 'Mono Aid', 'monobank', 'aid'],
+    ['monobank', 'Mono NC', 'monobank', 'national-cashback'],
     ['monobank', 'Mono National cashback', 'monobank', 'national-cashback'],
     ['monobank', 'Mono нацкешбек', 'monobank', 'national-cashback'],
     ['monobank', 'Mono FOP', 'monobank', 'fop'],
@@ -80,10 +81,7 @@ test("the household's nine accounts resolve from the names the owner gives them"
     assert.equal(productFor(resolved, label), product, label);
   }
   assert.equal(bankFor('enablebanking', ''), null);
-  assert.equal(
-    tileFor('monobank', 'national-cashback').name,
-    'Mono National cashback',
-  );
+  assert.equal(tileFor('monobank', 'national-cashback').name, 'Mono NC');
   assert.equal(currencyFromLabel('Wise EUR'), 'EUR');
   assert.equal(currencyFromLabel('Revolut usd'), 'USD');
   assert.equal(currencyFromLabel('Mono Black'), null);
