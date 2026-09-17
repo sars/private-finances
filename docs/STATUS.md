@@ -9,8 +9,17 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**7359ae93ac9c11766754d8e11397db38a43ef604**, live since September 17, 2026 at
-schema version 48, deployed with `deploy/release.sh` as the thirteenth release
+**a7ff4ba08008f2afc3dcc1f7c150d119312d3582**, live since September 17, 2026 at
+schema version 48, deployed with `deploy/release.sh` as the fourteenth release
+that day. It carries one fix (PR #43): the "Save explanation & suggest" button
+on the review page did nothing because Base UI's Button renders
+`type="button"`, so it never submitted its form; it and the demo import button
+now say `type="submit"`, and `scripts/check_frontend.py` refuses a file whose
+forms outnumber its submit buttons. No migration; rehearsed and verified as
+usual, both services active, 4,140 transactions, no error in the log.
+
+The release before it, **7359ae93ac9c11766754d8e11397db38a43ef604**, went live
+on September 17, 2026 at schema version 48 as the thirteenth release
 that day. It is `origin/main` after the Analytics rebuild (PR #40), LHV as a
 bank reachable through the provider (PR #39, migration 48) and the status entry
 for the eleventh release (PR #41). The migration was rehearsed on a restored
