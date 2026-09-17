@@ -186,7 +186,10 @@ function App() {
           </div>
         }
       />
-      <SidebarInset id="main" className="pb-20 md:pb-0">
+      {/* min-w-0: a flex item's minimum width is its content's, so a wide
+          table (the analytics heat grid over a month of days) would widen the
+          page instead of scrolling inside its own wrapper. */}
+      <SidebarInset id="main" className="min-w-0 pb-20 md:pb-0">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />
           <span className="hidden text-xs text-muted-foreground sm:inline">

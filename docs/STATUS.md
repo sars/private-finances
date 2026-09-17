@@ -9,6 +9,18 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**2c30f679341d7002e70328d0a20430197fa9a0f3**, live since September 17, 2026 at
+schema version 50, deployed with `deploy/release.sh`. Two fixes on Spending
+analytics: the period picker is now the first labelled field of the filter bar,
+at the same control height as the other filters and on its own row on the
+phone; and the main column no longer widens the page when the heat grid is
+wider than it (a month of days), so the grid scrolls inside its own card. The
+second fix is in the app shell and applies to every page. No migration; both
+services active after the switch.
+
+The release before it, **88c2034d3a6efdc23f5abf95b601b4635e2ad749**, brought the
+Account filter; its entry follows.
+
 **88c2034d3a6efdc23f5abf95b601b4635e2ad749**, live since September 17, 2026 at
 schema version 50, deployed with `deploy/release.sh`. Transactions and Review
 gained an Account filter beside Whose, listing every account of the household
