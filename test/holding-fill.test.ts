@@ -175,6 +175,7 @@ test('the broker statement fills positions and cash, zeroes what was sold, creat
       ],
       cash: [{ currency: 'USD', endingCash: '17205.55' }],
       sections: [],
+      cashFields: [],
       fromDate: null,
       toDate: null,
     });

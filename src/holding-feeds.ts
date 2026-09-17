@@ -117,6 +117,8 @@ export interface FlexStatement {
   cash: FlexCash[];
   /** Section names seen in the statement, for a check that names no figure. */
   sections: string[];
+  /** Attribute names on the cash rows, so a query missing a field is visible. */
+  cashFields: string[];
   /** The statement's own dates, when it states them. */
   fromDate: string | null;
   toDate: string | null;
@@ -179,12 +181,21 @@ export function parseFlexStatement(xml: string): FlexStatement {
     const detail = (row.levelOfDetail ?? '').toUpperCase();
     if (detail && detail !== 'SUMMARY' && detail !== 'CURRENCY') continue;
     const currency = (row.currency ?? '').trim().toUpperCase();
-    const endingCash = decimal(row.endingCash);
+    // "Ending Cash" when the query includes it, else "Ending Settled Cash";
+    // a query with neither has no cash to read.
+    const endingCash =
+      decimal(row.endingCash) ?? decimal(row.endingSettledCash);
     // The report's "BASE_SUMMARY" row totals every currency in the base one
     // and would double the cash; only real currencies are wanted.
     if (!/^[A-Z]{3}$/.test(currency) || endingCash === null) continue;
     cash.push({ currency, endingCash });
   }
+  // Attribute names of the cash rows, for a check that names no figure.
+  const cashFields = [
+    ...new Set(
+      elements(xml, 'CashReportCurrency').flatMap((row) => Object.keys(row)),
+    ),
+  ].sort();
   const sections = [
     ...new Set(
       [...xml.matchAll(/<([A-Z][A-Za-z]+)>/g)]
@@ -198,6 +209,7 @@ export function parseFlexStatement(xml: string): FlexStatement {
     positions,
     cash,
     sections,
+    cashFields,
     fromDate: flexDate(statement.fromDate),
     toDate: flexDate(statement.toDate),
   };

@@ -139,7 +139,10 @@ others run only from the command line and the timer.
 monthly job: it fills every fed holding for the day (today in Riga by default)
 and prints one line per feed with counts and status codes, never a name, an
 address or a figure. `--check` only tries the broker and exchange credentials
-and prints a status word each. Credentials are files in
+and prints a status word each, with the statement's shape — how many
+positions, which cash currencies, which attribute names the cash rows carry,
+which sections — and the exchange's asset count, never a figure. Cash is read
+from "Ending Cash" or, failing that, "Ending Settled Cash". Credentials are files in
 `CREDENTIALS_DIRECTORY`, present or absent: `ibkr-flex-token` with
 `ibkr-flex-query` (the Flex Web Service token and the Query ID of an Activity
 Flex Query in XML with Open Positions at summary level — Symbol, Position,

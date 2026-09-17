@@ -46,14 +46,15 @@ See [assets](assets.md) for the model and the plan.
       history is loaded.
 - [x] **PF-020 / AS-2: automatic balances.** Balances themselves landed with the
       Balances page (migration 53); a holding links to an account and the
-      last-Thursday 10:05 Riga job fills it (migration 54). Timer to be installed
-      and enabled on the server at release.
+      last-Thursday 10:05 Riga job fills it (migration 54). Deployed September
+      18, 2026; timer installed and enabled, 13 bank holdings linked and filled.
 - [ ] **PF-020 / AS-3: the monthly round in Telegram.** Missing-figure list to
       the household chat, parsed replies, a nudge after two days, maturity notices,
       and movement proposals between holdings confirmed with one tap.
 - [x] **PF-020 / AS-4: feeds.** IBKR Flex Web Service, Binance Spot read-only,
-      BTC and ETH wallets by address with the exchange's open prices; merged with
-      AS-2, credentials installed on the server, `--check` to run after release.
+      BTC and ETH wallets by address with the exchange's open prices. Deployed
+      September 18, 2026; both credentials verified, positions, exchange total
+      and wallets filled. Open: the broker's cash row, see STATUS.
 
 ## 2. Finish smooth frontend behavior
 
