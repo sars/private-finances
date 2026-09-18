@@ -9,6 +9,21 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**f83b6477289ec1161644525b1cb769180e1ee4ef**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 54 with 4,168 transactions unchanged, both services active. It
+carries PR #71, a follow-up to the phone-shell release below: the owner
+tried the installed iOS app and found every navigation dropped it out of
+standalone display, back into full Safari chrome. Safari can set a click's
+`event.target` to a bare Text node when the tap lands on rendered text with
+no element of its own — the tab bar's labels sit directly inside their `<a>`
+this way — and `Text` has no `.closest()`, so the click-interception that
+turns an internal link into a client-side route change silently missed on
+exactly those taps. The browser fell through to a real top-level navigation,
+which is what iOS treats as leaving the installed app. The handler now
+climbs to the nearest Element first.
+
 **e83193fd5acb0a7fd56abebeeecfa36d57200ed4**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
