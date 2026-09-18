@@ -62,6 +62,13 @@ jobs:
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-store-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile --prefer-offline
+      # TEMPORARY: print what Prettier would rewrite, then put it back. Remove
+      # before merge.
+      - name: Show Prettier's own formatting
+        run: |
+          pnpm format
+          git --no-pager diff
+          git checkout -- .
       # `pnpm check` runs the foundation script, Prettier and the backend compile,
       # then the tests, then the frontend typecheck and bundle. Every build step
       # happens exactly once inside it, so nothing here may repeat one.
