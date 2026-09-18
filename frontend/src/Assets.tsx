@@ -1,23 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-  type FormEvent,
-} from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   ChevronRight,
   CircleAlert,
   Clock3,
-  Landmark,
   Pencil,
   Plus,
   Gem,
+  X,
 } from 'lucide-react';
-import { apiGet, queryClient, useSession } from './lib/query';
+import { apiGet, queryClient } from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useUrlField } from './lib/navigation';
 import { money, toNumber } from './lib/format';
@@ -25,16 +17,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -44,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Choice,
   EmptyState,
@@ -53,7 +34,9 @@ import {
   PageHeader,
 } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
+import type { DonutSlice } from '@/components/charts/Donut';
 const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
+const Donut = lazy(() => import('@/components/charts/Donut'));
 
 type Holding = {
   id: string;
@@ -115,11 +98,6 @@ type Report = {
   series: Totals[];
   accounts: LinkableAccount[];
 };
-type FillSummary = {
-  filled: number;
-  unchanged: number;
-  skipped: Record<string, number>;
-};
 
 const kinds: Record<string, string> = {
   cash: 'Cash',
@@ -139,12 +117,6 @@ const feeds: Record<Feed, string> = {
   ibkr: 'Interactive Brokers',
   binance: 'Binance',
   wallet: 'Wallet address',
-};
-const feedHint: Record<Feed, string> = {
-  bank: 'The account whose stored balance fills this holding.',
-  ibkr: 'The symbol in the statement, or CASH for the cash in this currency.',
-  binance: 'TOTAL for everything in USD, or one asset symbol.',
-  wallet: 'The public address; BTC and ETH are read.',
 };
 const sourceLabel: Record<string, string> = {
   manual: 'typed',
@@ -167,68 +139,68 @@ const monthLabel = (day: string) =>
   new Intl.DateTimeFormat('en', { month: 'short', year: '2-digit' }).format(
     new Date(`${day}T00:00:00Z`),
   );
-
-async function send(path: string, fields: Record<string, string>) {
-  const response = await fetch(path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(fields),
-  });
-  if (!response.ok)
-    throw new Error(
-      response.status === 401 || response.status === 403
-        ? 'Your session has changed. Reload the page and try again.'
-        : response.status === 409
-          ? 'This changed since you opened it. Refresh and try again.'
-          : 'Not saved. Check the figure and try again.',
-    );
-  return response.json();
-}
 const refresh = () => queryClient.invalidateQueries({ queryKey: ['holdings'] });
 
-type Draft = {
-  name: string;
-  kind: string;
-  denomination: string;
-  invested: boolean;
-  liquid: boolean;
-  owner: string;
-  group: string;
-  maturesOn: string;
-  note: string;
-  archived: boolean;
-  feed: string;
-  feedRef: string;
+/** Everything the chosen half is not; minor units stay exact, so BigInt. */
+const rest = (total: string, part: string) =>
+  (BigInt(total) - BigInt(part)).toString();
+
+/** The three ways the same money divides in two: the time chart and the
+ *  composition rings read one of these. */
+type SplitKey = 'invested' | 'uah' | 'liquid';
+type Split = {
+  label: string;
+  first: string;
+  second: string;
+  /** The chart token the first half takes; the second half is always gray. */
+  tone: number;
+  a: (totals: Totals) => string;
+  b: (totals: Totals) => string;
 };
-const emptyDraft: Draft = {
-  name: '',
-  kind: 'bank',
-  denomination: 'USD',
-  invested: false,
-  liquid: true,
-  owner: '',
-  group: '',
-  maturesOn: '',
-  note: '',
-  archived: false,
-  feed: '',
-  feedRef: '',
+const splits: Record<SplitKey, Split> = {
+  invested: {
+    label: 'Invested vs not',
+    first: 'Invested',
+    second: 'Not invested',
+    tone: 1,
+    a: (totals) => totals.investedMinor,
+    b: (totals) => totals.notInvestedMinor,
+  },
+  uah: {
+    label: 'UAH vs other',
+    first: 'In hryvnia',
+    second: 'Other currencies',
+    tone: 3,
+    a: (totals) => totals.uahMinor,
+    b: (totals) => rest(totals.totalMinor, totals.uahMinor),
+  },
+  liquid: {
+    label: 'Liquid vs not',
+    first: 'Liquid',
+    second: 'Not liquid',
+    tone: 2,
+    a: (totals) => totals.liquidMinor,
+    b: (totals) => rest(totals.totalMinor, totals.liquidMinor),
+  },
 };
+const splitKeys = Object.keys(splits) as SplitKey[];
+/** Seven slices before "Others", which keeps gray to itself; the last two
+ *  step back through the tokens, drawn lighter so no two neighbours match. */
+const topTones = [1, 2, 3, 4, 6, 1, 2];
+const topCount = topTones.length;
 
 export default function Assets() {
   const { currency: display } = useDisplayCurrency();
-  const { data: session } = useSession();
   const isMobile = useIsMobile();
   const [at, setAt] = useUrlField('at', '');
+  const [excluded, setExcluded] = useUrlField('exclude', '');
+  const [split, setSplit] = useState<SplitKey>('invested');
   const [showRetired, setShowRetired] = useState(false);
   const [grouped, setGrouped] = useState(true);
   const [showZero, setShowZero] = useState(false);
   const [onlyManual, setOnlyManual] = useState(false);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<Holding | null | undefined>();
-  const [filling, setFilling] = useState(false);
-  const [notice, setNotice] = useState('');
+  // Groups start closed: the list is long, and the subtotals are the point.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const query = useQuery({
     queryKey: ['holdings', display, at],
     queryFn: ({ signal }) =>
@@ -238,6 +210,11 @@ export default function Assets() {
       ),
   });
   const report = query.data;
+  const hidden = useMemo(() => excluded.split(',').filter(Boolean), [excluded]);
+  const hide = (id: string) =>
+    setExcluded([...hidden.filter((each) => each !== id), id].join(','));
+  const unhide = (id: string) =>
+    setExcluded(hidden.filter((each) => each !== id).join(','));
   const dateOptions = useMemo(() => {
     const days = [...(report?.dates ?? [])];
     if (at && !days.includes(at)) days.push(at);
@@ -282,51 +259,109 @@ export default function Assets() {
     });
   }, [rows]);
   const toggleGroup = (key: string) =>
-    setCollapsed((current) => {
+    setExpanded((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  const chart = useMemo(
-    () =>
-      (report?.series ?? []).map((point) => ({
+  const chart = useMemo(() => {
+    const chosen = splits[split];
+    return (report?.series ?? []).map((point) => {
+      const aMinor = chosen.a(point);
+      const bMinor = chosen.b(point);
+      return {
         asOf: point.asOf,
-        invested: toNumber(point.investedMinor, display),
-        notInvested: toNumber(point.notInvestedMinor, display),
-        investedMinor: point.investedMinor,
-        notInvestedMinor: point.notInvestedMinor,
+        a: toNumber(aMinor, display),
+        b: toNumber(bMinor, display),
+        aMinor,
+        bMinor,
         totalMinor: point.totalMinor,
-      })),
-    [report?.series, display],
-  );
-  const today = rigaToday();
-  const selected = report?.at ?? at;
-  const linkedToBanks = (report?.rows ?? []).some(
-    (row) => row.holding.feed === 'bank' && !row.holding.archived,
-  );
-  async function fillFromBanks() {
-    if (!session || filling) return;
-    setFilling(true);
-    setNotice('');
-    try {
-      const { fill } = (await send('/api/holdings/fill', {
-        csrf: session.csrf,
-        asOf: selected,
-      })) as { fill: FillSummary };
-      await refresh();
-      const skipped = Object.entries(fill.skipped)
-        .map(([reason, count]) => `${count} ${reason.replaceAll('_', ' ')}`)
-        .join(', ');
-      setNotice(
-        `${fill.filled} filled from stored bank balances, ${fill.unchanged} already current${skipped ? `; skipped: ${skipped}` : ''}.`,
+      };
+    });
+  }, [report?.series, display, split]);
+  // One ring per way the money divides, all read off the chosen date.
+  const composition = useMemo(() => {
+    const totals = report?.totals;
+    if (!totals) return [];
+    return splitKeys.map((key) => {
+      const chosen = splits[key];
+      const aMinor = chosen.a(totals);
+      const bMinor = chosen.b(totals);
+      return {
+        key,
+        label: chosen.label,
+        slices: [
+          {
+            key: 'first',
+            label: chosen.first,
+            value: toNumber(aMinor, display),
+            detail: money(aMinor, display),
+            tone: chosen.tone,
+          },
+          {
+            key: 'second',
+            label: chosen.second,
+            value: toNumber(bMinor, display),
+            detail: money(bMinor, display),
+            tone: 5,
+          },
+        ],
+      };
+    });
+  }, [report?.totals, display]);
+  // The biggest holdings on the date, minus the ones sent away; the next one
+  // down takes the place each exclusion frees.
+  const biggest = useMemo(() => {
+    const counted = (report?.rows ?? [])
+      .filter(
+        (row) =>
+          !row.holding.archived &&
+          row.valueMinor !== null &&
+          BigInt(row.valueMinor) > 0n &&
+          !hidden.includes(row.holding.id),
+      )
+      .sort((left, right) => {
+        const a = BigInt(left.valueMinor!);
+        const b = BigInt(right.valueMinor!);
+        return a === b ? 0 : b > a ? 1 : -1;
+      });
+    const head = counted.slice(0, topCount);
+    const tail = counted.slice(topCount);
+    const slices: DonutSlice[] = head.map((row, index) => ({
+      key: row.holding.id,
+      label: row.holding.name,
+      value: toNumber(row.valueMinor!, display),
+      detail: money(row.valueMinor!, display),
+      tone: topTones[index],
+      dim: index >= 5,
+    }));
+    if (tail.length) {
+      const others = tail.reduce(
+        (sum, row) => sum + BigInt(row.valueMinor!),
+        0n,
       );
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Not filled.');
-    } finally {
-      setFilling(false);
+      slices.push({
+        key: 'others',
+        label: `Others · ${tail.length}`,
+        value: toNumber(others.toString(), display),
+        detail: money(others.toString(), display),
+        tone: 5,
+        dim: true,
+        fixed: true,
+      });
     }
-  }
+    return slices;
+  }, [report?.rows, display, hidden]);
+  const names = useMemo(
+    () =>
+      new Map(
+        (report?.rows ?? []).map((row) => [row.holding.id, row.holding.name]),
+      ),
+    [report?.rows],
+  );
+  const selected = report?.at ?? at;
+  const anyValue = report ? BigInt(report.totals.totalMinor) !== 0n : false;
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-8">
       <PageHeader
@@ -337,41 +372,18 @@ export default function Assets() {
             <Button
               variant="outline"
               size="sm"
-              disabled={!report || selected === today}
-              onClick={() => setAt(today)}
+              render={<a href="/assets/snapshots" />}
             >
               <Plus />
-              Snapshot today
+              New snapshot
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!report || !linkedToBanks || filling}
-              onClick={() => void fillFromBanks()}
-              title="Copies the balances the banks last stated into this date"
-            >
-              <Landmark className={filling ? 'animate-pulse' : ''} />
-              Fill from banks
-            </Button>
-            <Button
-              size="sm"
-              disabled={!session}
-              onClick={() => setEditing(null)}
-            >
+            <Button size="sm" render={<a href="/assets/new" />}>
               <Plus />
               Add holding
             </Button>
           </>
         }
       />
-      {notice && (
-        <div
-          role="status"
-          className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
-        >
-          {notice}
-        </div>
-      )}
       {query.error && (
         <div
           role="alert"
@@ -486,10 +498,21 @@ export default function Assets() {
             />
           </div>
           <Card className="shadow-xs">
-            <CardHeader>
+            <CardHeader className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="text-sm font-medium">
                 Over time · {display}
               </CardTitle>
+              <Choice
+                aria-label="What the bars split by"
+                size="sm"
+                className="w-44"
+                value={split}
+                onChange={(value) => setSplit(value as SplitKey)}
+                options={splitKeys.map((key) => ({
+                  value: key,
+                  label: splits[key].label,
+                }))}
+              />
             </CardHeader>
             <CardContent>
               {chart.length < 2 ? (
@@ -507,8 +530,8 @@ export default function Assets() {
                       data={chart}
                       index="asOf"
                       series={[
-                        { key: 'invested', label: 'Invested' },
-                        { key: 'notInvested', label: 'Not invested' },
+                        { key: 'a', label: splits[split].first },
+                        { key: 'b', label: splits[split].second },
                       ]}
                       formatValue={(_, key, row) =>
                         money(String(row[`${key}Minor`]), display)
@@ -517,7 +540,8 @@ export default function Assets() {
                       formatHeading={(day) =>
                         `${day} · ${money(String(chart.find((p) => p.asOf === day)?.totalMinor ?? '0'), display)}`
                       }
-                      showYAxis={!isMobile}
+                      yAxisWidth={isMobile ? 36 : 52}
+                      minTickGap={isMobile ? 16 : 28}
                     />
                   </Suspense>
                 </div>
@@ -525,25 +549,105 @@ export default function Assets() {
             </CardContent>
           </Card>
           <Card className="shadow-xs">
-            <CardHeader className="flex flex-row items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-sm font-medium">
-                  Holdings on {selected}
-                </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Type this date’s figure and press Enter. A figure typed in
-                  another currency is converted at that day’s rate.
-                </p>
-              </div>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">
+                How it divides on {selected}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!anyValue ? (
+                <EmptyState
+                  icon={Gem}
+                  title="Nothing counted on this date"
+                  text="Pick another date, or record what the holdings were worth."
+                />
+              ) : (
+                <Suspense fallback={<Skeleton className="h-52 rounded-lg" />}>
+                  <div className="grid gap-6 sm:grid-cols-3">
+                    {composition.map((ring) => (
+                      <div key={ring.key} className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          {ring.label}
+                        </p>
+                        <Donut slices={ring.slices} />
+                      </div>
+                    ))}
+                  </div>
+                </Suspense>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="shadow-xs">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">
+                Biggest holdings on {selected}
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The seven largest and everything else together. Tap a slice to
+                send it away and let the next one in.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {biggest.length === 0 ? (
+                <EmptyState
+                  icon={Gem}
+                  title="Nothing to rank"
+                  text="A holding appears here once it has a value on this date."
+                />
+              ) : (
+                <div className="sm:max-w-md">
+                  <Suspense fallback={<Skeleton className="h-52 rounded-lg" />}>
+                    <Donut
+                      slices={biggest}
+                      onSelect={hide}
+                      selectVerb="Leave out"
+                    />
+                  </Suspense>
+                </div>
+              )}
+              {hidden.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Left out
+                  </span>
+                  {hidden.map((id) => (
+                    <Badge
+                      key={id}
+                      variant="outline"
+                      className="cursor-pointer gap-1"
+                      render={
+                        <button
+                          type="button"
+                          onClick={() => unhide(id)}
+                          title={`Bring ${names.get(id) ?? 'it'} back`}
+                        />
+                      }
+                    >
+                      <X />
+                      {names.get(id) ?? id}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="shadow-xs">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">
+                Holdings on {selected}
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                What each holding was worth on the date. Open one to change it.
+              </p>
             </CardHeader>
             <CardContent className="p-0 sm:p-0">
               {rows.length === 0 ? (
                 <EmptyState
                   icon={Gem}
                   title="Nothing recorded yet"
-                  text="Add the first holding, then type what it was worth on the date."
+                  text="Add the first holding, then record what it was worth on the date."
                   action={
-                    <Button size="sm" onClick={() => setEditing(null)}>
+                    <Button size="sm" render={<a href="/assets/new" />}>
                       <Plus />
                       Add holding
                     </Button>
@@ -568,22 +672,16 @@ export default function Assets() {
                         <GroupHeader
                           group={group}
                           display={display}
-                          open={!collapsed.has(group.key)}
+                          open={expanded.has(group.key)}
                           onToggle={() => toggleGroup(group.key)}
                           compact
                         />
                       )}
-                      {(!grouped || !collapsed.has(group.key)) && (
+                      {(!grouped || expanded.has(group.key)) && (
                         <ul className="divide-y">
                           {group.rows.map((row) => (
                             <li key={row.holding.id} className="px-4 py-3">
-                              <HoldingCard
-                                row={row}
-                                asOf={selected}
-                                display={display}
-                                csrf={session?.csrf}
-                                onEdit={() => setEditing(row.holding)}
-                              />
+                              <HoldingCard row={row} display={display} />
                             </li>
                           ))}
                         </ul>
@@ -596,7 +694,7 @@ export default function Assets() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Holding</TableHead>
-                      <TableHead className="w-72">Amount</TableHead>
+                      <TableHead className="w-56">Amount</TableHead>
                       <TableHead className="text-right">Value</TableHead>
                       <TableHead className="w-36">Counted</TableHead>
                       <TableHead className="w-12" />
@@ -625,22 +723,19 @@ export default function Assets() {
                                 <GroupHeader
                                   group={group}
                                   display={display}
-                                  open={!collapsed.has(group.key)}
+                                  open={expanded.has(group.key)}
                                   onToggle={() => toggleGroup(group.key)}
                                 />
                               </TableCell>
                             </TableRow>,
                           ]
                         : []),
-                      ...(!grouped || !collapsed.has(group.key)
+                      ...(!grouped || expanded.has(group.key)
                         ? group.rows.map((row) => (
                             <HoldingTableRow
                               key={row.holding.id}
                               row={row}
-                              asOf={selected}
                               display={display}
-                              csrf={session?.csrf}
-                              onEdit={() => setEditing(row.holding)}
                             />
                           ))
                         : []),
@@ -651,14 +746,6 @@ export default function Assets() {
             </CardContent>
           </Card>
         </>
-      )}
-      {editing !== undefined && (
-        <HoldingDialog
-          holding={editing}
-          accounts={report?.accounts ?? []}
-          csrf={session?.csrf}
-          onClose={() => setEditing(undefined)}
-        />
       )}
     </div>
   );
@@ -734,144 +821,9 @@ function HoldingName({ holding }: { holding: Holding }) {
   );
 }
 
-/** The amount typed for the date, saved on Enter or blur; a currency pick when the figure is money. */
-function AmountEntry({
-  row,
-  asOf,
-  csrf,
-  compact,
-}: {
-  row: Row;
-  asOf: string;
-  csrf?: string;
-  compact?: boolean;
-}) {
-  const denomination = row.holding.denomination;
-  const initial = row.carried || row.quantity === null ? '' : row.quantity;
-  const [value, setValue] = useState(initial);
-  const [currency, setCurrency] = useState(denomination);
-  const [price, setPrice] = useState(row.price?.usdPerUnit ?? '');
-  const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle');
-  const [message, setMessage] = useState('');
-  useEffect(() => {
-    setValue(initial);
-    setCurrency(denomination);
-    setPrice(row.price?.usdPerUnit ?? '');
-    setState('idle');
-  }, [initial, denomination, row.price?.usdPerUnit, asOf]);
-  async function save() {
-    if (!csrf || state === 'saving') return;
-    const typed = value.trim();
-    if (!typed || (typed === initial && currency === denomination)) return;
-    setState('saving');
-    try {
-      await send('/api/holding-snapshots', {
-        csrf,
-        holdingId: row.holding.id,
-        asOf,
-        amount: typed,
-        ...(currency !== denomination ? { currency } : {}),
-      });
-      await refresh();
-      setState('idle');
-    } catch (error) {
-      setState('error');
-      setMessage(error instanceof Error ? error.message : 'Not saved.');
-    }
-  }
-  async function savePrice() {
-    if (!csrf || state === 'saving') return;
-    const typed = price.trim();
-    if (!typed || typed === (row.price?.usdPerUnit ?? '')) return;
-    setState('saving');
-    try {
-      await send('/api/asset-prices', {
-        csrf,
-        symbol: denomination,
-        asOf,
-        usdPerUnit: typed,
-      });
-      await refresh();
-      setState('idle');
-    } catch (error) {
-      setState('error');
-      setMessage(error instanceof Error ? error.message : 'Not saved.');
-    }
-  }
-  const options = [
-    denomination,
-    ...currencies.filter((code) => code !== denomination),
-  ].map((code) => ({ value: code, label: code }));
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label={`Amount of ${row.holding.name}`}
-          inputMode="decimal"
-          className={compact ? 'h-9 flex-1 tabular-nums' : 'w-32 tabular-nums'}
-          placeholder={row.carried && row.quantity ? row.quantity : '0'}
-          value={value}
-          disabled={!csrf || state === 'saving'}
-          onChange={(event) => setValue(event.target.value)}
-          onBlur={() => void save()}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter')
-              (event.target as HTMLInputElement).blur();
-          }}
-        />
-        {isCurrency(denomination) ? (
-          <Choice
-            aria-label="Currency of the typed amount"
-            size="sm"
-            className="w-20"
-            value={currency}
-            onChange={setCurrency}
-            options={options}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">{denomination}</span>
-        )}
-      </div>
-      {!isCurrency(denomination) && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>× USD</span>
-          <Input
-            aria-label={`Price of one ${denomination} in USD`}
-            inputMode="decimal"
-            className="h-7 w-28 text-xs tabular-nums"
-            placeholder="price"
-            value={price}
-            disabled={!csrf || state === 'saving'}
-            onChange={(event) => setPrice(event.target.value)}
-            onBlur={() => void savePrice()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter')
-                (event.target as HTMLInputElement).blur();
-            }}
-          />
-          {row.price?.approximate && (
-            <span title={`Price from ${row.price.asOf}`}>
-              from {row.price.asOf}
-            </span>
-          )}
-        </div>
-      )}
-      {row.enteredCurrency && !row.carried && (
-        <p className="text-xs text-muted-foreground">
-          typed as {row.enteredAmount} {row.enteredCurrency}
-        </p>
-      )}
-      {state === 'error' && (
-        <p role="alert" className="text-xs text-destructive">
-          {message}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** A figure a feed writes: shown, not typed; the feed is named beside it. */
-function FedAmount({ row }: { row: Row }) {
+/** How much of the thing there is on the date, and what one of it costs.
+ *  Read only: the figure is changed on the holding's own page. */
+function AmountCell({ row }: { row: Row }) {
   return (
     <div className="space-y-0.5 text-sm tabular-nums">
       <div>
@@ -922,30 +874,29 @@ function CountedCell({ row }: { row: Row }) {
   );
 }
 
-function HoldingTableRow({
-  row,
-  asOf,
-  display,
-  csrf,
-  onEdit,
-}: {
-  row: Row;
-  asOf: string;
-  display: string;
-  csrf?: string;
-  onEdit: () => void;
-}) {
+/** The pencil opens the holding's own page; nothing is edited in the list. */
+function EditLink({ holding }: { holding: Holding }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8"
+      aria-label={`Edit ${holding.name}`}
+      render={<a href={`/assets/${encodeURIComponent(holding.id)}`} />}
+    >
+      <Pencil className="size-3.5" />
+    </Button>
+  );
+}
+
+function HoldingTableRow({ row, display }: { row: Row; display: string }) {
   return (
     <TableRow>
       <TableCell className="align-top">
         <HoldingName holding={row.holding} />
       </TableCell>
       <TableCell className="align-top">
-        {row.holding.feed ? (
-          <FedAmount row={row} />
-        ) : (
-          <AmountEntry row={row} asOf={asOf} csrf={csrf} />
-        )}
+        <AmountCell row={row} />
       </TableCell>
       <TableCell className="text-right align-top tabular-nums">
         <ValueCell row={row} display={display} />
@@ -954,353 +905,24 @@ function HoldingTableRow({
         <CountedCell row={row} />
       </TableCell>
       <TableCell className="align-top">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label={`Edit ${row.holding.name}`}
-          onClick={onEdit}
-        >
-          <Pencil className="size-3.5" />
-        </Button>
+        <EditLink holding={row.holding} />
       </TableCell>
     </TableRow>
   );
 }
 
-function HoldingCard({
-  row,
-  asOf,
-  display,
-  csrf,
-  onEdit,
-}: {
-  row: Row;
-  asOf: string;
-  display: string;
-  csrf?: string;
-  onEdit: () => void;
-}) {
+function HoldingCard({ row, display }: { row: Row; display: string }) {
   return (
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <HoldingName holding={row.holding} />
         <div className="flex items-center gap-1">
           <ValueCell row={row} display={display} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            aria-label={`Edit ${row.holding.name}`}
-            onClick={onEdit}
-          >
-            <Pencil className="size-3.5" />
-          </Button>
+          <EditLink holding={row.holding} />
         </div>
       </div>
-      {row.holding.feed ? (
-        <FedAmount row={row} />
-      ) : (
-        <AmountEntry row={row} asOf={asOf} csrf={csrf} compact />
-      )}
+      <AmountCell row={row} />
       <CountedCell row={row} />
     </div>
-  );
-}
-
-function HoldingDialog({
-  holding,
-  accounts,
-  csrf,
-  onClose,
-}: {
-  holding: Holding | null;
-  accounts: LinkableAccount[];
-  csrf?: string;
-  onClose: () => void;
-}) {
-  const prefix = useId();
-  const [draft, setDraft] = useState<Draft>(
-    holding
-      ? {
-          name: holding.name,
-          kind: holding.kind,
-          denomination: holding.denomination,
-          invested: holding.invested,
-          liquid: holding.liquid,
-          owner: holding.owner ?? '',
-          group: holding.group ?? '',
-          maturesOn: holding.maturesOn ?? '',
-          note: holding.note ?? '',
-          archived: holding.archived,
-          feed: holding.feed ?? '',
-          feedRef: holding.feedRef ?? '',
-        }
-      : emptyDraft,
-  );
-  const accountOptions = accounts
-    .filter(
-      (account) =>
-        !account.currencies.length ||
-        account.currencies.includes(draft.denomination.trim().toUpperCase()),
-    )
-    .map((account) => ({
-      value: `${account.source}|${account.accountId}`,
-      label: `${account.label} · ${account.owner === 'rodion' ? 'Rodion' : 'Katya'}${account.currencies.length ? ` · ${account.currencies.join('/')}` : ''}`,
-    }));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const field = (key: keyof Draft) => (value: string | boolean) =>
-    setDraft((current) => ({ ...current, [key]: value }));
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!csrf || saving) return;
-    if (!draft.name.trim()) {
-      setError('Give the holding a name.');
-      return;
-    }
-    if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,15}$/.test(draft.denomination.trim())) {
-      setError('The unit is a currency code or a symbol, such as USD or QQQ.');
-      return;
-    }
-    if (draft.maturesOn && !/^\d{4}-\d{2}-\d{2}$/.test(draft.maturesOn)) {
-      setError('Write the maturity date as YYYY-MM-DD.');
-      return;
-    }
-    if (draft.feed === 'bank' && !draft.feedRef) {
-      setError('Pick the account whose balance fills this holding.');
-      return;
-    }
-    if (draft.feed === 'wallet' && !draft.feedRef.trim()) {
-      setError('Paste the wallet’s public address.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      await send('/api/holdings', {
-        csrf,
-        ...(holding
-          ? { id: holding.id, revision: String(holding.revision) }
-          : {}),
-        name: draft.name.trim(),
-        kind: draft.kind,
-        denomination: draft.denomination.trim().toUpperCase(),
-        invested: String(draft.invested),
-        liquid: String(draft.liquid),
-        owner: draft.owner,
-        group: draft.group.trim(),
-        maturesOn: draft.maturesOn.trim(),
-        note: draft.note.trim(),
-        archived: String(draft.archived),
-        feed: draft.feed,
-        feedRef: draft.feed ? draft.feedRef.trim() : '',
-      });
-      await refresh();
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Not saved.');
-    } finally {
-      setSaving(false);
-    }
-  }
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-        <form onSubmit={submit} className="space-y-4">
-          <DialogHeader>
-            <DialogTitle>
-              {holding ? 'Edit holding' : 'Add holding'}
-            </DialogTitle>
-            <DialogDescription>
-              One thing with a value. Its unit decides how the amount is
-              counted: a currency for money, a symbol for shares or coins.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor={`${prefix}-name`}>Name</Label>
-              <Input
-                id={`${prefix}-name`}
-                value={draft.name}
-                onChange={(event) => field('name')(event.target.value)}
-                maxLength={120}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${prefix}-kind`}>Kind</Label>
-              <Choice
-                id={`${prefix}-kind`}
-                value={draft.kind}
-                onChange={field('kind')}
-                options={Object.entries(kinds).map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${prefix}-unit`}>Unit</Label>
-              <Input
-                id={`${prefix}-unit`}
-                value={draft.denomination}
-                onChange={(event) =>
-                  field('denomination')(event.target.value.toUpperCase())
-                }
-                placeholder="USD, EUR, UAH, BTC, QQQ…"
-                maxLength={16}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${prefix}-group`}>Group</Label>
-              <Input
-                id={`${prefix}-group`}
-                value={draft.group}
-                onChange={(event) => field('group')(event.target.value)}
-                placeholder="Optional, such as a broker"
-                maxLength={80}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${prefix}-owner`}>Whose</Label>
-              <Choice
-                id={`${prefix}-owner`}
-                value={draft.owner}
-                onChange={field('owner')}
-                options={[
-                  { value: '', label: 'Household' },
-                  { value: 'rodion', label: 'Rodion' },
-                  { value: 'katya', label: 'Katya' },
-                ]}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${prefix}-matures`}>Matures on</Label>
-              <Input
-                id={`${prefix}-matures`}
-                value={draft.maturesOn}
-                onChange={(event) => field('maturesOn')(event.target.value)}
-                placeholder="YYYY-MM-DD, for a bond or deposit"
-                maxLength={10}
-              />
-            </div>
-            <div className="flex flex-col justify-end gap-2 text-sm">
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={draft.invested}
-                  onCheckedChange={(checked) =>
-                    field('invested')(Boolean(checked))
-                  }
-                />
-                Invested
-              </label>
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={draft.liquid}
-                  onCheckedChange={(checked) =>
-                    field('liquid')(Boolean(checked))
-                  }
-                />
-                Liquid
-              </label>
-              {holding && (
-                <label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={draft.archived}
-                    onCheckedChange={(checked) =>
-                      field('archived')(Boolean(checked))
-                    }
-                  />
-                  Retired, keep its history
-                </label>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${prefix}-feed`}>Filled by</Label>
-              <Choice
-                id={`${prefix}-feed`}
-                value={draft.feed}
-                onChange={(value) =>
-                  setDraft((current) => ({
-                    ...current,
-                    feed: value,
-                    feedRef: '',
-                  }))
-                }
-                options={[
-                  { value: '', label: 'Typed by hand' },
-                  ...Object.entries(feeds).map(([value, label]) => ({
-                    value,
-                    label,
-                  })),
-                ]}
-              />
-            </div>
-            {draft.feed && (
-              <div className="space-y-1.5">
-                <Label htmlFor={`${prefix}-ref`}>
-                  {draft.feed === 'bank' ? 'Account' : 'Reference'}
-                </Label>
-                {draft.feed === 'bank' ? (
-                  <Choice
-                    id={`${prefix}-ref`}
-                    value={draft.feedRef}
-                    onChange={field('feedRef')}
-                    placeholder={
-                      accountOptions.length
-                        ? 'Pick an account'
-                        : 'No account holds this currency'
-                    }
-                    options={accountOptions}
-                  />
-                ) : (
-                  <Input
-                    id={`${prefix}-ref`}
-                    value={draft.feedRef}
-                    onChange={(event) => field('feedRef')(event.target.value)}
-                    placeholder={
-                      draft.feed === 'ibkr'
-                        ? draft.denomination || 'symbol, or CASH'
-                        : draft.feed === 'binance'
-                          ? 'TOTAL'
-                          : 'public address'
-                    }
-                    maxLength={200}
-                  />
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {feedHint[draft.feed as Feed]}
-                </p>
-              </div>
-            )}
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor={`${prefix}-note`}>Note</Label>
-              <Textarea
-                id={`${prefix}-note`}
-                value={draft.note}
-                onChange={(event) => field('note')(event.target.value)}
-                rows={2}
-                maxLength={2000}
-              />
-            </div>
-          </div>
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving || !csrf}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

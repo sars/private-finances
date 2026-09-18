@@ -14,10 +14,10 @@ the page cannot support.
 
 ## Where the figures come from
 
-| Provider | How | Cost |
-| --- | --- | --- |
-| Monobank | `balance` and `creditLimit` in the `client-info` response the account listing already fetches | none; no extra request, nothing against the 60-second-per-token limit |
-| Enable Banking (Wise, Revolut, Swedbank, LHV) | `GET /accounts/{uid}/balances`, one request per account per run | one request, but **not** another background fetch against the four-a-day allowance many banks impose, which counts unattended polls rather than the requests inside one |
+| Provider                                      | How                                                                                           | Cost                                                                                                                                                                    |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monobank                                      | `balance` and `creditLimit` in the `client-info` response the account listing already fetches | none; no extra request, nothing against the 60-second-per-token limit                                                                                                   |
+| Enable Banking (Wise, Revolut, Swedbank, LHV) | `GET /accounts/{uid}/balances`, one request per account per run                               | one request, but **not** another background fetch against the four-a-day allowance many banks impose, which counts unattended polls rather than the requests inside one |
 
 Both are recorded in `syncBank` (`src/bank-sync.ts`) before the payments are
 imported, and both are **best-effort**: a rate limit, a resource the bank does
@@ -61,7 +61,7 @@ says a total is incomplete instead of quietly reporting a smaller one.
 ## Whose money is shown
 
 Both members' accounts, to either sign-in, as the overview already reports the
-household. The tabs are a view, not a permission: what each person may *decide*
+household. The tabs are a view, not a permission: what each person may _decide_
 stays owner-scoped on Review and Accounts, and nothing on this page decides
 anything. The selected tab lives in the URL (`?who=`), so Back and Forward work.
 
@@ -91,3 +91,20 @@ Saving carries the revision it was read at and a stale one is refused with 409,
 the same optimistic check the settings screen uses. The card moves as soon as it
 is dropped; if the save fails the whole list goes back to where it was, so
 nobody is left looking at an arrangement that was never recorded.
+
+## Own money, and the groups
+
+Where a bank publishes an agreed overdraft it counts that limit inside the
+balance, so the figure the bank states is not what the household owns. The
+page's main figure per account is the stated balance less the limit — the
+household's own money — with the stated figure and the limit in a small line
+beneath; a negative result is shown as such. The household total is given
+twice: as stated by the banks, converted at the daily rates, and as own
+money where the limits can be taken out exactly, with a plain "—" and the
+reason where a limit is in another currency and no converted limit exists.
+Nothing is estimated to fill that gap.
+
+Accounts are listed in three sections: Personal, Non-personal (business and
+investment accounts) and, only when any exist, Purpose to review. Each card
+is titled with the account's full name — member, bank, product and currency
+(`displayName` from the API; see [assets](assets.md)).

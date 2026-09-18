@@ -38,6 +38,7 @@ import { Reports, previousReportPeriod } from './reports.js';
 import { Accounts } from './accounts.js';
 import { Holdings } from './holdings.js';
 import { fillFromBalances } from './holding-fill.js';
+import { accountDisplayName } from './account-names.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
@@ -64,7 +65,7 @@ import {
 
 export type WebConfig = {
   frontendDirectory?: string;
-  credentialHealth?: () => CredentialHealth;
+  credentialHealth?: () => CredentialHealth[];
   port: number;
   mode: 'demo' | 'postgres';
   // Credentials live in the `users` table, seeded from the environment by
@@ -117,6 +118,8 @@ const frontendRoutes = new Set([
   '/settings',
   '/cash',
   '/assets',
+  '/assets/snapshots',
+  '/assets/new',
 ]);
 const assetTypes: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
@@ -354,10 +357,14 @@ export function web(
         Boolean(config.frontendDirectory) &&
         (frontendRoutes.has(route) ||
           /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(route) ||
+          /^\/assets\/[0-9a-f-]{36}$/.test(route) ||
           route.startsWith('/assets/') ||
           rootFile);
       const serveShell = async () => {
-        const asset = route.startsWith('/assets/') || rootFile;
+        // The bundle lives under /assets/ and so do the holding pages; a build
+        // file has an extension the bundler gave it, a page does not.
+        const asset =
+          (route.startsWith('/assets/') && extname(route) !== '') || rootFile;
         const path = asset ? decodeURIComponent(route.slice(1)) : 'index.html';
         const type = asset
           ? assetTypes[extname(path)]
@@ -521,6 +528,16 @@ export function web(
             owner: account.owner,
             label: account.label,
             currencies: account.balances.map((b) => b.currency),
+            // One name for the account wherever it is listed.
+            displayName: accountDisplayName({
+              owner: account.owner,
+              source: account.source,
+              label: account.label,
+              currency:
+                account.balances.length === 1
+                  ? account.balances[0]!.currency
+                  : null,
+            }),
           })),
         });
         return;
@@ -548,7 +565,18 @@ export function web(
         const layout = await new UiLayouts(repo.db).get(actor, 'balances');
         json(200, {
           accounts: arrange(
-            accounts,
+            accounts.map((account) => ({
+              ...account,
+              displayName: accountDisplayName({
+                owner: account.owner,
+                source: account.source,
+                label: account.label,
+                currency:
+                  account.balances.length === 1
+                    ? account.balances[0]!.currency
+                    : null,
+              }),
+            })),
             layout.ordering,
             (account) => `${account.source}:${account.accountId}`,
           ),
@@ -959,9 +987,7 @@ export function web(
       if (req.method === 'GET' && route === '/api/ops') {
         json(200, {
           ...(await repo.health()),
-          credentials: config.credentialHealth
-            ? [config.credentialHealth()]
-            : [],
+          credentials: config.credentialHealth ? config.credentialHealth() : [],
         });
         return;
       }
@@ -986,7 +1012,7 @@ export function web(
             'Import needs review. Previously completed account windows remain saved.',
         };
         html(
-          `<h1>System health</h1>${config.credentialHealth ? `<section class="total"><h2>OpenAI API key</h2><p>${escape(config.credentialHealth().state.replaceAll('_', ' '))} · Expires ${escape(config.credentialHealth().expiresOn ?? config.credentialHealth().expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>` : ''}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section></div><h2>Bank imports</h2>${
+          `<h1>System health</h1>${(config.credentialHealth?.() ?? []).map((credential) => `<section class="total"><h2>${escape(credential.label)}</h2><p>${escape(credential.state.replaceAll('_', ' '))} · Expires ${escape(credential.expiresOn ?? credential.expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>`).join('')}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section></div><h2>Bank imports</h2>${
             connections.length
               ? connections
                   .map((c) => {

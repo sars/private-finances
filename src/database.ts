@@ -873,6 +873,26 @@ async function applyMigrations(db: Database): Promise<void> {
       await initializeAuth(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (55)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=56'))
+        .rows.length
+    ) {
+      // The reminder table admitted the OpenAI key and bank approvals only. The
+      // IBKR Flex token expires once a year, and when it does the holdings
+      // snapshot stops reading the broker without anything else saying so — so
+      // it is watched on the same 5/2/1-day ladder, which first requires the
+      // check constraint to accept its name. The constraint is replaced, not
+      // widened in place: PostgreSQL has no ALTER for a check's expression.
+      // Nothing is written or deleted; every existing row already satisfies it.
+      await tx.query(
+        'ALTER TABLE credential_reminders DROP CONSTRAINT IF EXISTS credential_reminders_credential_check',
+      );
+      await tx.query(
+        `ALTER TABLE credential_reminders ADD CONSTRAINT credential_reminders_credential_check
+         CHECK(credential IN ('openai_api_key','bank_consent','ibkr_flex_token'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (56)');
+    }
   });
 }
 

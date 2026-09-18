@@ -15,11 +15,14 @@ export const appPaths = [
   '/imports',
   '/settings',
   '/assets',
+  '/assets/snapshots',
+  '/assets/new',
 ];
 export function isAppPath(path: string) {
   return (
     appPaths.includes(path) ||
-    /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(path)
+    /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(path) ||
+    /^\/assets\/[0-9a-f-]{36}$/.test(path)
   );
 }
 export function stringSearch(

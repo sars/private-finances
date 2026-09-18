@@ -1,4 +1,4 @@
-import { openAiCredentialHealth } from '../src/credential-health.js';
+import { credentialsHealthFromEnv } from '../src/credential-health.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
@@ -52,7 +52,13 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     release: 'frontend-test',
     frontendDirectory: frontend,
     credentialHealth: () =>
-      openAiCredentialHealth('2026-12-10', new Date('2026-12-05T12:00:00Z')),
+      credentialsHealthFromEnv(
+        {
+          OPENAI_API_KEY_EXPIRES_ON: '2026-12-10',
+          IBKR_FLEX_TOKEN_EXPIRES_AT: '2027-08-19T18:14:23Z',
+        },
+        new Date('2026-12-05T12:00:00Z'),
+      ),
     monobankJarsExcluded: true,
     consent: {
       list: async (actor) => [
@@ -203,9 +209,16 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
       !JSON.stringify(budget).includes('RAW_PAYLOAD_MUST_STAY_PRIVATE'),
     );
     const ops = await (await get('/api/ops')).json();
+    assert.equal(ops.credentials[0].credential, 'openai_api_key');
     assert.equal(ops.credentials[0].state, 'expiring');
     assert.equal(ops.credentials[0].warningDays, 5);
     assert.equal(ops.credentials[0].expiresOn, '2026-12-10');
+    // Every tracked credential is reported, each under the name operations
+    // reads on the page.
+    assert.equal(ops.credentials[1].credential, 'ibkr_flex_token');
+    assert.equal(ops.credentials[1].label, 'IBKR Flex token');
+    assert.equal(ops.credentials[1].state, 'healthy');
+    assert.equal(ops.credentials[1].expiresAt, '2027-08-19T18:14:23.000Z');
     const overview = await (await get('/api/overview?owner=katya')).json();
     assert.ok(
       overview.transactions.every(
@@ -219,6 +232,19 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     const script = await get('/assets/app.js');
     assert.equal(script.status, 200);
     assert.equal(script.headers.get('cache-control'), 'no-store');
+    // The holding pages share the /assets/ prefix with the bundle: a page is
+    // the shell, a hashed file with an extension is the file.
+    for (const page of [
+      '/assets/snapshots',
+      '/assets/new',
+      '/assets/12345678-1234-1234-1234-123456789012',
+    ]) {
+      const shell = await get(page);
+      assert.equal(shell.status, 200, page);
+      assert.match(shell.headers.get('content-type') ?? '', /text\/html/);
+      assert.match(await shell.text(), /Application shell/);
+    }
+    assert.equal((await get('/assets/missing-file.js')).status, 404);
     assert.equal(
       (await get('/assets/app-Abcd1234.js')).headers.get('cache-control'),
       'private, max-age=31536000, immutable',

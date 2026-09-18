@@ -53,6 +53,8 @@ const Connections = lazy(() => import('./Connections'));
 const Imports = lazy(() => import('./Imports'));
 const Balances = lazy(() => import('./Balances'));
 const Assets = lazy(() => import('./Assets'));
+const AssetsSnapshots = lazy(() => import('./AssetsSnapshots'));
+const AssetEdit = lazy(() => import('./AssetEdit'));
 const screens: Record<
   string,
   React.LazyExoticComponent<React.ComponentType>
@@ -73,6 +75,8 @@ const screens: Record<
   '/imports': Imports,
   '/settings': Settings,
   '/assets': Assets,
+  '/assets/snapshots': AssetsSnapshots,
+  '/assets/new': AssetEdit,
 };
 
 type Theme = 'system' | 'light' | 'dark';
@@ -400,6 +404,11 @@ routes.push(
     getParentRoute: () => rootRoute,
     path: '/transactions/$id',
     component: () => <Payment />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/assets/$id',
+    component: () => <AssetEdit />,
   }),
 );
 const router = createRouter({

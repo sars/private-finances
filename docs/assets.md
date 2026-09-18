@@ -48,26 +48,44 @@ that, the holding is **without a price** and is counted separately rather than
 as zero. Rounding happens once, on the final figure in the display currency,
 half away from zero; every intermediate value is an exact rational.
 
-## The screen
+## The screens
 
-`/assets`, under Money. Four figures for the chosen date — everything,
-invested, liquid, and everything denominated in hryvnia — each against the
-previous snapshot; a chart of every snapshot date split into invested and not
-invested; and the holdings, one row each, with the quantity typed straight
-into the row. Enter saves the figure for the chosen date; a currency picker
-beside a money figure converts a number typed in another currency; a holding
-with a symbol shows a price field for that day. The date picker moves between
-snapshots, and **Snapshot today** starts a new one on today's Riga date,
-showing every quantity as carried until it is counted again. Rows are grouped
-by the holding's group — a holding without one sits under its kind — with a
-line per group giving its count and its value together, collapsible, and a
-switch for the flat list. A holding whose quantity is zero is hidden unless
+**Assets** (`/assets`, under Money) is the analytics view and reads only.
+Four figures for the chosen date — everything, invested, liquid, and
+everything denominated in hryvnia — each against the previous snapshot; a
+chart of every snapshot date with a switch between three splits, invested
+against not, hryvnia against other currencies, liquid against not, the
+scale shown on the phone too and no figures printed on the bars; three
+donuts for the chosen date with the same three splits; a donut of the seven
+largest holdings and the rest, where tapping a slice or its legend entry
+excludes that holding so the next largest appears, the exclusions kept in
+the page address; and the holdings, grouped by the holding's group — a
+holding without one under its kind — with a subtotal line per group, groups
+collapsed until opened, a switch for the flat list, and a pencil on each row
+that opens the holding's page. A zero-quantity holding is hidden unless
 asked for, and so are retired holdings; **Only what I type** hides every
-holding a feed fills, which is the view for the monthly round of manual
-figures. A fed holding's figure is shown, not typed — the feed owns it — while
-its settings stay editable. Either member sees and records the whole
-household's holdings; there is no per-member scope here, only an optional
-owner label on a holding.
+holding a feed fills. The date picker moves between snapshots.
+
+**Snapshots** (`/assets/snapshots`) lists every snapshot date with its total,
+invested, liquid and count, each linking to the Assets view of that day, and
+holds the form for today: every holding that is typed by hand, both members',
+with its previous figure and the day it was counted, and an input in the
+holding's own currency shown as plain text — the currency is fixed per
+holding. Fed holdings sit behind a checkbox, read-only, with their source.
+Everything typed is saved with one button; a figure that is not a number is
+refused before anything is sent.
+
+**Holding** (`/assets/new`, `/assets/<id>`) is one holding's settings on a
+page of its own: name, kind, unit, group, whose, maturity, the invested and
+liquid flags, retired, note, and the feed with its reference. Choosing a bank
+account fills the name, whose and unit from the account.
+
+Accounts are named the same way wherever the application lists one —
+member, bank, product, and the currency when the product does not say it:
+"Rodion · Monobank · Iron UAH", "Katya · Wise · EUR" (`src/account-names.ts`,
+sent as `displayName` by the holdings and balances APIs). Either member sees
+and records the whole household's holdings; there is no per-member scope
+here, only an optional owner label on a holding.
 
 The display currency is the workspace's, from the header control, defaulting
 to UAH like every other screen; the owner's own figure is USD and the control

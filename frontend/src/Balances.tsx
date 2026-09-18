@@ -10,6 +10,7 @@ import {
 import { apiGet, useSession, queryClient } from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useUrlField } from './lib/navigation';
+import { ownMoneyMinor, ownMoneyTotal } from './lib/own-money';
 import {
   AccountBadge,
   EmptyState,
@@ -33,12 +34,19 @@ type Balance = {
   asOf: string | null;
   observedAt: string;
 };
+type Purpose = 'personal' | 'business' | 'investment' | 'unreviewed';
 type BalanceAccount = {
   source: string;
   accountId: string;
   owner: Owner;
   label: string;
-  purpose: 'personal' | 'business' | 'investment' | 'unreviewed';
+  /**
+   * The whole name of the account — holder, bank and the owner's own name for
+   * it, e.g. "Rodion · Monobank · Iron UAH". Older servers do not send it, so
+   * the screen falls back to the label they do send.
+   */
+  displayName?: string | null;
+  purpose: Purpose;
   balances: Balance[];
 };
 type Reporting = {
@@ -64,6 +72,26 @@ const cardKey = (account: { source: string; accountId: string }) =>
   `${account.source}:${account.accountId}`;
 const rowKey = (row: { source: string; accountId: string; currency: string }) =>
   `${row.source}:${row.accountId}:${row.currency}`;
+/** What the account is called on this screen: the server's name, else its label. */
+const nameOf = (account: BalanceAccount) =>
+  (account.displayName ?? '').trim() || account.label;
+
+/**
+ * Three questions a reader has about an account, in the order they ask them:
+ * is this our spending money, is it money set aside for something that is not
+ * spending, and is it an account nobody has decided about yet. The last
+ * section only appears when something is in it — an empty "to review" heading
+ * is a chore that does not exist.
+ */
+const sectionsInOrder: { id: string; title: string; holds: Purpose[] }[] = [
+  { id: 'personal', title: 'Personal', holds: ['personal'] },
+  {
+    id: 'non-personal',
+    title: 'Non-personal',
+    holds: ['business', 'investment'],
+  },
+  { id: 'unreviewed', title: 'Purpose to review', holds: ['unreviewed'] },
+];
 
 /**
  * How long ago a figure was true, in the words a person would use.
@@ -127,8 +155,14 @@ export default function Balances() {
     : ((actor as Owner) ?? 'rodion');
   const mine = accounts.filter((account) => account.owner === who);
 
-  /** That person's money in the display currency, and what is missing from it. */
-  const total = useMemo(() => {
+  /**
+   * What the banks state for that person, in the display currency — every
+   * agreed overdraft still inside it, because that is what the server
+   * converted. It is the honest name for this figure, not the household's
+   * money, which is why the screen labels it as the banks' claim and prints
+   * the household's own money beside it.
+   */
+  const stated = useMemo(() => {
     let sum = 0n;
     let missing = 0;
     for (const account of mine)
@@ -139,6 +173,38 @@ export default function Balances() {
       }
     return { minor: sum.toString(), missing };
   }, [mine, converted]);
+
+  /** The same money with the banks' overdrafts taken back out of it. */
+  const own = useMemo(
+    () =>
+      ownMoneyTotal(
+        mine.flatMap((account) =>
+          account.balances.map((balance) => ({
+            currency: balance.currency,
+            amountMinor: balance.amountMinor,
+            creditLimitMinor: balance.creditLimitMinor,
+            convertedMinor:
+              converted.get(rowKey(balance))?.convertedMinor ?? null,
+          })),
+        ),
+        display,
+      ),
+    [mine, converted, display],
+  );
+
+  /** That person's cards, split into the sections the screen shows them in. */
+  const sections = useMemo(
+    () =>
+      sectionsInOrder
+        .map((section) => ({
+          ...section,
+          accounts: mine.filter((account) =>
+            section.holds.includes(account.purpose),
+          ),
+        }))
+        .filter((section) => section.accounts.length > 0),
+    [mine],
+  );
 
   /**
    * One stored arrangement covers both tabs, but a drag only ever reorders the
@@ -234,8 +300,11 @@ export default function Balances() {
               size="md"
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium" title={account.label}>
-                {account.label}
+              <p
+                className="truncate text-sm font-medium"
+                title={nameOf(account)}
+              >
+                {nameOf(account)}
               </p>
               {/* Said only when it is worth saying. Most accounts are the
                   household's own spending, and a card repeating "Personal"
@@ -263,17 +332,38 @@ export default function Balances() {
             <div className="mt-3 space-y-2">
               {account.balances.map((balance) => {
                 const row = converted.get(rowKey(balance));
+                const limit = balance.creditLimitMinor;
+                // The bank counts the agreed overdraft inside the figure it
+                // states, so the loudest number on the card is what is left
+                // after it: the household's own money, which is the only one
+                // of the two anybody can spend without borrowing.
+                const held = ownMoneyMinor(balance.amountMinor, limit);
                 return (
                   <div key={balance.currency}>
                     <Money
-                      minor={balance.amountMinor}
+                      minor={held}
                       currency={balance.currency}
-                      className="text-2xl font-semibold tracking-tight break-all"
+                      className={`text-2xl font-semibold tracking-tight break-all${
+                        BigInt(held) < 0n ? ' text-negative' : ''
+                      }`}
                     />
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {balance.currency !== display &&
-                        (row?.convertedMinor ? (
+                    {limit && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        own money · bank states{' '}
+                        <Money
+                          minor={balance.amountMinor}
+                          currency={balance.currency}
+                        />
+                        , incl.{' '}
+                        <Money minor={limit} currency={balance.currency} />{' '}
+                        limit
+                      </p>
+                    )}
+                    {balance.currency !== display && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {row?.convertedMinor ? (
                           <>
+                            {limit ? 'stated figure ' : ''}
                             <Money
                               minor={row.convertedMinor}
                               currency={display}
@@ -284,18 +374,9 @@ export default function Balances() {
                           <span className="text-warning">
                             No rate to show this in {display}
                           </span>
-                        ))}
-                      {balance.creditLimitMinor && (
-                        <>
-                          {balance.currency !== display ? ' · ' : ''}includes an
-                          overdraft of{' '}
-                          <Money
-                            minor={balance.creditLimitMinor}
-                            currency={balance.currency}
-                          />
-                        </>
-                      )}
-                    </p>
+                        )}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -316,11 +397,27 @@ export default function Balances() {
   if (session.isPending) return <p role="status">Loading balances…</p>;
   if (session.error) return <p role="alert">{session.error.message}</p>;
 
-  const items: ArrangeItem[] = mine.map((account) => ({
-    key: cardKey(account),
-    node: card(account),
-  }));
   const grid = 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3';
+  const laidOut = sections.map((section) => ({
+    ...section,
+    items: section.accounts.map((account): ArrangeItem => ({
+      key: cardKey(account),
+      node: card(account),
+    })),
+  }));
+
+  /**
+   * A drag moves a card within its own section, and what gets saved is every
+   * section end to end in the order they are shown. The grouping is part of
+   * the arrangement now, so storing it that way keeps the saved order and the
+   * screen the same thing — and `merged` still slots the result back into the
+   * positions this person's cards hold among both members'.
+   */
+  function orderWithin(sectionId: string, keys: string[]): string[] {
+    return laidOut.flatMap((section) =>
+      section.id === sectionId ? keys : section.items.map((item) => item.key),
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -381,22 +478,71 @@ export default function Balances() {
           <TabsContent key={owner} value={owner} className="mt-4 space-y-4">
             {owner === who && (
               <>
-                <section aria-label="Total held" className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Total held · {display}
-                  </p>
-                  <Money
-                    minor={total.minor}
-                    currency={display}
-                    className="text-2xl font-semibold tracking-tight break-all"
-                  />
-                  {total.missing > 0 && (
-                    <p className="text-xs text-warning">
-                      {total.missing}{' '}
-                      {total.missing === 1 ? 'balance is' : 'balances are'} not
-                      in this total: no rate, or the bank has not reported one.
+                <section
+                  aria-label="Total held"
+                  className="grid gap-4 sm:grid-cols-2"
+                >
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Stated by banks · {display}
                     </p>
-                  )}
+                    <Money
+                      minor={stated.minor}
+                      currency={display}
+                      className="text-2xl font-semibold tracking-tight break-all"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Before overdraft limits: what the banks say the accounts
+                      hold, agreed overdrafts included.
+                    </p>
+                    {stated.missing > 0 && (
+                      <p className="text-xs text-warning">
+                        {stated.missing}{' '}
+                        {stated.missing === 1 ? 'balance is' : 'balances are'}{' '}
+                        not in this total: no rate, or the bank has not reported
+                        one.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Own money · {display}
+                    </p>
+                    {own.minor === null ? (
+                      <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                        —
+                      </p>
+                    ) : (
+                      <Money
+                        minor={own.minor}
+                        currency={display}
+                        className="text-2xl font-semibold tracking-tight break-all"
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      The same money with every agreed overdraft taken back out
+                      of it.
+                    </p>
+                    {own.minor === null && (
+                      <p className="text-xs text-warning">
+                        {own.unconvertedLimits}{' '}
+                        {own.unconvertedLimits === 1
+                          ? 'overdraft limit is'
+                          : 'overdraft limits are'}{' '}
+                        in another currency and no converted limit is sent, so
+                        no honest figure can be given here. Each card below
+                        still shows its own money exactly.
+                      </p>
+                    )}
+                    {own.minor !== null && own.missing > 0 && (
+                      <p className="text-xs text-warning">
+                        {own.missing}{' '}
+                        {own.missing === 1 ? 'balance is' : 'balances are'} not
+                        in this total: no rate, or the bank has not reported
+                        one.
+                      </p>
+                    )}
+                  </div>
                 </section>
                 {query.isPending ? (
                   <p role="status" className="text-sm text-muted-foreground">
@@ -414,20 +560,37 @@ export default function Balances() {
                       </Button>
                     }
                   />
-                ) : arranging ? (
-                  <Suspense
-                    fallback={
-                      <div className={grid}>{items.map((i) => i.node)}</div>
-                    }
-                  >
-                    <CardArranger
-                      items={items}
-                      onReorder={(keys) => void persist(keys)}
-                      className={grid}
-                    />
-                  </Suspense>
                 ) : (
-                  <div className={grid}>{items.map((item) => item.node)}</div>
+                  <div className="space-y-5">
+                    {laidOut.map((section) => (
+                      <section key={section.id} className="space-y-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">
+                          {section.title} · {section.items.length}
+                        </h3>
+                        {arranging ? (
+                          <Suspense
+                            fallback={
+                              <div className={grid}>
+                                {section.items.map((i) => i.node)}
+                              </div>
+                            }
+                          >
+                            <CardArranger
+                              items={section.items}
+                              onReorder={(keys) =>
+                                void persist(orderWithin(section.id, keys))
+                              }
+                              className={grid}
+                            />
+                          </Suspense>
+                        ) : (
+                          <div className={grid}>
+                            {section.items.map((item) => item.node)}
+                          </div>
+                        )}
+                      </section>
+                    ))}
+                  </div>
                 )}
               </>
             )}
