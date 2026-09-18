@@ -9,6 +9,27 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**fc79952767963106906abd9c52ede6fbb19da24a**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 54 with 4,168 transactions unchanged, both services active.
+The Add holding form can be scrolled to its own Save button again.
+
+A dialog is fixed and the page behind it does not scroll, so one taller than
+the screen cannot be reached at either end. The holding form has eleven
+fields; on a phone its first field and its Save button both sat off-screen
+with nothing to scroll to them. Accounts, Categories and the period picker
+had all bound their own content with `max-h-[90dvh] overflow-y-auto` — the
+holding dialog was the single call site that had not, which is why this was
+the one screen the owner found stuck. The primitives come from the registry
+and are never edited, so the bound belongs on the call, and
+`scripts/check_frontend.py` now holds every `DialogContent` and
+`SheetContent` to it instead of leaving the next one to remember. The rule
+was confirmed to fail on the unfixed file before the fix went in.
+
+The owner found this in the installed app rather than in Safari, where the
+browser's chrome collapses on scroll and buys back the difference in height.
+
 **12a20c496c8c9865b4d39eb09f4484b2ea372154**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
