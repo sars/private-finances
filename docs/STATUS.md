@@ -9,6 +9,38 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**bc5ad357b1684721c4dca9d0cd21f411fa46373f**, live since September 18, 2026 at
+schema version 57, deployed with `deploy/release.sh` in one run: 599
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 57 in 25 milliseconds with 4,175 transactions, 140 active
+refund links, no expense without a category and nothing filed on a heading;
+both services active afterwards. It carries PR #85 and adds no migration.
+
+Refreshing now means one thing across the whole workspace: re-read what the
+server holds, without the browser reloading the app. On a phone or tablet the
+page is pulled down — the indicator sits under the header, follows the finger,
+spins while the data is re-read and answers with a tick — and the Refresh
+buttons hide there; on a desktop the single `RefreshButton` stays, first among
+a page's actions. Twelve bespoke buttons became that one component, and the
+nine screens that fetch in an effect rather than through the query cache
+(Home, Bank connections, Currency conversion, System health, Accounts,
+Categories & rules, Reports, a payment's history, the AI budget) now follow a
+shared signal `invalidateFinancialData()` advances, so one refresh reaches
+every screen instead of half of them; their private refresh counters are gone.
+Android's own pull-to-refresh is suppressed so only the app's runs. Bank
+imports shows when it last checked, because refreshing that page re-reads the
+importer's record and not the banks — which keep their own systemd schedule —
+so a working refresh had nothing on screen to show for itself. Snapshots and
+Assets gained the refresh they lacked.
+
+Still open, at the owner's suggestion: a small per-bank update control on Bank
+imports that asks one bank immediately. That needs the web process to be
+allowed to start the `private-finances-sync@*` units, so it is a separate
+change with a privilege rule to write down.
+
+The release before it, **7858fa2ef1d0ecf6d29c35b4a6b99af2b99e6072**, is
+described below.
+
 **7858fa2ef1d0ecf6d29c35b4a6b99af2b99e6072**, live since September 18, 2026 at
 schema version 57, deployed with `deploy/release.sh` in one run: 599
 application tests passed on the server, the rehearsal on a restored copy
