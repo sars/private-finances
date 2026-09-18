@@ -47,6 +47,16 @@ groups, `gap-6` between sections. Card padding `p-4`, `p-6` on desktop. Rows
 are 40 px on desktop and at least 44 px on the phone. Pages are one column
 under 1024 px.
 
+**Every page root is `space-y-5`.** One value, on every screen, so the step from
+the header to the first thing under it is the same wherever you are. What breaks
+that impression is not the number but what fills it: a page whose first element
+is a bordered control reads tight, and one that opens with a stacked field
+label, a borderless tab band or a strip of grey meta text reads loose at the
+identical gap. So do not tune the spacing per screen — give the first element
+some ink, or take the light-weight thing out. A `Field` whose control already
+states its own value (`This year · 1 Jan – 18 Sept 2026`) takes `hideLabel`,
+which keeps the label for a screen reader and the 24 px off the screen.
+
 ## Components
 
 Compose from `src/components/finance/index.ts` first, `src/components/ui/`

@@ -23,11 +23,23 @@ four background fetches/day. Never send fabricated online-user PSU headers.
 60-second statement/client-info limits. Both sources checked September 12, 2026.
 
 Timers start once after boot and do not replay every missed interval. Each firing
-makes one bounded attempt. Transient/rate-limit errors set a 12-hour cooldown
-(24 hours until September 18, 2026, halved at the owner's request so a limited
-bank is asked again the same day); auth/uncertain failures stay latched for
-investigation. The app retains
-connection leases and never overlaps the same scheduled instance.
+makes one bounded attempt. A rate limit sets a 12-hour cooldown (24 hours until
+September 18, 2026, halved at the owner's request so a limited bank is asked
+again the same day); auth/uncertain failures stay latched for investigation. The
+app retains connection leases and never overlaps the same scheduled instance.
+
+**A transient failure backs off in steps: an hour, then three, then a day**, and
+a success forgets the streak (`<instance>.transient-streak` beside the cooldown
+file; an unreadable count is treated as the longest wait, never the shortest).
+The flat cooldown was wrong for this class of error. Monobank's API is
+unreachable for a few minutes around 03:00 Kyiv, and every Monobank transient in
+the server's journal — for both owners, on separate tokens, so not a per-token
+limit — has fallen between 03:04 and 03:10. One such night cost a whole day of
+imports, which is how an account came to be eighteen hours stale from a
+ten-minute outage. Retrying within the hour risks nothing: Monobank allows one
+request per minute per token and the connector already spaces requests by
+sixty-one seconds, while a provider genuinely refusing work answers 429 and
+takes the rate-limit path instead.
 
 Install the Monobank owner-specific timer drop-ins alongside the timer template.
 Each run still requires a fresh local backup. Retention keeps 14 recent snapshots

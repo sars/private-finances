@@ -882,6 +882,57 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# Home says what is broken — September 18, 2026
+
+Schema version 58. Built and checked; **not deployed**.
+
+Kate's Monobank went eighteen hours without importing and nobody was told. One
+transient failure at 03:10 had set the flat error cooldown, and every wake for
+the rest of the day returned `deferred` without touching the bank. The cause was
+not the connection: Monobank's API is unreachable for a few minutes around 03:00
+Kyiv, and every Monobank transient in the journal — both owners, separate
+tokens — falls between 03:04 and 03:10. A transient failure now backs off an
+hour, then three, then a day, and a success forgets the streak; a rate limit
+keeps its flat twelve hours, because that one is the provider refusing work.
+
+The larger gap was that nothing said so. `src/problems.ts` reads the tables the
+application already writes and reports what has stopped and only the owner can
+fix: a bank whose approval has expired, whose credentials were refused or that
+has been silent for twenty-five hours (one row per bank, not three); a stale
+exchange-rate feed; a paused classifier; an undelivered Telegram queue; a
+credential near its expiry; a feed that could not be read; a backup that has not
+been taken. Its thresholds are the owner's — a few hours of missing bank data is
+no cause for concern, so nothing is said before twenty-five hours, and a bank
+approval is announced one day ahead rather than five. Amounts no rate can
+convert appear there too, at the owner's direction.
+
+Two things had to be stored to be readable. Feed outcomes now keep one row per
+feed (migration 58) instead of only being printed, which is the only way the
+Binance key can be watched at all: it has no expiry to count down to and dies by
+being revoked, unused, or read from an address its restriction does not name.
+And `BACKUP_DIRECTORY` in `app.env` lets the application read the newest
+snapshot's filename — every scheduled import requires a fresh backup first, so a
+failing backup stops every import at once with nothing else to say why. **That
+variable must be added to the server's `app.env` before the deploy**, or the
+backup row simply never appears.
+
+Home lost its five filters, period picker, interval switch, context strip, AI
+budget panel and closing caveat; it is this month, the whole household, in the
+display currency. Two figures remain — spent this month against the same days of
+last month, and the household's own money — over the problems block, the yellow
+band (which now carries the unresolved amount), spending day by day, the five
+largest categories and recent activity.
+
+Balances had a real error behind a label. "Own money" summed every account in
+the household, both members and every purpose, so business and investment money
+sat inside the figure the owner reads as theirs to spend. It is now that
+person's personal accounts, with a second figure beside it for the rest.
+
+Finally the page rhythm is one value. Balances sat at 20px and every other
+screen at 24px, and Analytics stacked a label over each control so its first
+control began a band below the description. Measured at four widths across five
+screens, the header-to-content gap is now 20px everywhere.
+
 # Analytics reads like the workbook — September 17, 2026
 
 Schema version 48, deployed as `46cdb02aef90831341cce4a2ea1c93a97568f6ae`.

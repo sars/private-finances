@@ -182,7 +182,15 @@ the encrypted repository or losing the restic recovery password.
 `/etc/private-finances/app.env` and `sync.env` are restricted environment files read
 by the service manager. Secret files must be readable by their intended service
 user and inaccessible to unrelated users; mode 0600 and private directories with
-mode 0700 require correct ownership. Never make secret files world-readable to
+mode 0700 require correct ownership.
+
+**`BACKUP_DIRECTORY` is not a secret and must be set in `app.env`** —
+`/var/lib/private-finances-backups`, the directory `deploy/local-backup.py`
+writes to. Without it the problems block cannot tell that a backup has stopped,
+and says nothing rather than guessing there is none. The application only lists
+the directory and reads the filenames, which are nanosecond timestamps; it never
+opens a dump, and must not be able to. Listing requires execute permission on
+the directory for the service user. Never make secret files world-readable to
 solve a permissions error. Restore-verification markers are not secrets and have
 a separate policy in [scheduling.md](scheduling.md).
 
