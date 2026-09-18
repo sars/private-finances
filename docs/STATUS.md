@@ -919,6 +919,17 @@ that run `scripts/backup.sh` itself against stubbed `pg_dump`, `restic` and
 a backup, and each outcome reaches the table. That script had never been under
 test, having existed only on the server.
 
+A backup that stops also joins Home's list of what is broken, as a warning
+rather than a critical: nothing stops arriving when an off-server backup fails,
+and what has gone is the protection. A backup that has never run stays off that
+list — Home reports faults, not configuration nobody has finished. Giving it a
+row exposed something older: four entries on that list pointed at
+`/operations`, and the route has only ever been `/ops`. The paused classifier,
+a Telegram bot that has stopped delivering, an expired credential and a missing
+local backup all linked to a page that is not there, which are the entries
+somebody follows in a hurry. A test now reads the destinations out of the
+module's own source and checks each against the router's table.
+
 What remains is not code. The bucket, its lifecycle rule, a bucket-scoped IAM
 user and the restic recovery password are the owner's to create, and
 [the runbook](backups.md) now states the five values needed and the four server
