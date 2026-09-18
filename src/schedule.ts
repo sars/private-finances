@@ -50,6 +50,45 @@ export async function verifiedMarker(
  */
 export type SyncResult =
   'success' | 'transient' | 'rate_limit' | 'consent_pending' | 'blocked';
+
+/**
+ * How long to wait after a transient failure, by how many have come in a row.
+ *
+ * A rate limit is the provider saying it has had enough, and keeps the flat
+ * twelve hours. A transient failure is something else: the bank was briefly
+ * unreachable. Monobank's API goes down for a few minutes around 03:00 Kyiv,
+ * and every Monobank transient in the server's journal — for both owners, on
+ * separate tokens — has fallen between 03:04 and 03:10. Under a flat cooldown
+ * one such night cost a whole day of imports, which is how an account came to
+ * be eighteen hours stale from a ten-minute outage.
+ *
+ * So the first retry comes in an hour, the second three hours later, and only
+ * a failure that keeps repeating earns a full day. Retrying an hour later costs
+ * nothing: Monobank allows one request per minute per token and the connector
+ * already spaces them by sixty-one seconds, while a provider that is genuinely
+ * refusing work answers 429 and takes the rate-limit path instead.
+ */
+const TRANSIENT_BACKOFF_MS = [3600000, 10800000, 86400000];
+
+/**
+ * How many transient failures have come in a row, from the file the last one
+ * wrote. A file that cannot be read as a count is treated as the longest wait
+ * rather than the shortest: a corrupt streak must not become a reason to call
+ * a bank more often.
+ */
+async function transientStreak(path: string): Promise<number> {
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    throw error;
+  }
+  const streak = Number(raw.trim());
+  return Number.isSafeInteger(streak) && streak >= 0
+    ? streak
+    : TRANSIENT_BACKOFF_MS.length;
+}
 export async function scheduleEnabled(
   directory: string,
   instance: string,
@@ -125,6 +164,10 @@ export async function runScheduledSync(options: ScheduleOptions) {
     options.stateDirectory,
     `${options.instance}.conservative`,
   );
+  const streakFile = resolve(
+    options.stateDirectory,
+    `${options.instance}.transient-streak`,
+  );
   let backgroundHours = 6;
   if (
     provider === 'enablebanking' &&
@@ -159,7 +202,7 @@ export async function runScheduledSync(options: ScheduleOptions) {
       ),
       { mode: 0o600 },
     );
-  if (result === 'transient' || result === 'rate_limit')
+  if (result === 'rate_limit')
     await writeFile(
       cooldown,
       // Twelve hours: long enough to let a bank's limit reset, short enough
@@ -168,6 +211,23 @@ export async function runScheduledSync(options: ScheduleOptions) {
       String(Math.max(options.now.getTime(), Date.now()) + 43200000),
       { mode: 0o600 },
     );
+  if (result === 'transient') {
+    const streak = (await transientStreak(streakFile)) + 1;
+    await writeFile(streakFile, String(streak) + '\n', { mode: 0o600 });
+    await writeFile(
+      cooldown,
+      String(
+        Math.max(options.now.getTime(), Date.now()) +
+          TRANSIENT_BACKOFF_MS[Math.min(streak, TRANSIENT_BACKOFF_MS.length) - 1]!,
+      ),
+      { mode: 0o600 },
+    );
+  }
+  // The streak counts consecutive failures, so anything that worked ends it.
+  if (result === 'success')
+    await unlink(streakFile).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
   if (result !== 'blocked') await unlink(latch);
   return result;
 }

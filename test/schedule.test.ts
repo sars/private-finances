@@ -373,8 +373,11 @@ for (const minutes of [30, 60]) {
         const retry = Number(
           await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
         );
-        assert.ok(retry >= initial + 43200000);
-        assert.ok(retry < initial + 43200000 + 60000);
+        // A rate limit is the provider refusing work and keeps the flat twelve
+        // hours; a first transient failure is a blip and waits only an hour.
+        const wait = failure === 'transient' ? 3600000 : 43200000;
+        assert.ok(retry >= initial + wait);
+        assert.ok(retry < initial + wait + 60000);
         assert.equal(
           await runScheduledSync({ ...options, now: new Date(retry - 1) }),
           'deferred',
@@ -410,3 +413,81 @@ for (const minutes of [30, 60]) {
     }
   });
 }
+
+test('a transient failure backs off an hour, then three, then a day, and a success clears it', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-transient-ladder-'));
+  const instance = 'monobank-katya';
+  const streak = join(directory, `${instance}.transient-streak`);
+  const cooldown = join(directory, `${instance}.retry-after`);
+  const base = { instance, stateDirectory: directory, ready: async () => true };
+  const failing = { ...base, invoke: async () => 'transient' as const };
+  const read = async (path: string) => Number(await readFile(path, 'utf8'));
+  try {
+    // The bank is unreachable for a few minutes, the way Monobank is most
+    // nights. Each further failure waits longer, but the first two are short
+    // enough that an outage costs a poll rather than a day of imports.
+    let now = new Date();
+    for (const expected of [3600000, 10800000, 86400000, 86400000]) {
+      assert.equal(await runScheduledSync({ ...failing, now }), 'transient');
+      const retry = await read(cooldown);
+      assert.ok(
+        retry >= now.getTime() + expected &&
+          retry < now.getTime() + expected + 60000,
+        `expected ${expected}ms, waited ${retry - now.getTime()}ms`,
+      );
+      // Nothing may reach the bank before the cooldown is up.
+      assert.equal(
+        await runScheduledSync({ ...failing, now: new Date(retry - 1) }),
+        'deferred',
+      );
+      now = new Date(retry);
+    }
+    assert.equal(await read(streak), 4);
+    assert.equal(
+      await runScheduledSync({
+        ...base,
+        now,
+        invoke: async () => 'success' as const,
+      }),
+      'success',
+    );
+    const remaining = (await readdir(directory)).filter((name) =>
+      name.endsWith('.transient-streak'),
+    );
+    assert.deepEqual(remaining, []);
+    // Having forgotten the streak, the next lone failure waits an hour again.
+    const later = new Date(now.getTime() + 1);
+    assert.equal(
+      await runScheduledSync({ ...failing, now: later }),
+      'transient',
+    );
+    assert.ok((await read(cooldown)) < later.getTime() + 3600000 + 60000);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a streak file that is not a count waits the longest, never the shortest', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-transient-corrupt-'));
+  const instance = 'monobank-rodion';
+  try {
+    await writeFile(join(directory, `${instance}.transient-streak`), 'nonsense');
+    const now = new Date();
+    assert.equal(
+      await runScheduledSync({
+        instance,
+        now,
+        stateDirectory: directory,
+        ready: async () => true,
+        invoke: async () => 'transient' as const,
+      }),
+      'transient',
+    );
+    const retry = Number(
+      await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
+    );
+    assert.ok(retry >= now.getTime() + 86400000);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
