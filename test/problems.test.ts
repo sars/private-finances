@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { memoryDatabase, migrate } from '../src/database.js';
 import { connectionLabel, systemProblems } from '../src/problems.js';
 import type { CredentialHealth } from '../src/credential-health.js';
+import { recordBackupRun } from '../src/backup-health.js';
+import { readFileSync } from 'node:fs';
 
 const NOW = new Date('2026-09-18T18:00:00.000Z');
 const hoursAgo = (n: number) =>
@@ -264,6 +266,137 @@ test('critical problems are listed before warnings, longest-standing first', asy
       problems.map((p) => p.id),
       ['bank:enablebanking:rodion:lhv', 'bank:monobank:katya', 'fx:stale'],
     );
+  } finally {
+    await db.close();
+  }
+});
+
+test('an off-server backup that has never run is not reported as broken', async () => {
+  const db = await healthy();
+  try {
+    // Configuration the owner has not finished yet. System health states it
+    // plainly as "Never"; this page reports faults, not unbuilt things.
+    assert.deepEqual((await systemProblems(db, { now: NOW })).problems, []);
+  } finally {
+    await db.close();
+  }
+});
+
+test('an off-server backup that stops is a warning, not a critical', async () => {
+  const db = await healthy();
+  try {
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'succeeded',
+      startedAt: new Date(hoursAgo(10)),
+      finishedAt: new Date(hoursAgo(10)),
+      sizeBytes: 4096,
+    });
+    assert.deepEqual((await systemProblems(db, { now: NOW })).problems, []);
+
+    await db.query('DELETE FROM backup_runs');
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'succeeded',
+      startedAt: new Date(hoursAgo(40)),
+      finishedAt: new Date(hoursAgo(40)),
+      sizeBytes: 4096,
+    });
+    const late = (await systemProblems(db, { now: NOW })).problems;
+    assert.deepEqual(ids(late), ['backup:off-server']);
+    // Nothing has stopped arriving, so it is not the same shade as a bank that
+    // has gone silent; what has gone is the protection.
+    assert.equal(late[0]!.severity, 'warning');
+    assert.match(late[0]!.title, /No off-server backup for 40 hours/);
+    assert.equal(late[0]!.href, '/ops');
+
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'failed',
+      stage: 'upload',
+      startedAt: new Date(hoursAgo(1)),
+      finishedAt: new Date(hoursAgo(1)),
+    });
+    const failing = (await systemProblems(db, { now: NOW })).problems;
+    assert.deepEqual(ids(failing), ['backup:off-server']);
+    assert.equal(failing[0]!.title, 'Off-server backup failed');
+    assert.match(failing[0]!.detail, /upload stage failed/);
+    assert.equal(failing[0]!.since, new Date(hoursAgo(1)).toISOString());
+  } finally {
+    await db.close();
+  }
+});
+
+test('every problem links to a page that exists', async () => {
+  // A problem carries the page where the fix is, which is the whole point of
+  // the row. Four of them pointed at /operations, which has never been a route
+  // — the page is /ops — so the rows that mattered most led nowhere. The set
+  // below is the router's own table in frontend/src/main.tsx.
+  const routes = new Set([
+    '/',
+    '/analytics',
+    '/review',
+    '/transactions',
+    '/cash',
+    '/receipts',
+    '/categories',
+    '/ops',
+    '/fx',
+    '/balances',
+    '/accounts',
+    '/reports',
+    '/connections',
+    '/imports',
+    '/settings',
+    '/assets',
+    '/assets/snapshots',
+    '/assets/new',
+  ]);
+  // Every destination the module can emit, including the branches this test
+  // cannot reach without a whole household's worth of fixture rows.
+  // The TypeScript source, not the compiled module beside this test: the
+  // destinations are string literals and reading them is the only way to check
+  // a branch no fixture reaches. Tests run from the repository root.
+  const source = readFileSync('src/problems.ts', 'utf8');
+  const declared = [...source.matchAll(/href: '([^']*)'/g)].map((m) => m[1]!);
+  assert.ok(declared.length >= 6, 'expected several declared destinations');
+  for (const href of declared)
+    assert.ok(routes.has(href), `problems.ts links to ${href}, not a route`);
+
+  // And the rows actually produced carry one of them.
+  const db = await healthy(null);
+  try {
+    await db.query('UPDATE bank_sync_runs SET last_success_at=$1', [
+      hoursAgo(40),
+    ]);
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'failed',
+      stage: 'upload',
+      startedAt: new Date(hoursAgo(1)),
+      finishedAt: new Date(hoursAgo(1)),
+    });
+    const { problems } = await systemProblems(db, {
+      now: NOW,
+      lastBackupAt: null,
+      credentials: [
+        {
+          credential: 'openai_api_key',
+          label: 'OpenAI API key',
+          state: 'expired',
+          expiresAt: hoursAgo(50),
+          expiresOn: null,
+          daysRemaining: -2,
+          warningDays: 0,
+        },
+      ],
+    });
+    assert.ok(problems.length >= 4, 'expected several problems to be reported');
+    for (const problem of problems)
+      assert.ok(
+        problem.href === null || routes.has(problem.href),
+        `${problem.id} links to ${problem.href}, which is not a route`,
+      );
   } finally {
     await db.close();
   }
