@@ -114,9 +114,15 @@ function App() {
         event.altKey
       )
         return;
-      const anchor = (event.target as Element)?.closest?.(
-        'a[href]',
-      ) as HTMLAnchorElement | null;
+      // Safari can hand this a Text node — the tab bar's labels are bare
+      // text children of their <a> — and Text has no .closest(), so a tap
+      // there fell through to a real navigation, which is exactly what
+      // drops an installed iOS app out of standalone display.
+      const start =
+        event.target instanceof Element
+          ? event.target
+          : (event.target as Node | null)?.parentElement;
+      const anchor = start?.closest('a[href]') as HTMLAnchorElement | null;
       if (
         !anchor ||
         anchor.hasAttribute('download') ||
