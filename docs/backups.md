@@ -5,10 +5,13 @@ encrypted by [restic](https://restic.readthedocs.io/) and uploaded to a private
 Amazon S3 bucket is what changes that. The owner chose S3, in the AWS account
 they already hold; the cost at this data size is a few cents a month.
 
-The code, the systemd units and the operations-page status are in place. What
-is not in place is the bucket, the credential and the proof of restore — those
-need the steps below, and until they are done the System health page says
-**Off-server backup · Never**, which is the truth.
+This is running. The bucket exists in `eu-north-1`, the restic repository was
+initialised on 19 September 2026, the daily timer is enabled and the first
+snapshot is uploaded. What is still outstanding is the proof of restore, and
+until that is done a backup is a belief rather than protection.
+
+The account section below is kept because it is how the bucket was built and
+how it would be rebuilt.
 
 ## What the owner does in AWS
 
@@ -93,13 +96,21 @@ Nothing below needs the owner once the five values exist.
 
 1. `apt-get install restic` (Ubuntu 24.04 ships 0.16.4, which is sufficient).
 2. Write `/etc/private-finances/backup.env`, root-owned, mode 600, holding
-   `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGPASSFILE`,
-   `RESTIC_REPOSITORY` (`s3:s3.<region>.amazonaws.com/<bucket>`),
-   `RESTIC_PASSWORD_FILE`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-   The repository password goes in its own root-only file that
-   `RESTIC_PASSWORD_FILE` points at.
-3. `restic init` once, against that repository.
-4. Install `private-finances-backup.service` and `.timer`, then
+   `PGHOST=/var/run/postgresql`, `PGDATABASE`, `PGUSER`, `RESTIC_REPOSITORY`
+   (`s3:s3.<region>.amazonaws.com/<bucket>`), `RESTIC_PASSWORD_FILE`,
+   `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. There is **no** `PGPASSFILE`
+   and no database password: PostgreSQL authenticates this connection by peer
+   over the unix socket, so the operating-system user is the credential.
+   systemd reads this file as root and injects it into the backup service
+   alone, which is why the AWS keys never have to be readable by anyone else.
+3. The repository password lives in its own file, `RESTIC_PASSWORD_FILE`. It
+   must be readable by `private-finances`, the user the service runs as —
+   `chown private-finances:private-finances`, mode `400`. The containing
+   directory is `root:private-finances` `0750`, so nobody else can traverse to
+   it. On its own that password opens nothing: reaching the bucket also needs
+   the AWS keys, which stay root-only.
+4. `restic init` once, against that repository.
+5. Install `private-finances-backup.service` and `.timer`, then
    `systemctl enable --now private-finances-backup.timer`.
 
 The timer runs daily at 03:30 UTC with up to fifteen minutes of randomised
@@ -119,6 +130,15 @@ delay, and `Persistent=true` catches up a run the server slept through.
 Diagnostics from `pg_dump` and `restic` never reach the service log: they can
 carry connection details. The log carries the event and the stage it failed at,
 and nothing else.
+
+The status row goes in through `psql` reading the statement **on stdin**, never
+through `--command`. `psql -c` hands its argument straight to the server, and
+`:'name'` is a client-side feature, so through `-c` the placeholders reach
+PostgreSQL verbatim and the statement does not parse — which is exactly what
+happened on the first real run. Fed a script, psql expands each placeholder into
+a correctly quoted literal, which is also what keeps a value from ever being
+part of the SQL grammar. `ON_ERROR_STOP=1` is what turns a rejected statement
+into a non-zero exit rather than a silent success.
 
 ## What the operations page shows
 
