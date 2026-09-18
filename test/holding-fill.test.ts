@@ -226,6 +226,7 @@ test('the exchange total lands on the holding that asks for it and wallets are r
       denomination: 'ETH',
       invested: true,
       liquid: true,
+      group: 'Binance',
       feed: 'binance',
       feedRef: 'ETH',
     });
@@ -241,17 +242,28 @@ test('the exchange total lands on the holding that asks for it and wallets are r
       assets: [
         { asset: 'BTC', quantity: '0.15', usdPerUnit: '90000' },
         { asset: 'ETH', quantity: '2', usdPerUnit: '3000' },
+        // Dust: half a dollar of a coin gets no holding of its own.
+        { asset: 'DOGE', quantity: '5', usdPerUnit: '0.1' },
+        { asset: 'NOPE', quantity: '5', usdPerUnit: null },
       ],
-      totalUsd: '19500',
-      unpriced: [],
+      totalUsd: '19500.5',
+      unpriced: ['NOPE'],
     });
+    // A per-coin holding exists (ETH), so both TOTAL holdings are skipped as
+    // superseded; ETH is filled, BTC is created, DOGE and NOPE are not.
     assert.deepEqual(exchange, {
       filled: 2,
       unchanged: 0,
-      skipped: { total_needs_usd: 1 },
-      pricesRecorded: 2,
-      created: 0,
+      skipped: { total_superseded_by_coins: 2 },
+      pricesRecorded: 3,
+      created: 1,
     });
+    const createdBtc = (await service.list()).find(
+      (h) => h.denomination === 'BTC' && h.feed === 'binance',
+    )!;
+    assert.equal(createdBtc.name, 'Binance BTC');
+    assert.equal(createdBtc.group, 'Binance');
+    assert.equal(createdBtc.feedRef, 'BTC');
     const btcWallet = await service.upsert('rodion', {
       name: 'Cold BTC',
       kind: 'crypto',
@@ -300,7 +312,7 @@ test('the exchange total lands on the holding that asks for it and wallets are r
     });
     const report = await service.report('USD', '2026-09-24');
     const by = (id: string) => report.rows.find((r) => r.holding.id === id)!;
-    assert.equal(by(total.id).quantity, '19500');
+    assert.equal(by(total.id).quantity, null);
     assert.equal(by(coin.id).quantity, '2');
     assert.equal(by(coin.id).valueMinor, '600000');
     assert.equal(by(wrong.id).quantity, null);
@@ -421,6 +433,97 @@ test('the full run reports each feed separately and a prepared document can link
     assert.equal(isLastThursday('2026-02-26'), true);
     assert.throws(() => parseArguments(['2099-01-01']), /invalid_date/);
     assert.throws(() => parseArguments(['a', 'b']), /usage/);
+  } finally {
+    await db.close();
+  }
+});
+
+test('a total-only exchange holding still takes the dollar total, and a wallet is read by its extended key', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const service = new Holdings(db);
+    const total = await service.upsert('rodion', {
+      name: 'Exchange all',
+      kind: 'crypto',
+      denomination: 'USD',
+      invested: true,
+      liquid: true,
+      group: 'Exchange',
+      feed: 'binance',
+      feedRef: 'TOTAL',
+    });
+    const first = await applyExchangeHoldings(db, '2026-09-24', {
+      assets: [{ asset: 'XYZ', quantity: '3', usdPerUnit: '100' }],
+      totalUsd: '300',
+      unpriced: [],
+    });
+    // The total is written, and the coin gets its own holding beside it; from
+    // the next run on the total is superseded.
+    assert.equal(first.filled, 2);
+    assert.equal(first.created, 1);
+    const second = await applyExchangeHoldings(db, '2026-09-25', {
+      assets: [{ asset: 'XYZ', quantity: '3', usdPerUnit: '100' }],
+      totalUsd: '300',
+      unpriced: [],
+    });
+    assert.deepEqual(second.skipped, { total_superseded_by_coins: 1 });
+    const report = await service.report('USD', '2026-09-25');
+    assert.equal(
+      report.rows.find((r) => r.holding.id === total.id)!.carried,
+      true,
+    );
+    assert.equal(
+      report.rows.find((r) => r.holding.denomination === 'XYZ')!.holding.group,
+      'Exchange',
+    );
+
+    const zpub =
+      'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs';
+    const wallet = await service.upsert('rodion', {
+      name: 'Cold BTC',
+      kind: 'crypto',
+      denomination: 'BTC',
+      invested: true,
+      liquid: true,
+      feed: 'wallet',
+      feedRef: zpub,
+    });
+    // Coins on the first receive address and the first change address; every
+    // other derived address is unused and the scan stops at the gap limit.
+    const funded: Record<string, number> = {
+      bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu: 18171700,
+      bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el: 2500,
+    };
+    let lookups = 0;
+    const fetcher: Fetcher = async (url) => {
+      if (url.pathname === '/api/v3/ticker/price')
+        return reply(JSON.stringify([{ symbol: 'BTCUSDT', price: '100000' }]));
+      if (url.origin === 'https://mempool.space') {
+        lookups += 1;
+        const address = url.pathname.split('/').pop()!;
+        const sats = funded[address] ?? 0;
+        return reply(
+          JSON.stringify({
+            chain_stats: {
+              funded_txo_sum: sats,
+              spent_txo_sum: 0,
+              tx_count: sats ? 1 : 0,
+            },
+            mempool_stats: { funded_txo_sum: 0, spent_txo_sum: 0, tx_count: 0 },
+          }),
+        );
+      }
+      return reply('', 500);
+    };
+    const summary = await fillWallets(db, '2026-09-25', fetcher);
+    assert.equal(summary.filled, 1);
+    assert.equal(lookups, 1 + 20 + 1 + 20);
+    const row = (await service.report('USD', '2026-09-25')).rows.find(
+      (r) => r.holding.id === wallet.id,
+    )!;
+    assert.equal(row.quantity, '0.181742');
+    assert.equal(row.valueMinor, '1817420'); // 0.181742 × 100,000
   } finally {
     await db.close();
   }

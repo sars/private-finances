@@ -11,6 +11,11 @@
  */
 import { createHmac } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
+import {
+  isExtendedPublicKey,
+  parseExtendedPublicKey,
+  scanWallet,
+} from './bitcoin-wallet.js';
 import { parseDecimal, toDecimal, type Rational } from './holding-valuation.js';
 
 export type FeedErrorCode =
@@ -491,27 +496,62 @@ export function isEthereumAddress(value: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
-/** Confirmed plus unconfirmed balance of an address, in BTC as a decimal string. */
-export async function fetchBitcoinBalance(
+type AddressStats = {
+  chain_stats?: {
+    funded_txo_sum?: unknown;
+    spent_txo_sum?: unknown;
+    tx_count?: unknown;
+  };
+  mempool_stats?: {
+    funded_txo_sum?: unknown;
+    spent_txo_sum?: unknown;
+    tx_count?: unknown;
+  };
+};
+async function addressStats(
   address: string,
   fetcher: Fetcher,
-  origin = BTC_API_ORIGIN,
-): Promise<string> {
-  if (!isBitcoinAddress(address)) throw new FeedError('configuration');
-  const body = JSON.parse(
+  origin: string,
+): Promise<AddressStats> {
+  return JSON.parse(
     await fetchText(fetcher, new URL(`/api/address/${address}`, origin), {
       headers: { accept: 'application/json' },
     }),
-  ) as {
-    chain_stats?: { funded_txo_sum?: unknown; spent_txo_sum?: unknown };
-    mempool_stats?: { funded_txo_sum?: unknown; spent_txo_sum?: unknown };
-  };
-  return bitcoinFromStats(body);
+  ) as AddressStats;
 }
-export function bitcoinFromStats(body: {
-  chain_stats?: { funded_txo_sum?: unknown; spent_txo_sum?: unknown };
-  mempool_stats?: { funded_txo_sum?: unknown; spent_txo_sum?: unknown };
-}): string {
+/**
+ * Confirmed plus unconfirmed balance in BTC as a decimal string, of one
+ * address or of a whole wallet given its extended public key: the wallet's
+ * receive and change addresses are derived here and looked up one by one,
+ * stopping after twenty unused in a row, so the key never leaves the server.
+ */
+export async function fetchBitcoinBalance(
+  reference: string,
+  fetcher: Fetcher,
+  origin = BTC_API_ORIGIN,
+): Promise<string> {
+  if (isExtendedPublicKey(reference)) {
+    let account;
+    try {
+      account = parseExtendedPublicKey(reference);
+    } catch {
+      throw new FeedError('configuration');
+    }
+    const scanned = await scanWallet(account, async (address) => {
+      const stats = await addressStats(address, fetcher, origin);
+      const count = (side?: { tx_count?: unknown }) =>
+        typeof side?.tx_count === 'number' ? side.tx_count : 0;
+      return {
+        transactions: count(stats.chain_stats) + count(stats.mempool_stats),
+        satoshis: satoshisFromStats(stats),
+      };
+    });
+    return toDecimal({ n: scanned.satoshis, d: 100000000n }, 8);
+  }
+  if (!isBitcoinAddress(reference)) throw new FeedError('configuration');
+  return bitcoinFromStats(await addressStats(reference, fetcher, origin));
+}
+export function satoshisFromStats(body: AddressStats): bigint {
   const sats = (value: unknown) => {
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
       throw new FeedError('schema');
@@ -519,12 +559,15 @@ export function bitcoinFromStats(body: {
   };
   const chain = body.chain_stats ?? {};
   const pending = body.mempool_stats ?? {};
-  const total =
+  return (
     sats(chain.funded_txo_sum ?? 0) -
     sats(chain.spent_txo_sum ?? 0) +
     sats(pending.funded_txo_sum ?? 0) -
-    sats(pending.spent_txo_sum ?? 0);
-  return toDecimal({ n: total, d: 100000000n }, 8);
+    sats(pending.spent_txo_sum ?? 0)
+  );
+}
+export function bitcoinFromStats(body: AddressStats): string {
+  return toDecimal({ n: satoshisFromStats(body), d: 100000000n }, 8);
 }
 
 /** Balance of an address in ETH as a decimal string, through JSON-RPC eth_getBalance. */

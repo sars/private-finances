@@ -25,7 +25,7 @@ import {
   type Fetcher,
   type FlexStatement,
 } from './holding-feeds.js';
-import { toDecimal } from './holding-valuation.js';
+import { parseDecimal, toDecimal } from './holding-valuation.js';
 
 export interface FillSummary {
   filled: number;
@@ -229,7 +229,16 @@ export async function applyFlexStatement(
   return summary;
 }
 
-/** The exchange's dollar total, or one asset's quantity, onto the holdings that ask for it. */
+/** Below this dollar value a coin is dust: counted in the exchange total, not given a holding. */
+export const EXCHANGE_DUST_USD = 1n;
+
+/**
+ * The exchange onto its holdings: every coin worth at least a dollar gets a
+ * holding of its own, created when new and zeroed when gone, shaped like the
+ * exchange's existing holdings; a `TOTAL` holding still takes the dollar
+ * total of everything, but is skipped once per-coin holdings exist so the
+ * same money is never counted twice.
+ */
 export async function applyExchangeHoldings(
   db: Database,
   asOf: string,
@@ -238,13 +247,13 @@ export async function applyExchangeHoldings(
   const service = new Holdings(db);
   const summary = empty();
   const w = await writer(service);
-  const fed = (await service.list(false)).filter((h) => h.feed === 'binance');
+  const all = await service.list();
+  const fed = all.filter((h) => h.feed === 'binance' && !h.archived);
+  const perCoin = (h: Holding) =>
+    (h.feedRef ?? 'TOTAL').toUpperCase() !== 'TOTAL';
+  const symbolOk = (asset: string) => /^[A-Z0-9][A-Z0-9.\-]{0,15}$/.test(asset);
   for (const asset of exchange.assets) {
-    if (
-      asset.usdPerUnit &&
-      asset.asset !== 'USD' &&
-      /^[A-Z0-9][A-Z0-9.\-]{0,15}$/.test(asset.asset)
-    ) {
+    if (asset.usdPerUnit && asset.asset !== 'USD' && symbolOk(asset.asset)) {
       await service.recordPrice(null, {
         symbol: asset.asset,
         asOf,
@@ -254,9 +263,14 @@ export async function applyExchangeHoldings(
       summary.pricesRecorded += 1;
     }
   }
+  const claimed = new Set<string>();
   for (const holding of fed) {
     const reference = (holding.feedRef ?? 'TOTAL').toUpperCase();
     if (reference === 'TOTAL') {
+      if (fed.some(perCoin)) {
+        skip(summary, 'total_superseded_by_coins');
+        continue;
+      }
       if (holding.denomination !== 'USD' || exchange.totalUsd === null) {
         skip(
           summary,
@@ -267,8 +281,35 @@ export async function applyExchangeHoldings(
       await w.write(summary, holding, asOf, exchange.totalUsd, 'binance');
       continue;
     }
+    claimed.add(reference);
     const asset = exchange.assets.find((a) => a.asset === reference);
     await w.write(summary, holding, asOf, asset?.quantity ?? '0', 'binance');
+  }
+  // A coin worth a dollar or more with no holding yet gets one, shaped like
+  // the exchange's other holdings; a retired total still lends its shape.
+  const template =
+    fed.find(perCoin) ?? all.find((h) => h.feed === 'binance') ?? null;
+  for (const asset of exchange.assets) {
+    if (claimed.has(asset.asset) || !asset.usdPerUnit || !symbolOk(asset.asset))
+      continue;
+    const quantity = parseDecimal(asset.quantity)!;
+    const price = parseDecimal(asset.usdPerUnit)!;
+    // quantity × price < dust, in exact arithmetic
+    if (quantity.n * price.n < EXCHANGE_DUST_USD * quantity.d * price.d)
+      continue;
+    const created = await service.upsert('binance', {
+      name: `${template?.group ?? 'Binance'} ${asset.asset}`,
+      kind: 'crypto',
+      denomination: asset.asset,
+      invested: true,
+      liquid: true,
+      owner: template?.owner ?? null,
+      group: template?.group ?? 'Binance',
+      feed: 'binance',
+      feedRef: asset.asset,
+    });
+    await w.write(summary, created, asOf, asset.quantity, 'binance');
+    summary.created += 1;
   }
   return summary;
 }
