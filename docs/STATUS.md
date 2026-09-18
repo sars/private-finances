@@ -9,6 +9,42 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**12a20c496c8c9865b4d39eb09f4484b2ea372154**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 54 with 4,168 transactions unchanged, both services active. It
+gives the installed app three things the browser's own chrome used to
+provide, all of them owed to the release below that made standalone display
+work in the first place.
+
+The phone's tab bar is 3.5rem plus whatever the home indicator claims, and
+that inset only became real when the viewport gained `viewport-fit=cover` —
+so the flat `pb-20` reserved for the bar stopped covering it and the last
+few millimetres of every screen sat underneath, which is how the owner found
+it. The reservation now carries the same inset the bar does, restoring the
+slack that existed before. `overscroll-behavior-y: none` is gone too: it had
+taken pull to refresh away along with the rubber band, and an installed app
+has no reload button, so that gesture is the only one the platform offers.
+The per-screen refresh buttons stay — the gesture reloads the document and
+loses the period, the filters and the scroll, while a button refetches and
+keeps them, and a desktop has no gesture at all.
+
+Nothing refetched on its own either: every query rests at `staleTime:
+Infinity` with refetch on focus, reconnect and interval all off, so an app
+iOS had suspended came back showing hours-old figures. Returning after more
+than a minute away now invalidates everything but the session; under a
+minute is switching to the bank's app and back, which should not cost a
+round trip. Home, Reports and Cash read through raw `fetch` rather than the
+query client and still refresh from their own button or the gesture.
+
+Recorded late and out of order: **f83b6477289ec1161644525b1cb769180e1ee4ef**
+(PR #71) went live between `e83193fd` and `56b8bbd4` and is contained in
+both. Its commit message blames Safari for handing a click a bare `Text`
+node, and that is wrong — the quirk is real but was fixed in WebKit around
+2007, and modern Safari reports the element. The change is harmless
+defensive code and was kept; what actually broke standalone display was the
+manifest the policy refused, which `56b8bbd4` fixed.
+
 **56b8bbd4170972fa862e3ad1cc2d5976e0065b70**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
