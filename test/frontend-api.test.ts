@@ -297,11 +297,7 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
       (await (await get('/api/fx?display=UAH')).json()).currency,
       'UAH',
     );
-    const post = (
-      path: string,
-      fields: Record<string, string>,
-      as = cookie,
-    ) =>
+    const post = (path: string, fields: Record<string, string>, as = cookie) =>
       fetch(base + path, {
         method: 'POST',
         headers: { cookie: as, accept: 'application/json' },

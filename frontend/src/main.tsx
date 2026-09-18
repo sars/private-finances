@@ -175,7 +175,8 @@ function App() {
         leftAt = Date.now();
         return;
       }
-      if (leftAt && Date.now() - leftAt > 60_000) void invalidateFinancialData();
+      if (leftAt && Date.now() - leftAt > 60_000)
+        void invalidateFinancialData();
       leftAt = 0;
     };
     document.addEventListener('visibilitychange', onVisibility);

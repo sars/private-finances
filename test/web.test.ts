@@ -233,23 +233,17 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     cookie = await signInAs(base, 'rodion');
     const withHost = (host: string) =>
       new Promise<number>((resolve, reject) => {
-        const req = request(
-          base,
-          { headers: { host, cookie } },
-          (res) => {
-            res.resume();
-            resolve(res.statusCode!);
-          },
-        );
+        const req = request(base, { headers: { host, cookie } }, (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        });
         req.on('error', reject);
         req.end();
       });
     assert.equal(await withHost('attacker.example'), 403);
     assert.equal(await withHost('finances.example.test:8443'), 200);
 
-    const html = await (
-      await fetch(base, { headers: { cookie } })
-    ).text();
+    const html = await (await fetch(base, { headers: { cookie } })).text();
     const csrf = /name="csrf" value="([a-f0-9]+)"/.exec(html)![1]!;
     assert.equal(html.includes('Import example transactions'), false);
     const demoImport = await fetch(`${base}/import`, {
