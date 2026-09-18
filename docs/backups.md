@@ -170,20 +170,34 @@ that row travels inside the very dump that gets uploaded, and the bucket address
 is private configuration. No financial content and no credentials reach the
 table.
 
-## Proving recovery, before this counts as protection
+## Proving recovery
 
-A backup nobody has restored is a belief. Before live data depends on it:
-upload a synthetic snapshot, run `restic check --read-data`, restore it to a
-restricted temporary folder, create a separate disposable PostgreSQL database
-and restore with `pg_restore --exit-on-error --no-owner --no-acl`, then compare
-transaction and audit counts and exact per-currency totals against the source.
-Never restore into the active database.
-
-Record the snapshot ID, the tested Git SHA, the timestamp and the comparison
-result — without financial content. Proof is marked by
+A backup nobody has restored is a belief. The procedure: run
+`restic check --read-data`, restore the snapshot to a restricted temporary
+folder, create a separate disposable PostgreSQL database and load it with
+`pg_restore --exit-on-error --no-owner --no-acl`, then compare table row counts
+and exact per-currency totals against the source. **Never restore into the
+active database.** Record the snapshot ID, the tested commit, the timestamp and
+the comparison result, without financial content. Proof is marked by
 `/etc/private-finances/off-server-restore-verified`, containing exactly
 `off-server-restore-verified`; the local-only marker never substitutes for it.
-Repeat after migration changes and periodically thereafter.
+
+**Done on 19 September 2026**, against release
+`860801e2153434400378a8103e0b2cfe3786e249` and snapshot `7db29d4b`.
+`restic check --read-data` re-read every pack and found no errors. The restore
+loaded without error into a disposable database. All 50 tables matched by row
+count and the per-currency transaction totals matched by digest, except two
+tables explained by the seconds between the dump and the comparison:
+`backup_runs` (+1, because the status row is written after the dump is taken)
+and `bank_import_windows` (+3, with `completed_at` after the dump, from the
+worker resuming). The disposable database and the restored file were destroyed
+afterwards.
+
+Repeat after migration changes and periodically thereafter. One caution learned
+here: write the comparison so that it is capable of failing. The first attempt
+reported all fifty tables identical while in fact returning empty rows on both
+sides, which is not evidence of anything. Confirm a comparison reports the
+differences that really exist before trusting it to report none.
 
 ## Retention, still deferred
 
