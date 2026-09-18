@@ -10,7 +10,7 @@ import {
 import { apiGet, useSession, queryClient } from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useUrlField } from './lib/navigation';
-import { ownMoneyMinor, ownMoneyTotal } from './lib/own-money';
+import { ownMoneyMinor } from './lib/own-money';
 import {
   AccountBadge,
   EmptyState,
@@ -156,41 +156,11 @@ export default function Balances() {
   const mine = accounts.filter((account) => account.owner === who);
 
   /**
-   * What the banks state for that person, in the display currency — every
-   * agreed overdraft still inside it, because that is what the server
-   * converted. It is the honest name for this figure, not the household's
-   * money, which is why the screen labels it as the banks' claim and prints
-   * the household's own money beside it.
+   * The household's own money, as the server already worked it out: every
+   * figure under `reporting` has the agreed overdraft taken out of it before
+   * it is converted, so the screen prints it and subtracts nothing again.
    */
-  const stated = useMemo(() => {
-    let sum = 0n;
-    let missing = 0;
-    for (const account of mine)
-      for (const balance of account.balances) {
-        const row = converted.get(rowKey(balance));
-        if (row?.convertedMinor) sum += BigInt(row.convertedMinor);
-        else missing += 1;
-      }
-    return { minor: sum.toString(), missing };
-  }, [mine, converted]);
-
-  /** The same money with the banks' overdrafts taken back out of it. */
-  const own = useMemo(
-    () =>
-      ownMoneyTotal(
-        mine.flatMap((account) =>
-          account.balances.map((balance) => ({
-            currency: balance.currency,
-            amountMinor: balance.amountMinor,
-            creditLimitMinor: balance.creditLimitMinor,
-            convertedMinor:
-              converted.get(rowKey(balance))?.convertedMinor ?? null,
-          })),
-        ),
-        display,
-      ),
-    [mine, converted, display],
-  );
+  const reporting = query.data?.reporting;
 
   /** That person's cards, split into the sections the screen shows them in. */
   const sections = useMemo(
@@ -308,16 +278,14 @@ export default function Balances() {
               </p>
               {/* Said only when it is worth saying. Most accounts are the
                   household's own spending, and a card repeating "Personal"
-                  nine times teaches nobody anything; an account nobody has
-                  classified, or one whose money is not personal spending, is
-                  exactly what a reader of this screen needs pointing out. */}
-              {account.purpose !== 'personal' && (
+                  nine times teaches nobody anything; money that is not personal
+                  spending is exactly what a reader needs pointing out. An
+                  undecided account says nothing either: it sits under the
+                  "Purpose to review" heading, which has already said it. */}
+              {(account.purpose === 'business' ||
+                account.purpose === 'investment') && (
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {account.purpose === 'unreviewed'
-                    ? 'Purpose not decided'
-                    : account.purpose === 'business'
-                      ? 'Business'
-                      : 'Investment'}
+                  {account.purpose === 'business' ? 'Business' : 'Investment'}
                 </p>
               )}
             </div>
@@ -332,12 +300,14 @@ export default function Balances() {
             <div className="mt-3 space-y-2">
               {account.balances.map((balance) => {
                 const row = converted.get(rowKey(balance));
-                const limit = balance.creditLimitMinor;
                 // The bank counts the agreed overdraft inside the figure it
-                // states, so the loudest number on the card is what is left
-                // after it: the household's own money, which is the only one
-                // of the two anybody can spend without borrowing.
-                const held = ownMoneyMinor(balance.amountMinor, limit);
+                // states, so the only number the card shows is what is left
+                // after it: the household's own money, the part anybody can
+                // spend without borrowing. The limit is nobody's business here.
+                const held = ownMoneyMinor(
+                  balance.amountMinor,
+                  balance.creditLimitMinor,
+                );
                 return (
                   <div key={balance.currency}>
                     <Money
@@ -347,23 +317,10 @@ export default function Balances() {
                         BigInt(held) < 0n ? ' text-negative' : ''
                       }`}
                     />
-                    {limit && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        own money · bank states{' '}
-                        <Money
-                          minor={balance.amountMinor}
-                          currency={balance.currency}
-                        />
-                        , incl.{' '}
-                        <Money minor={limit} currency={balance.currency} />{' '}
-                        limit
-                      </p>
-                    )}
                     {balance.currency !== display && (
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {row?.convertedMinor ? (
                           <>
-                            {limit ? 'stated figure ' : ''}
                             <Money
                               minor={row.convertedMinor}
                               currency={display}
@@ -478,72 +435,28 @@ export default function Balances() {
           <TabsContent key={owner} value={owner} className="mt-4 space-y-4">
             {owner === who && (
               <>
-                <section
-                  aria-label="Total held"
-                  className="grid gap-4 sm:grid-cols-2"
-                >
-                  <div className="space-y-1">
+                {reporting && (
+                  <section aria-label="Own money" className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">
-                      Stated by banks · {display}
+                      Own money · {reporting.currency}
                     </p>
                     <Money
-                      minor={stated.minor}
-                      currency={display}
+                      minor={reporting.totalMinor}
+                      currency={reporting.currency}
                       className="text-2xl font-semibold tracking-tight break-all"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Before overdraft limits: what the banks say the accounts
-                      hold, agreed overdrafts included.
-                    </p>
-                    {stated.missing > 0 && (
+                    {reporting.coverage.missing > 0 && (
                       <p className="text-xs text-warning">
-                        {stated.missing}{' '}
-                        {stated.missing === 1 ? 'balance is' : 'balances are'}{' '}
+                        {reporting.coverage.missing}{' '}
+                        {reporting.coverage.missing === 1
+                          ? 'balance is'
+                          : 'balances are'}{' '}
                         not in this total: no rate, or the bank has not reported
                         one.
                       </p>
                     )}
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Own money · {display}
-                    </p>
-                    {own.minor === null ? (
-                      <p className="text-2xl font-semibold tracking-tight tabular-nums">
-                        —
-                      </p>
-                    ) : (
-                      <Money
-                        minor={own.minor}
-                        currency={display}
-                        className="text-2xl font-semibold tracking-tight break-all"
-                      />
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      The same money with every agreed overdraft taken back out
-                      of it.
-                    </p>
-                    {own.minor === null && (
-                      <p className="text-xs text-warning">
-                        {own.unconvertedLimits}{' '}
-                        {own.unconvertedLimits === 1
-                          ? 'overdraft limit is'
-                          : 'overdraft limits are'}{' '}
-                        in another currency and no converted limit is sent, so
-                        no honest figure can be given here. Each card below
-                        still shows its own money exactly.
-                      </p>
-                    )}
-                    {own.minor !== null && own.missing > 0 && (
-                      <p className="text-xs text-warning">
-                        {own.missing}{' '}
-                        {own.missing === 1 ? 'balance is' : 'balances are'} not
-                        in this total: no rate, or the bank has not reported
-                        one.
-                      </p>
-                    )}
-                  </div>
-                </section>
+                  </section>
+                )}
                 {query.isPending ? (
                   <p role="status" className="text-sm text-muted-foreground">
                     Loading balances…
