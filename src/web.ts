@@ -15,6 +15,7 @@ import { Refunds } from './refunds.js';
 import { SpendingPatterns } from './spending-pattern.js';
 import { TransactionTriage } from './transaction-triage.js';
 import { llmBudgetSummary } from './llm-budget.js';
+import { systemProblems } from './problems.js';
 import type { CredentialHealth } from './credential-health.js';
 import { convertedSpending } from './analytics.js';
 import { AccountBalances, convertedBalances } from './account-balances.js';
@@ -73,6 +74,13 @@ import {
 export type WebConfig = {
   frontendDirectory?: string;
   credentialHealth?: () => CredentialHealth[];
+  /**
+   * When the newest local database snapshot was taken, or null when the
+   * directory holds none. Absent means this process was never told where the
+   * backups live, which the problems list treats as "say nothing" rather than
+   * as "there are none".
+   */
+  lastBackupAt?: () => Promise<string | null>;
   /** The feeds a snapshot made from the screen may read; absent means only the stored bank balances. */
   holdingFeeds?: {
     credentials: () => Promise<FeedCredentials>;
@@ -1000,6 +1008,16 @@ export function web(
         json(200, await importStatus(repo.db));
         return;
       }
+      if (req.method === 'GET' && route === '/api/problems') {
+        json(
+          200,
+          await systemProblems(repo.db, {
+            credentials: config.credentialHealth?.(),
+            lastBackupAt: await config.lastBackupAt?.(),
+          }),
+        );
+        return;
+      }
       if (req.method === 'GET' && route === '/api/ops') {
         json(200, {
           ...(await repo.health()),
@@ -1767,6 +1785,7 @@ export function web(
           : route === '/health/ready' ||
               route === '/api/ops' ||
               route === '/api/imports' ||
+              route === '/api/problems' ||
               route === '/api/llm-budget' ||
               route === '/ops'
             ? 503

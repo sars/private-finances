@@ -6,7 +6,7 @@ import { memoryDatabase, postgresDatabase, migrate } from './database.js';
 import { Repository } from './repository.js';
 import { web } from './web.js';
 import { synthetic } from './synthetic.js';
-import { mkdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { TelegramClarifications, telegramTransport } from './telegram.js';
 import { Classifier } from './classifier.js';
@@ -17,6 +17,31 @@ import {
 } from './categories.js';
 import { ConsentService } from './consent.js';
 import { forgetExpiredSessions, seedOwners } from './auth.js';
+
+/**
+ * When the newest local database snapshot was taken.
+ *
+ * `deploy/local-backup.py` names each dump after the nanosecond it finished, so
+ * the filename is the timestamp and no file needs opening — which matters,
+ * because the application must never be able to read the dumps themselves. A
+ * directory it cannot list at all is reported as "no backup", the same as an
+ * empty one: both mean the same thing to somebody who has to fix it.
+ */
+async function newestBackupAt(directory: string): Promise<string | null> {
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch {
+    return null;
+  }
+  const newest = names
+    .filter((name) => /^\d+\.dump$/.test(name))
+    .map((name) => Number(name.slice(0, -5)) / 1e6)
+    .filter((millis) => Number.isFinite(millis) && millis > 0)
+    .sort((a, b) => a - b)
+    .at(-1);
+  return newest === undefined ? null : new Date(newest).toISOString();
+}
 
 const mode = process.env.APP_MODE ?? 'demo';
 if (mode !== 'demo' && mode !== 'postgres')
@@ -153,6 +178,10 @@ const server = web(repo, {
   credentialHealth:
     mode === 'postgres'
       ? () => credentialsHealthFromEnv(process.env)
+      : undefined,
+  lastBackupAt:
+    mode === 'postgres' && process.env.BACKUP_DIRECTORY
+      ? () => newestBackupAt(process.env.BACKUP_DIRECTORY!)
       : undefined,
   port,
   mode,

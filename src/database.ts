@@ -905,6 +905,25 @@ async function applyMigrations(db: Database): Promise<void> {
       await retirePerOwnerBankConnections(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (57)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=58'))
+        .rows.length
+    ) {
+      // The holdings run already decided whether each feed was read, skipped or
+      // refused, and then only printed it. That was enough while somebody was
+      // reading the output, and no use at all for saying so on a screen — which
+      // matters most for the exchange, whose key has no expiry date to count
+      // down to and fails by being revoked, unused or read from a new address.
+      // One row per feed, overwritten each run: the last outcome is the only
+      // one worth keeping, and a history here would be a second ledger of
+      // something the logs already hold.
+      await tx.query(`CREATE TABLE holding_feed_runs (
+        feed text PRIMARY KEY CHECK(feed IN ('ibkr','binance','wallet')),
+        status text NOT NULL CHECK(status IN ('ok','not_configured','failed')),
+        code text, ran_at timestamptz NOT NULL DEFAULT now()
+      )`);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (58)');
+    }
   });
 }
 

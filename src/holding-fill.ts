@@ -447,7 +447,46 @@ export async function runFeeds(
   } catch (error) {
     outcomes.push({ feed: 'wallet', status: 'failed', code: codeOf(error) });
   }
+  await recordFeedOutcomes(db, outcomes, options.now);
   return outcomes;
+}
+
+/**
+ * Keeps the last outcome of each feed where a screen can read it.
+ *
+ * The run printed these and nothing else kept them, so a feed that had been
+ * refused for a month looked exactly like one nobody had configured. The bank
+ * feed is left out: it reads balances this application already holds and cannot
+ * fail on its own, and recording it would invite the reader to treat a missing
+ * bank balance as a feed problem when it is an import problem.
+ *
+ * Recording must never cost a snapshot that otherwise worked, so a failure to
+ * write is swallowed here — the outcomes are returned to the caller and logged
+ * either way.
+ */
+async function recordFeedOutcomes(
+  db: Database,
+  outcomes: FeedOutcome[],
+  now?: Date,
+): Promise<void> {
+  const at = (now ?? new Date()).toISOString();
+  for (const outcome of outcomes) {
+    if (outcome.feed === 'bank') continue;
+    try {
+      await db.query(
+        `INSERT INTO holding_feed_runs(feed,status,code,ran_at) VALUES($1,$2,$3,$4)
+         ON CONFLICT(feed) DO UPDATE SET status=excluded.status,code=excluded.code,ran_at=excluded.ran_at`,
+        [
+          outcome.feed,
+          outcome.status,
+          outcome.status === 'failed' ? outcome.code : null,
+          at,
+        ],
+      );
+    } catch {
+      // A snapshot that ran is worth more than the note saying it ran.
+    }
+  }
 }
 /** A feed's own code, or the application's own error name; never a provider payload. */
 const codeOf = (error: unknown) =>
