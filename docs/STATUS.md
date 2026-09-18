@@ -9,13 +9,17 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**47d4744b82f1d7bab0106951465e352df7ad09f7**, live since September 18, 2026 at
-schema version 57, deployed with `deploy/release.sh` at the second attempt: 600
-application tests passed on the server, the rehearsal on a restored copy reached
-schema 57 in 22 milliseconds with 4,176 transactions, 140 active refund links,
-no expense without a category and nothing filed on a heading; both services
-active and the import timers back afterwards. It carries PR #87 and adds no
-migration.
+**997972a89797db05181df51661b29f872fb51174**, live since September 18, 2026 at
+schema version 59, deployed with `deploy/release.sh` in one pass over
+`a4e5b17e89044b39e064073d320ddaa24bdc78d9`: every gate passed, imports and the
+worker paused and resumed around the switch, and verification afterwards
+reported both services active, release `997972a`, schema 59 and 4,176
+transactions. It carries PR #90 and adds migration 59, the `backup_runs` table,
+which creates one empty table and touches nothing existing.
+
+`backup_runs` is empty, which is the true and intended state: no off-server
+backup has ever run, and System health now says **Never** rather than nothing at
+all. The bucket and its credential are still the owner's to create.
 
 The installed app moves itself to a new release now. Getting one onto the phone
 had meant deleting the app and installing it again, for two reasons that had
