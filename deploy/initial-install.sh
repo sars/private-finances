@@ -23,6 +23,9 @@ import secrets,os
 fd=os.open('/etc/private-finances/app.env',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
 with os.fdopen(fd,'w') as f:
  f.write('DATABASE_URL="postgresql:///private_finances?host=/var/run/postgresql&user=private-finances"\n')
+ # Each owner signs in with their own address; the address is the identity and
+ # the password below is the first one, set on every boot from this file.
+ f.write('RODION_EMAIL=\nKATYA_EMAIL=\n')
  f.write('RODION_PASSWORD='+secrets.token_hex(24)+'\nKATYA_PASSWORD='+secrets.token_hex(24)+'\n')
  f.write('RELEASE_SHA=de4b0aace9343f304572e2873ceee690d656c71d\n')
 PY

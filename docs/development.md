@@ -74,11 +74,13 @@ pull request lands.
 
 ## Isolated PostgreSQL
 
-Set APP_MODE=postgres, DATABASE_URL and both RODION_PASSWORD/KATYA_PASSWORD
-(at least 20 characters each) through a secret environment file. The application
-does not automatically load `.env`. It applies the versioned schema at startup
-and uses HTTP Basic authentication only on its loopback listener. For private
-server access, configure the TLS proxy and access checks before deployment.
+Set APP_MODE=postgres, DATABASE_URL, both RODION_EMAIL/KATYA_EMAIL and both
+RODION_PASSWORD/KATYA_PASSWORD (at least 20 characters each) through a secret
+environment file. The application does not automatically load `.env`. It
+applies the versioned schema at startup, writes those four values into the
+`users` table, and serves a sign-in screen on its loopback listener — see
+[authentication.md](authentication.md). For private server access, configure
+the TLS proxy and access checks before deployment.
 
 ## Checks
 

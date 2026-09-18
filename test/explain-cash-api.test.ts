@@ -5,6 +5,7 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { web } from '../src/web.js';
 import { TransactionTriage } from '../src/transaction-triage.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('cash and saved explanations share authenticated review, exact accounting and explicit confirmation', async () => {
   const db = memoryDatabase();
@@ -14,14 +15,14 @@ test('cash and saved explanations share authenticated review, exact accounting a
     port: 0,
     mode: 'postgres' as const,
     release: 'test',
-    passwords: {
-      rodion: 'synthetic-rodion-password',
-      katya: 'synthetic-katya-password',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   config.port = (server.address() as { port: number }).port;
+  const cookies: Record<'rodion' | 'katya', string> = {
+    rodion: '',
+    katya: '',
+  };
   const request = (
     path: string,
     owner: 'rodion' | 'katya' = 'rodion',
@@ -31,9 +32,7 @@ test('cash and saved explanations share authenticated review, exact accounting a
       redirect: 'manual',
       method: body ? 'POST' : 'GET',
       headers: {
-        authorization:
-          'Basic ' +
-          Buffer.from(owner + ':' + config.passwords[owner]).toString('base64'),
+        cookie: cookies[owner],
         ...(body
           ? { 'content-type': 'application/x-www-form-urlencoded' }
           : {}),
@@ -41,6 +40,10 @@ test('cash and saved explanations share authenticated review, exact accounting a
       ...(body ? { body: new URLSearchParams(body) } : {}),
     });
   try {
+    await seedTestOwners(db);
+    const base = `http://127.0.0.1:${config.port}`;
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
     const bootstrap = await (await request('/api/bootstrap')).json();
     const form = {
       csrf: bootstrap.csrf,

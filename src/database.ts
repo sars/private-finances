@@ -73,6 +73,7 @@ import {
   moveHouseholdTaxToItsOwnLeaf,
   seedCategoryTree,
 } from './category-tree.js';
+import { initializeAuth } from './auth.js';
 
 export type Row = Record<string, unknown>;
 export interface Executor {
@@ -861,6 +862,16 @@ async function applyMigrations(db: Database): Promise<void> {
       // monthly snapshot job knows what to read (PF-020, step two).
       await addHoldingFeeds(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (54)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=55'))
+        .rows.length
+    ) {
+      // Each owner signs in with an address and a password of their own, and
+      // the session that follows outlives a restart — Basic authentication
+      // could do neither, and neither could grow a second factor (PF-021).
+      await initializeAuth(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (55)');
     }
   });
 }

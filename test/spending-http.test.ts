@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { web, type WebConfig } from '../src/web.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('spending HTTP controls enforce CSRF, owner boundaries and stale revisions', async () => {
   const db = memoryDatabase();
@@ -33,22 +34,14 @@ test('spending HTTP controls enforce CSRF, owner boundaries and stale revisions'
     port: 0,
     mode: 'postgres',
     release: 'test',
-    passwords: {
-      rodion: 'synthetic-password-one',
-      katya: 'synthetic-password-two',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   config.port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${config.port}`;
-  const auth = (owner: string) =>
-    'Basic ' +
-    Buffer.from(
-      `${owner}:${owner === 'rodion' ? 'synthetic-password-one' : 'synthetic-password-two'}`,
-    ).toString('base64');
+  const cookies: Record<string, string> = { rodion: '', katya: '' };
   const get = (path: string, owner = 'rodion') =>
-    fetch(base + path, { headers: { authorization: auth(owner) } });
+    fetch(base + path, { headers: { cookie: cookies[owner]! } });
   const post = (
     path: string,
     fields: Record<string, string>,
@@ -56,11 +49,14 @@ test('spending HTTP controls enforce CSRF, owner boundaries and stale revisions'
   ) =>
     fetch(base + path, {
       method: 'POST',
-      headers: { authorization: auth(owner) },
+      headers: { cookie: cookies[owner]! },
       body: new URLSearchParams(fields),
       redirect: 'manual',
     });
   try {
+    await seedTestOwners(db);
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
     const csrf = (await (await get('/api/bootstrap')).json()).csrf;
     const kateCsrf = (await (await get('/api/bootstrap', 'katya')).json()).csrf;
     const fields = {

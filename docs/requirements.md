@@ -45,6 +45,7 @@ release/test evidence; these summaries do not claim complete historical coverage
 | PF-010 | Private responsive dashboard, Analytics, Router/Query foundation, Transactions/Receipts caches, full-page review and cash entry | Remaining screen cache migration, navigation/accessibility audit and settings follow-ups |
 | PF-011 | Validated proposals, reservations, shared $10 cap and visible usage; saved explanations before AI | Expanded quality evaluation within existing cap |
 | PF-012 | Guarded release/rollback, request IDs, bank isolation, credential reminders and full 36-table local restore comparison | Backend refactoring/measurement, encrypted S3 recovery, broader alerts and release failure drill |
+| PF-021 | Each member signs in with an address and a password; thirty-day sessions in the database, sign-out, per-address and per-caller guessing delays ([authentication](authentication.md)) | Change password, sign-up, reset by email, Google sign-in and a second factor; the environment still sets each password at boot |
 
 Passing synthetic tests does not prove live provider completeness. See
 [STATUS](STATUS.md) for exact commits, CI and deployment evidence. Missing FX,

@@ -9,6 +9,7 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { web, type WebConfig } from '../src/web.js';
 import { synthetic } from '../src/synthetic.js';
+import { seedTestOwners, signInAs, TEST_OWNERS } from './sign-in.js';
 
 test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF and static containment', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'finances-frontend-test-'));
@@ -52,10 +53,6 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     frontendDirectory: frontend,
     credentialHealth: () =>
       openAiCredentialHealth('2026-12-10', new Date('2026-12-05T12:00:00Z')),
-    passwords: {
-      rodion: 'synthetic-rodion-password',
-      katya: 'synthetic-katya-password',
-    },
     monobankJarsExcluded: true,
     consent: {
       list: async (actor) => [
@@ -80,15 +77,16 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   config.port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${config.port}`;
-  const authorization =
-    'Basic ' +
-    Buffer.from('rodion:synthetic-rodion-password').toString('base64');
-  const get = (path: string, auth = authorization) =>
-    fetch(base + path, { headers: { authorization: auth } });
+  let cookie = '';
+  const get = (path: string, as = cookie) =>
+    fetch(base + path, { headers: { cookie: as } });
   try {
+    // The shell and its assets are the sign-in screen, so they answer before
+    // there is a session. Everything carrying household data waits for one.
+    for (const path of ['/', '/assets/app.js']) {
+      assert.equal((await fetch(base + path)).status, 200, path);
+    }
     for (const path of [
-      '/',
-      '/assets/app.js',
       '/api/bootstrap',
       '/api/accounts',
       '/api/categories',
@@ -101,6 +99,22 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     ]) {
       assert.equal((await fetch(base + path)).status, 401, path);
     }
+    await seedTestOwners(db);
+    // A wrong password is refused, and repeated guesses are slowed down.
+    assert.equal(
+      (
+        await fetch(base + '/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            email: TEST_OWNERS[0]!.email,
+            password: 'not the password',
+          }).toString(),
+        })
+      ).status,
+      401,
+    );
+    cookie = await signInAs(base, 'rodion');
     const bootstrapResponse = await get('/api/bootstrap');
     const bootstrap = await bootstrapResponse.json();
     assert.match(bootstrap.csrf, /^[a-f0-9]{64}$/);
@@ -132,11 +146,9 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
         ],
       },
     );
-    const katyaAuthorization =
-      'Basic ' +
-      Buffer.from('katya:synthetic-katya-password').toString('base64');
+    const katyaCookie = await signInAs(base, 'katya');
     const katyaBootstrap = await (
-      await get('/api/bootstrap', katyaAuthorization)
+      await get('/api/bootstrap', katyaCookie)
     ).json();
     assert.equal(katyaBootstrap.actor, 'katya');
     assert.notEqual(katyaBootstrap.csrf, bootstrap.csrf);
@@ -174,7 +186,8 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
       manifest.headers.get('content-type'),
       'application/manifest+json',
     );
-    assert.equal((await fetch(base + '/manifest.webmanifest')).status, 401);
+    // The manifest is part of the shell, so it answers before a session too.
+    assert.equal((await fetch(base + '/manifest.webmanifest')).status, 200);
     // The shell answers screen routes, never a literal /index.html; the worker
     // must not precache a path the server does not serve.
     assert.equal((await get('/index.html')).status, 404);
@@ -287,11 +300,11 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     const post = (
       path: string,
       fields: Record<string, string>,
-      auth = authorization,
+      as = cookie,
     ) =>
       fetch(base + path, {
         method: 'POST',
-        headers: { authorization: auth, accept: 'application/json' },
+        headers: { cookie: as, accept: 'application/json' },
         body: new URLSearchParams(fields),
         redirect: 'manual',
       });
@@ -301,7 +314,7 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
         await post(
           '/categories',
           { csrf: bootstrap.csrf, name: 'Bakery' },
-          katyaAuthorization,
+          katyaCookie,
         )
       ).status,
       403,
@@ -321,7 +334,7 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
       ),
     );
     assert.deepEqual(
-      (await (await get('/api/categories', katyaAuthorization)).json()).rules,
+      (await (await get('/api/categories', katyaCookie)).json()).rules,
       [],
     );
     const ruleFields = {
@@ -345,7 +358,7 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     assert.equal(rules[0].matcher.field, 'counterparty');
     assert.equal(rules[0].matcher.value, 'Synthetic merchant');
     assert.deepEqual(
-      (await (await get('/api/categories', katyaAuthorization)).json()).rules,
+      (await (await get('/api/categories', katyaCookie)).json()).rules,
       [],
     );
     const redirect = await post('/connections/enablebanking/start', {

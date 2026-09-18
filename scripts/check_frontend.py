@@ -123,7 +123,7 @@ def pwa_rules() -> list[str]:
     index.html, which the server never serves under that path, so every install
     died with bad-precaching-response and no asset was cached at all. And the
     manifest link had no crossorigin attribute, so the browser asked for it with
-    credentials omitted and HTTP Basic authentication answered 401.
+    credentials omitted, which the authentication of the day answered with 401.
     """
     built = ROOT / "dist" / "frontend"
     index_html = built / "index.html"
@@ -138,7 +138,7 @@ def pwa_rules() -> list[str]:
     elif "use-credentials" not in link.group(0):
         errors.append(
             'dist/frontend/index.html: manifest link needs crossorigin="use-credentials" '
-            "(VitePWA useCredentials) or Basic authentication answers it with 401"
+            "(VitePWA useCredentials); the root stops answering the moment anything there needs the session cookie"
         )
     if worker.is_file():
         precached_html = re.findall(r"[\"']([^\"']*\.html)[\"']", worker.read_text(encoding="utf-8"))

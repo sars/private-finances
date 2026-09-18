@@ -5,6 +5,7 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { TelegramClarifications } from '../src/telegram.js';
 import { web } from '../src/web.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 test("saved replies survive confirmation/rejection; the list is the signed-in member's and a payment detail is its own owner's", async () => {
   const db = memoryDatabase();
@@ -90,26 +91,26 @@ test("saved replies survive confirmation/rejection; the list is the signed-in me
     mode: 'postgres' as const,
     release: 'test',
     telegram,
-    passwords: {
-      rodion: 'synthetic-owner-password',
-      katya: 'synthetic-kate-password',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   config.port = (server.address() as { port: number }).port;
+  const cookies: Record<'rodion' | 'katya', string> = {
+    rodion: '',
+    katya: '',
+  };
   const get = async (path: string, actor: 'rodion' | 'katya' = 'rodion') => {
     const response = await fetch(`http://127.0.0.1:${config.port}${path}`, {
-      headers: {
-        authorization:
-          'Basic ' +
-          Buffer.from(`${actor}:${config.passwords[actor]}`).toString('base64'),
-      },
+      headers: { cookie: cookies[actor] },
     });
     assert.equal(response.status, 200);
     return response.json();
   };
   try {
+    await seedTestOwners(db);
+    const base = `http://127.0.0.1:${config.port}`;
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
     assert.equal((await telegram.pending('rodion')).length, 1);
     for (const owner of ['rodion', 'katya'] as const) {
       const list = await get('/api/review?window=current_month', owner);

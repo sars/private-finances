@@ -7,6 +7,7 @@ import { web, type WebConfig } from '../src/web.js';
 import { FxRates } from '../src/fx-rates.js';
 import { AccountBalances } from '../src/account-balances.js';
 import { Accounts } from '../src/accounts.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('holdings HTTP routes are shared by the household, need CSRF, and value in the display currency', async () => {
   const db = memoryDatabase();
@@ -26,22 +27,14 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
     port: 0,
     mode: 'postgres',
     release: 'test',
-    passwords: {
-      rodion: 'synthetic-password-one',
-      katya: 'synthetic-password-two',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   config.port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${config.port}`;
-  const auth = (owner: string) =>
-    'Basic ' +
-    Buffer.from(
-      `${owner}:${owner === 'rodion' ? 'synthetic-password-one' : 'synthetic-password-two'}`,
-    ).toString('base64');
+  const cookies: Record<string, string> = { rodion: '', katya: '' };
   const get = (path: string, owner = 'rodion') =>
-    fetch(base + path, { headers: { authorization: auth(owner) } });
+    fetch(base + path, { headers: { cookie: cookies[owner]! } });
   const post = (
     path: string,
     fields: Record<string, string>,
@@ -49,12 +42,15 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
   ) =>
     fetch(base + path, {
       method: 'POST',
-      headers: { authorization: auth(owner) },
+      headers: { cookie: cookies[owner]! },
       body: new URLSearchParams(fields),
       redirect: 'manual',
     });
   try {
     assert.equal((await fetch(`${base}/api/holdings`)).status, 401);
+    await seedTestOwners(db);
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
     const csrf = (await (await get('/api/bootstrap')).json()).csrf;
     const kateCsrf = (await (await get('/api/bootstrap', 'katya')).json()).csrf;
     const fields = {
