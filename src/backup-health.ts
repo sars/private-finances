@@ -143,7 +143,7 @@ export async function backupHealth(
 }
 
 /** "9 h" / "3 d": a backup's age is read as a scale, not to the minute. */
-export function backupAge(hours: number): string {
+function backupAge(hours: number): string {
   return hours < 48
     ? `${Math.max(0, Math.round(hours))} h`
     : `${Math.round(hours / 24)} d`;
@@ -193,8 +193,13 @@ export function backupSummary(
 }
 
 /**
- * Records one attempt. Written for the backup script through the CLI below;
- * the web application never starts a backup and never writes here.
+ * Records one attempt.
+ *
+ * The backup script writes its own rows through `psql`, reusing the libpq
+ * variables the dump already has rather than introducing a second credential;
+ * this is the same statement in the language the schema is defined in, for the
+ * tests and for any later caller. The web application never starts a backup and
+ * never writes here.
  */
 export async function recordBackupRun(
   db: Executor,
@@ -221,22 +226,4 @@ export async function recordBackupRun(
       run.sizeBytes ?? null,
     ],
   );
-}
-
-/**
- * Keeps the table to a readable tail. A year of daily rows is nothing, but the
- * page reads only the newest 200 and nobody audits a backup from two years ago
- * from here — the snapshots themselves are the record.
- */
-export async function pruneBackupRuns(
-  db: Executor,
-  keep = 400,
-): Promise<number> {
-  const removed = await db.query(
-    `DELETE FROM backup_runs WHERE id IN (
-       SELECT id FROM backup_runs ORDER BY finished_at DESC, id DESC OFFSET $1
-     ) RETURNING id`,
-    [keep],
-  );
-  return removed.rows.length;
 }

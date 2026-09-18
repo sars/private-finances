@@ -5,7 +5,6 @@ import {
   BACKUP_EXPECTED_WITHIN_HOURS,
   backupHealth,
   backupSummary,
-  pruneBackupRuns,
   recordBackupRun,
 } from '../src/backup-health.js';
 
@@ -162,28 +161,6 @@ test('the stored row refuses a shape the operations page could not trust', async
            VALUES (gen_random_uuid(),'amazon-s3','succeeded',now(),'not-a-snapshot')`,
       ),
     );
-  } finally {
-    await db.close();
-  }
-});
-
-test('pruning keeps the recent tail and leaves the newest run in place', async () => {
-  const db = await database();
-  try {
-    for (let day = 0; day < 20; day++)
-      await recordBackupRun(db, {
-        destination: 'amazon-s3',
-        outcome: 'succeeded',
-        startedAt: hoursAgo(day * 24),
-        finishedAt: hoursAgo(day * 24),
-        sizeBytes: 1024,
-      });
-    assert.equal(await pruneBackupRuns(db, 5), 15);
-    const remaining = await db.query(
-      'SELECT count(*)::int AS count FROM backup_runs',
-    );
-    assert.equal(remaining.rows[0]!.count, 5);
-    assert.equal((await backupHealth(db, now)).state, 'healthy');
   } finally {
     await db.close();
   }
