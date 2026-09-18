@@ -9,6 +9,35 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**858c9b2e6510fa905614f213ddaf96d9bae5abf7**, live since September 18, 2026 at
+schema version 56, deployed with `deploy/release.sh` in one run: 588
+application tests passed on the server, the rehearsal on a restored copy of
+the real database reached schema 56 in 28 milliseconds with 4,171
+transactions, 140 active refund links, no expense without a category and
+nothing filed on a heading; after the switch both services are active and the
+import timers are back. It carries PR #76, the owner's second round on the
+household assets, built as four parallel pieces: Balances shows own money —
+the stated balance less the agreed overdraft — and groups accounts into
+Personal, Non-personal and Purpose to review; the Assets screen is read-only
+analytics with a series switch, three composition donuts, a top-seven donut
+with click-to-exclude and groups collapsed by default; a Snapshots page lists
+every snapshot date and takes today's manual figures in one form; a holding
+has a page of its own instead of a popup, with a bank account filling name,
+member and unit; accounts are named by one rule everywhere ("Rodion ·
+Monobank · Iron UAH"); and the IBKR Flex token's expiry is tracked beside the
+OpenAI key's with the same 5, 2 and 1 day reminders, migration 56 widening
+the reminders table's constraint. A route fix lets the pages under `/assets/`
+load on a fresh visit: only a path with an extension is a bundle file.
+
+Operator steps afterwards: `IBKR_FLEX_TOKEN_EXPIRES_AT` added to the server
+configuration before the switch, so the restarted services read it; the 15
+bank-fed holdings renamed to their accounts' names with prepared statements,
+all 15 updated. Hand-typed holdings keep their spreadsheet names by the
+owner's default.
+
+The release before it, **9a77fc2b8b17901a0459f2590c555ffac4f620af**, is
+described below.
+
 **9a77fc2b8b17901a0459f2590c555ffac4f620af**, live since September 18, 2026 at
 schema version 55, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
@@ -29,7 +58,7 @@ day so a page view is not a database write.
 
 Verified on the server after the switch: `/api/bootstrap` and
 `/api/transactions` answer 401 without a session, the shell answers 200
-because it *is* the sign-in screen, both members sign in and receive their own
+because it _is_ the sign-in screen, both members sign in and receive their own
 actor, and a wrong password is refused. `/health/ready` now answers without a
 session as well — it carries no household data, listens on loopback and is
 what `switch-release.py` polls, which no longer needs a password to deploy.
@@ -124,8 +153,7 @@ server never serves under that path — screen routes answer with the shell and
 `bad-precaching-response` and nothing was cached at all; no navigation is
 served from the cache anyway, so `html` left the worker's glob patterns.
 And the manifest link now carries `crossorigin="use-credentials"`, without
-which the browser omits credentials and HTTP Basic authentication answers
-401. `scripts/check_frontend.py` holds both properties against the built
+which the browser omits credentials and HTTP Basic authentication answers 401. `scripts/check_frontend.py` holds both properties against the built
 output.
 
 **e83193fd5acb0a7fd56abebeeecfa36d57200ed4**, live since September 18, 2026 at
