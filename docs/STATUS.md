@@ -9,6 +9,30 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**483c965b2473506282f2899e9d6f533407b548b9**, live since September 18, 2026 at
+schema version 57, deployed with `deploy/release.sh` in one run: 599
+application tests passed on the server, the rehearsal on a restored copy of
+the real database reached schema 57 in 36 milliseconds with 4,171
+transactions, 140 active refund links, no expense without a category and
+nothing filed on a heading; both services active afterwards. It carries
+PR #80, the owner's review of the assets round: the Balances total is own
+money — every balance converted after the agreed overdraft is taken out, in
+exact minor units — and the screen shows one figure per account and one
+total with the explanatory text about limits gone; the Snapshots page lists
+every date with Edit, which opens the same form for that day, and a confirmed
+Remove backed by `POST /api/holding-snapshots/delete`, which deletes every
+figure of a day and keeps the prices; the form's inputs are prefilled with
+the day's figure, carried values included, and only changed rows are saved;
+fed holdings stay read-only on any day; a Back to Assets link tops the
+assets pages for the phone; and Assets links to both the list and a new
+snapshot. Before this release the owner had the two unfinished snapshot days
+of September 17 and 18 removed — 58 figures — so the latest snapshot is again
+November 28, 2025 until the feeds run, on Thursday September 24 at 10:05
+Riga or earlier on request.
+
+The release before it, **c871c21f0f7086c1f1a115a1b960b9cbd97fcc6c**, is
+described below.
+
 **c871c21f0f7086c1f1a115a1b960b9cbd97fcc6c**, live since September 18, 2026 at
 schema version 56, deployed with `deploy/release.sh` in one run: 593
 application tests passed on the server, the rehearsal on a restored copy of the
