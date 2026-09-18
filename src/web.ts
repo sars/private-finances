@@ -37,7 +37,14 @@ import type { Classifier } from './classifier.js';
 import { Reports, previousReportPeriod } from './reports.js';
 import { Accounts } from './accounts.js';
 import { Holdings } from './holdings.js';
-import { fillFromBalances } from './holding-fill.js';
+import {
+  fillFromBalances,
+  rigaDate,
+  runFeeds,
+  type FeedCredentials,
+  type FeedOutcome,
+} from './holding-fill.js';
+import type { Fetcher } from './holding-feeds.js';
 import { accountDisplayName } from './account-names.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
@@ -66,6 +73,12 @@ import {
 export type WebConfig = {
   frontendDirectory?: string;
   credentialHealth?: () => CredentialHealth[];
+  /** The feeds a snapshot made from the screen may read; absent means only the stored bank balances. */
+  holdingFeeds?: {
+    credentials: () => Promise<FeedCredentials>;
+    fetcher: Fetcher;
+    ethRpcUrl?: string;
+  };
   port: number;
   mode: 'demo' | 'postgres';
   // Credentials live in the `users` table, seeded from the environment by
@@ -251,6 +264,9 @@ export function web(
       throw new Error('publicOrigin must be an HTTPS origin');
     publicHost = origin.host;
   }
+  // The feeds run for up to a minute against outside services; two people
+  // pressing the button at once must not start two runs.
+  let feedsRunning = false;
   // Demo mode signs itself in — there is nobody to authenticate and nothing
   // real behind it — so it needs one token of its own rather than a session
   // row. Every other mode reads the token off the session.
@@ -1069,6 +1085,40 @@ export function web(
             revision: form.revision,
           });
           json(200, { holding });
+          return;
+        }
+        if (route === '/api/holdings/read-feeds') {
+          // A snapshot made from the screen reads the automatic figures at
+          // that moment: stored bank balances, the broker, the exchange, the
+          // wallets. Only for today — a reading is of now, and writing it
+          // under an old date would be a lie. One run at a time.
+          if (form.asOf !== rigaDate())
+            throw new Error('holdings_feeds_today_only');
+          if (feedsRunning) {
+            json(409, { error: 'feeds_running', requestId });
+            return;
+          }
+          feedsRunning = true;
+          try {
+            const outcomes: FeedOutcome[] = await runFeeds(
+              repo.db,
+              form.asOf,
+              config.holdingFeeds
+                ? await config.holdingFeeds.credentials()
+                : {},
+              config.holdingFeeds?.fetcher ??
+                ((url, init) =>
+                  fetch(url, {
+                    ...init,
+                    redirect: 'error',
+                    signal: AbortSignal.timeout(20000),
+                  })),
+              { ethRpcUrl: config.holdingFeeds?.ethRpcUrl },
+            );
+            json(200, { outcomes });
+          } finally {
+            feedsRunning = false;
+          }
           return;
         }
         if (route === '/api/holdings/fill') {

@@ -24,6 +24,8 @@ import {
   sourceNames,
   type HoldingRow,
   type HoldingsReport,
+  readFeeds,
+  describeOutcomes,
 } from './lib/holdings';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -71,6 +73,35 @@ export default function AssetsSnapshots() {
   );
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
+  const [reading, setReading] = useState(false);
+  const isToday = day === today;
+
+  /** Today's automatic figures, read now and written into the day; returns the one-line account of it. */
+  async function readAutomatic(): Promise<string | null> {
+    if (!session) return null;
+    setReading(true);
+    try {
+      const { outcomes } = await readFeeds(session.csrf, day);
+      return describeOutcomes(outcomes);
+    } finally {
+      setReading(false);
+    }
+  }
+
+  async function readOnly() {
+    if (!session || reading || saving) return;
+    setError('');
+    setSummary('');
+    try {
+      const account = await readAutomatic();
+      await refreshHoldings();
+      setSummary(`Automatic figures for ${day}: ${account}.`);
+    } catch (cause) {
+      setError(
+        `Automatic figures not read: ${cause instanceof Error ? cause.message : 'try again'}`,
+      );
+    }
+  }
   const [confirming, setConfirming] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
@@ -133,8 +164,8 @@ export default function AssetsSnapshots() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!session || saving) return;
-    if (!changed.length) {
+    if (!session || saving || reading) return;
+    if (!changed.length && !isToday) {
       setError('Nothing changed yet. Edit at least one figure.');
       setSummary('');
       return;
@@ -149,6 +180,17 @@ export default function AssetsSnapshots() {
     }
     setError('');
     setSummary('');
+    // Today's snapshot is the automatic figures of this moment and what was
+    // typed, taken together; the reading comes first so a failure there is
+    // reported beside the saved rows rather than lost.
+    let automatic: string | null = null;
+    if (isToday) {
+      try {
+        automatic = await readAutomatic();
+      } catch (cause) {
+        automatic = `not read (${cause instanceof Error ? cause.message : 'try again'})`;
+      }
+    }
     setSaving({ done: 0, total: changed.length });
     const failed: string[] = [];
     const written: string[] = [];
@@ -178,7 +220,7 @@ export default function AssetsSnapshots() {
     });
     await refreshHoldings();
     setSummary(
-      `${written.length} saved for ${day}${failed.length ? `, ${failed.length} failed: ${failed.join('; ')}` : ''}.`,
+      `${written.length} typed figure${written.length === 1 ? '' : 's'} saved for ${day}${failed.length ? `, ${failed.length} failed: ${failed.join('; ')}` : ''}${automatic ? `. Automatic figures: ${automatic}` : ''}.`,
     );
   }
 
@@ -367,14 +409,35 @@ export default function AssetsSnapshots() {
                     <div className="flex flex-wrap items-center gap-3">
                       <Button
                         type="submit"
-                        disabled={!session || saving !== null || !manual.length}
+                        disabled={
+                          !session ||
+                          saving !== null ||
+                          reading ||
+                          (!manual.length && !isToday)
+                        }
                       >
-                        {saving
-                          ? `Saving ${saving.done + 1} of ${saving.total}…`
-                          : changed.length
-                            ? `Save ${changed.length} changed`
-                            : 'Save changed figures'}
+                        {reading && !saving
+                          ? 'Reading automatic figures…'
+                          : saving
+                            ? `Saving ${saving.done + 1} of ${saving.total}…`
+                            : isToday
+                              ? changed.length
+                                ? `Read automatic and save ${changed.length} changed`
+                                : 'Read automatic figures and save'
+                              : changed.length
+                                ? `Save ${changed.length} changed`
+                                : 'Save changed figures'}
                       </Button>
+                      {isToday && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={!session || saving !== null || reading}
+                          onClick={() => void readOnly()}
+                        >
+                          Read automatic figures only
+                        </Button>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {countedThatDay
                           ? `${day} already has a snapshot; saving replaces the figures you changed.`

@@ -83,7 +83,15 @@ with its previous figure and the day it was counted, and an input in the
 holding's own currency shown as plain text — the currency is fixed per
 holding. Fed holdings sit behind a checkbox, read-only, with their source.
 Everything typed is saved with one button; a figure that is not a number is
-refused before anything is sent.
+refused before anything is sent. For today the same button first reads the
+automatic figures — the stored bank balances, the broker, the exchange, the
+wallets — and writes them into the day, then saves what was typed, so a
+snapshot is one moment's picture of everything; a second button reads the
+automatic figures alone. The reading is refused for any other day (`POST
+/api/holdings/read-feeds`, today only, one run at a time), because a reading
+is of now. The web process therefore needs `CREDENTIALS_DIRECTORY` (and
+optionally `ETH_RPC_URL`) in its own environment file, the same values the
+snapshot service gets from `sync.env`.
 
 **Holding** (`/assets/new`, `/assets/<id>`) is one holding's settings on a
 page of its own: name, kind, unit, group, whose, maturity, the invested and
@@ -114,6 +122,8 @@ remembers the choice.
   entirely, answering `{ removed }` with how many rows went. Either member,
   like every other holdings route. Prices are left alone.
 - `POST /api/asset-prices` — record `usdPerUnit` for `symbol` on `asOf`.
+- `POST /api/holdings/read-feeds` — read every feed for `asOf`, which must be
+  today, and write the figures; answers one outcome per feed.
 
 ## Loading the spreadsheet's history
 

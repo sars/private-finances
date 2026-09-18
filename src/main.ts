@@ -1,6 +1,7 @@
 import { LLM_OUTPUT_TOKEN_LIMIT } from './llm-budget.js';
 import { loadEnableBankingCredentials } from './enablebanking-credentials.js';
 import { credentialsHealthFromEnv } from './credential-health.js';
+import { loadFeedCredentials } from './holding-fill.js';
 import { memoryDatabase, postgresDatabase, migrate } from './database.js';
 import { Repository } from './repository.js';
 import { web } from './web.js';
@@ -135,6 +136,20 @@ const server = web(repo, {
         }
       : undefined,
   consent,
+  holdingFeeds:
+    mode === 'postgres'
+      ? {
+          credentials: () =>
+            loadFeedCredentials(process.env.CREDENTIALS_DIRECTORY),
+          fetcher: (url, init) =>
+            fetch(url, {
+              ...init,
+              redirect: 'error',
+              signal: AbortSignal.timeout(20000),
+            }),
+          ethRpcUrl: process.env.ETH_RPC_URL,
+        }
+      : undefined,
   credentialHealth:
     mode === 'postgres'
       ? () => credentialsHealthFromEnv(process.env)

@@ -13,7 +13,6 @@
  * Output is counts and status codes; never a name, an address or a figure.
  * Production runs from `private-finances-assets-snapshot.timer`.
  */
-import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, postgresDatabase } from './database.js';
@@ -25,6 +24,7 @@ import {
 } from './holding-feeds.js';
 import {
   isLastThursday,
+  loadFeedCredentials,
   rigaDate,
   runFeeds,
   type FeedCredentials,
@@ -32,32 +32,6 @@ import {
 
 const log = (value: unknown) =>
   process.stdout.write(JSON.stringify(value) + '\n');
-
-async function secret(path: string): Promise<string | undefined> {
-  try {
-    const value = (await readFile(path, 'utf8')).trim();
-    return value || undefined;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
-
-export async function loadFeedCredentials(
-  directory: string | undefined,
-): Promise<FeedCredentials> {
-  if (!directory) return {};
-  const [token, queryId, key, secretKey] = await Promise.all([
-    secret(resolve(directory, 'ibkr-flex-token')),
-    secret(resolve(directory, 'ibkr-flex-query')),
-    secret(resolve(directory, 'binance-api-key')),
-    secret(resolve(directory, 'binance-api-secret')),
-  ]);
-  return {
-    ...(token && queryId ? { ibkr: { token, queryId } } : {}),
-    ...(key && secretKey ? { binance: { key, secret: secretKey } } : {}),
-  };
-}
 
 export function parseArguments(args: string[]): {
   asOf: string;
