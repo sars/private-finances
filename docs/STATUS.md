@@ -9,6 +9,51 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**47d4744b82f1d7bab0106951465e352df7ad09f7**, live since September 18, 2026 at
+schema version 57, deployed with `deploy/release.sh` at the second attempt: 600
+application tests passed on the server, the rehearsal on a restored copy reached
+schema 57 in 22 milliseconds with 4,176 transactions, 140 active refund links,
+no expense without a category and nothing filed on a heading; both services
+active and the import timers back afterwards. It carries PR #87 and adds no
+migration.
+
+The installed app moves itself to a new release now. Getting one onto the phone
+had meant deleting the app and installing it again, for two reasons that had
+nothing to do with each other. Nothing ever checked: the worker was registered
+by the script `vite-plugin-pwa` injects, which runs on the document's `load`
+event and never again, and an installed app is resumed far more often than it
+is started — iOS keeps the same document alive for days — so a release could be
+live for a week while the phone sat on the one before it. And a page that was
+open when a release landed broke: the worker was `autoUpdate`, which claims the
+open page the moment the new worker activates and drops the old cache with it,
+after which the next screen the page had not already opened asked the server
+for a file the release had removed, and the workspace showed its error card.
+
+The app registers the worker itself now and asks on its own schedule — every
+thirty minutes in the foreground, and on the way back from more than a minute
+away, the same moment the figures are already re-read. It reads two signals,
+the worker and the release `/health/live` reports, because a browser can hold a
+worker back under its own update throttle for a day after the release has
+moved. The new worker waits rather than taking over, so nothing changes under a
+screen in use: a message offers the update when one lands, and the sidebar
+footer carries the running version with a check beside it. A page that was
+already open when a release landed reloads itself once instead of showing the
+card. `scripts/check_frontend.py` holds the worker's hand-over shape and the
+bundle's registration against the built output, both of which were a one-word
+change in `vite.config.ts` away from disappearing. The installed app needs one
+cold start — closed and reopened, not reinstalled — to reach this release; from
+there it keeps itself current.
+
+`deploy/release.sh` has a gap this release found. Its first attempt stopped at
+the pause step because a Monobank import was still running after the five
+minutes it waits, which correctly leaves the previous release serving — but the
+script has no trap, so the import timers and the Telegram worker it had just
+stopped stayed stopped until the next run resumed them. Restoring what a failed
+step had paused is worth adding.
+
+The release before it, **bc5ad357b1684721c4dca9d0cd21f411fa46373f**, is
+described below.
+
 **bc5ad357b1684721c4dca9d0cd21f411fa46373f**, live since September 18, 2026 at
 schema version 57, deployed with `deploy/release.sh` in one run: 599
 application tests passed on the server, the rehearsal on a restored copy
