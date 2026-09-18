@@ -32,6 +32,8 @@ export type BarSeriesProps = {
   formatHeading?: (value: string) => string;
   /** Hidden on the phone by the caller; see DESIGN.md. */
   showYAxis?: boolean;
+  /** How much room the Y ticks take; narrower where the phone needs the width. */
+  yAxisWidth?: number;
   minTickGap?: number;
   /** A horizontal rule, such as the average bucket, with its label. */
   reference?: { value: number; label: string };
@@ -56,6 +58,7 @@ export default function BarSeries({
   formatIndex = String,
   formatHeading,
   showYAxis = true,
+  yAxisWidth = 52,
   minTickGap = 28,
   reference,
   shaded,
@@ -113,7 +116,7 @@ export default function BarSeries({
           <YAxis
             axisLine={false}
             tickLine={false}
-            width={52}
+            width={yAxisWidth}
             tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }}
             tickFormatter={(value) => compact(Number(value))}
           />
