@@ -9,6 +9,25 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**56b8bbd4170972fa862e3ad1cc2d5976e0065b70**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 54 with 4,168 transactions unchanged, both services active. It
+replaces `f83b6477` (PR #71), which another session released during this
+build and which this release contains. It carries PR #72: the installable app
+stopped failing at the two files the browser fetches by itself. The response
+policy named no `manifest-src`, and `default-src 'none'` is its fallback, so
+the browser refused the manifest before requesting it; the policy now says
+`manifest-src 'self'`. The service worker precached `index.html`, which the
+server never serves under that path — screen routes answer with the shell and
+`/index.html` is a 404 — so every install died with
+`bad-precaching-response` and nothing was cached at all; no navigation is
+served from the cache anyway, so `html` left the worker's glob patterns.
+And the manifest link now carries `crossorigin="use-credentials"`, without
+which the browser omits credentials and HTTP Basic authentication answers
+401. `scripts/check_frontend.py` holds both properties against the built
+output.
+
 **e83193fd5acb0a7fd56abebeeecfa36d57200ed4**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
