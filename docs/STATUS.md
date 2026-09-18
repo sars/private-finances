@@ -9,6 +9,49 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**9a77fc2b8b17901a0459f2590c555ffac4f620af**, live since September 18, 2026 at
+schema version 55, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 55 with 4,168 transactions unchanged, both services active.
+Each member now signs in with an email address and a password, and the
+session that follows can be ended (PF-021).
+
+HTTP Basic authentication had the browser hold the password and re-send it on
+every request. There was no way to sign out, the CSRF token was regenerated at
+every restart — quietly invalidating open tabs — and nothing could ever
+stand beside the password. Two tables replace it: `users`, one row per member with
+an address and a scrypt hash, and `sessions`, holding the digest of a token
+rather than the token itself, so a copy of the table resumes nothing. The
+cookie is `HttpOnly`, `Secure` and `SameSite=Lax` — `Strict` is withheld on
+the redirect back from bank approval, which would have dropped the member on
+the sign-in screen mid-consent. Thirty days, sliding, renewed at most once a
+day so a page view is not a database write.
+
+Verified on the server after the switch: `/api/bootstrap` and
+`/api/transactions` answer 401 without a session, the shell answers 200
+because it *is* the sign-in screen, both members sign in and receive their own
+actor, and a wrong password is refused. `/health/ready` now answers without a
+session as well — it carries no household data, listens on loopback and is
+what `switch-release.py` polls, which no longer needs a password to deploy.
+
+The environment still sets both passwords, applied at every boot, so rotation
+stays edit-`app.env`-and-restart and remains the only way back in; nothing
+resets a password by email. `RODION_EMAIL` and `KATYA_EMAIL` joined it for
+this release and are required — without them the service refuses to start.
+Guessing is delayed per address and per caller with no lockout, and an unknown
+address is hashed against a decoy so it costs what a wrong password costs.
+
+No library: Better Auth would have given sign-up, change-password, reset by
+email, Google and a second factor as configuration, at about fifteen
+dependencies in a server that has two, plus adapter work for the PGlite
+databases the tests run on. None of those are wanted yet. The two tables are
+shaped the way a library shapes them and every decision sits in `src/auth.ts`,
+so the move later is two tables and one re-login. The trade and the three
+routes on from here are in [authentication.md](authentication.md).
+
+This release also carries the Prettier fix that had left the Tests workflow
+failing on `main` since 12a20c4; `main` is green again.
+
 **fc79952767963106906abd9c52ede6fbb19da24a**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
