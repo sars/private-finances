@@ -218,7 +218,9 @@ export async function runScheduledSync(options: ScheduleOptions) {
       cooldown,
       String(
         Math.max(options.now.getTime(), Date.now()) +
-          TRANSIENT_BACKOFF_MS[Math.min(streak, TRANSIENT_BACKOFF_MS.length) - 1]!,
+          TRANSIENT_BACKOFF_MS[
+            Math.min(streak, TRANSIENT_BACKOFF_MS.length) - 1
+          ]!,
       ),
       { mode: 0o600 },
     );

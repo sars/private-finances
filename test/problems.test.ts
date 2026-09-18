@@ -66,7 +66,10 @@ test('a bank silent for more than a day is a problem; a few hours is not', async
     const { problems } = await systemProblems(db, { now: NOW });
     assert.deepEqual(ids(problems), ['bank:monobank:katya']);
     assert.equal(problems[0]!.severity, 'critical');
-    assert.match(problems[0]!.title, /Monobank · Katya has not imported for 26/);
+    assert.match(
+      problems[0]!.title,
+      /Monobank · Katya has not imported for 26/,
+    );
     assert.equal(problems[0]!.href, '/connections');
   } finally {
     await db.close();
@@ -76,9 +79,10 @@ test('a bank silent for more than a day is a problem; a few hours is not', async
 test('an approval is announced one day before it lapses, not five', async () => {
   const db = await healthy();
   const expiry = async (days: number) => {
-    await db.query("UPDATE bank_consents SET expires_at=$1 WHERE owner='rodion'", [
-      new Date(NOW.getTime() + days * 86400000).toISOString(),
-    ]);
+    await db.query(
+      "UPDATE bank_consents SET expires_at=$1 WHERE owner='rodion'",
+      [new Date(NOW.getTime() + days * 86400000).toISOString()],
+    );
     return (await systemProblems(db, { now: NOW })).problems;
   };
   try {
@@ -86,9 +90,15 @@ test('an approval is announced one day before it lapses, not five', async () => 
     const soon = await expiry(0.5);
     assert.deepEqual(ids(soon), ['bank:enablebanking:rodion:lhv']);
     // The bank as the owner knows it, never the integration provider's name.
-    assert.match(soon[0]!.title, /^LHV · Rodion approval expires within a day$/);
+    assert.match(
+      soon[0]!.title,
+      /^LHV · Rodion approval expires within a day$/,
+    );
     const lapsed = await expiry(-1);
-    assert.match(lapsed[0]!.title, /LHV · Rodion has stopped: the bank approval expired/);
+    assert.match(
+      lapsed[0]!.title,
+      /LHV · Rodion has stopped: the bank approval expired/,
+    );
   } finally {
     await db.close();
   }

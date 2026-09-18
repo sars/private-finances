@@ -471,7 +471,10 @@ test('a streak file that is not a count waits the longest, never the shortest', 
   const directory = await mkdtemp(join(tmpdir(), 'pf-transient-corrupt-'));
   const instance = 'monobank-rodion';
   try {
-    await writeFile(join(directory, `${instance}.transient-streak`), 'nonsense');
+    await writeFile(
+      join(directory, `${instance}.transient-streak`),
+      'nonsense',
+    );
     const now = new Date();
     assert.equal(
       await runScheduledSync({

@@ -30,7 +30,12 @@
  */
 import type { Executor } from './database.js';
 import type { CredentialHealth } from './credential-health.js';
-import { bankLabel, bankSlug, isBankName, isBankSlug } from './connectors/banks.js';
+import {
+  bankLabel,
+  bankSlug,
+  isBankName,
+  isBankSlug,
+} from './connectors/banks.js';
 
 /**
  * `critical` is money data that has stopped arriving or will within the day;
@@ -145,10 +150,7 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
           'Nothing imports from this bank until you approve it again on the Bank connections page.',
         since: consentAt,
       });
-    else if (
-      consentAt &&
-      Date.parse(consentAt) - now.getTime() <= 24 * 3600000
-    )
+    else if (consentAt && Date.parse(consentAt) - now.getTime() <= 24 * 3600000)
       problems.push({
         ...base,
         severity: 'critical',
