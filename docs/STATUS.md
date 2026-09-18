@@ -9,6 +9,46 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**c871c21f0f7086c1f1a115a1b960b9cbd97fcc6c**, live since September 18, 2026 at
+schema version 56, deployed with `deploy/release.sh` in one run: 593
+application tests passed on the server, the rehearsal on a restored copy of the
+real database reached schema 56 in 41 milliseconds with 4,171 transactions, 140
+active refund links, no expense without a category and nothing filed on a
+heading; after the switch both services are active and the import timers are
+back. It carries PR #77 and adds no migration.
+
+A message the bot addresses to a member now tags them. A question that opened
+`Rodion,` named the person and nothing more: in a chat both members read, the
+one it was for had to notice it. The name is a Telegram mention now — it links
+to them and notifies them — sent as a `text_mention` entity carrying the
+numeric user id the chat binding already holds, not an `@username`: neither
+member needs one, and a username someone changes would quietly stop tagging.
+Entities rather than HTML keep the message plain text, so a bank description
+full of `<` and `&` needs no escaping and cannot smuggle markup into what the
+household reads.
+
+Only a name the bot itself wrote is tagged. A question quotes the bank's
+description, and one may read `Sent money to Rodion Salnik` — the bank naming a
+payee, not the bot addressing anyone — so the search is anchored to the address
+at the head of the message and never sweeps the quoted text. Tagged: the
+clarification question, the refund question, the receipt reporting what was
+saved (both names when the other member answered), the notes that say a reply
+reached nothing, and the bank approval reminder, which names the member whose
+approval it is. A report is a bulletin rather than a message to a person, and
+stays untagged.
+
+The tag can never cost the message. An entity that would not fit its text is
+dropped before sending, because Telegram rejects the whole message over one.
+And if Telegram refuses the mention itself — an id it cannot resolve to someone
+it has seen — the message goes again without it: a 400 is a refusal, nothing
+was delivered, so saying it once more cannot duplicate it. A timeout is not a
+refusal and is never repeated; that send stays uncertain, as it always has.
+Without that fallback a refused tag would have failed the send, left the
+question `uncertain`, and nothing retries an uncertain send.
+
+The release before it, **858c9b2e6510fa905614f213ddaf96d9bae5abf7**, is
+described below.
+
 **858c9b2e6510fa905614f213ddaf96d9bae5abf7**, live since September 18, 2026 at
 schema version 56, deployed with `deploy/release.sh` in one run: 588
 application tests passed on the server, the rehearsal on a restored copy of
