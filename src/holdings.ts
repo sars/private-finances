@@ -123,10 +123,18 @@ export async function addHoldingFeeds(tx: Executor): Promise<void> {
   await tx.query('ALTER TABLE holdings ADD COLUMN IF NOT EXISTS feed_ref text');
 }
 
-const dateValid = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-  new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+/** A real calendar day. The round trip rejects the thirty-first of February;
+ * a month or day out of range never becomes a date at all, and asking such a
+ * value for its ISO form throws, so the parse is checked before the compare. */
+const dateValid = (value: unknown): value is string => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+};
 const uuidValid = (value: unknown): value is string =>
   typeof value === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -466,6 +474,39 @@ export class Holdings {
         )
       ).rows[0]!;
       return mapSnapshot(inserted);
+    });
+  }
+
+  /**
+   * Remove a snapshot day entirely: every holding, every version, whatever
+   * recorded them.
+   *
+   * A day gets here by being a mistake — a run against the wrong date, a fill
+   * nobody wanted — and a mistaken day cannot be corrected by recording over
+   * it, because a snapshot for one holding says nothing about the holdings the
+   * day should never have touched. Versioning protects a figure that was
+   * honestly entered; it is not a reason to keep a day that should not exist.
+   * So this is deliberately whole-day and deliberately not versioned: after it,
+   * every holding simply carries forward from the day before, which is what the
+   * report already does for a date with no snapshot of its own.
+   *
+   * Prices are left alone. `asset_prices` is a record of what a symbol was
+   * worth on a day, true regardless of what the household held, and shared by
+   * every other day that values through it.
+   */
+  async deleteDay(asOf: string): Promise<{ removed: number }> {
+    if (!dateValid(asOf)) throw new Error('snapshot_invalid_date');
+    return this.db.transaction(async (tx) => {
+      // The lock the snapshot writer takes, so a delete cannot interleave with
+      // a write that is choosing its next version number.
+      await tx.query('SELECT pg_advisory_xact_lock(7482402)');
+      const removed = (
+        await tx.query(
+          'DELETE FROM holding_snapshots WHERE as_of=$1 RETURNING id',
+          [asOf],
+        )
+      ).rows.length;
+      return { removed };
     });
   }
 

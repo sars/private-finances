@@ -215,3 +215,96 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
     await db.close();
   }
 });
+
+test('a snapshot day is deleted whole, by either member, and the day before is carried afterwards', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  const repo = new Repository(db);
+  const config: WebConfig = { port: 0, mode: 'postgres', release: 'test' };
+  const server = web(repo, config, () => {});
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  config.port = (server.address() as AddressInfo).port;
+  const base = `http://127.0.0.1:${config.port}`;
+  const cookies: Record<string, string> = { rodion: '', katya: '' };
+  const get = (path: string, owner = 'rodion') =>
+    fetch(base + path, { headers: { cookie: cookies[owner]! } });
+  const post = (
+    path: string,
+    fields: Record<string, string>,
+    owner = 'rodion',
+  ) =>
+    fetch(base + path, {
+      method: 'POST',
+      headers: { cookie: cookies[owner]! },
+      body: new URLSearchParams(fields),
+      redirect: 'manual',
+    });
+  try {
+    await seedTestOwners(db);
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
+    const csrf = (await (await get('/api/bootstrap')).json()).csrf;
+    const kateCsrf = (await (await get('/api/bootstrap', 'katya')).json()).csrf;
+    const { holding } = await (
+      await post('/api/holdings', {
+        csrf,
+        name: 'Jar USD',
+        kind: 'cash',
+        denomination: 'USD',
+        invested: 'false',
+        liquid: 'true',
+      })
+    ).json();
+    const record = (asOf: string, amount: string) =>
+      post('/api/holding-snapshots', {
+        csrf,
+        holdingId: holding.id,
+        asOf,
+        amount,
+      });
+    assert.equal((await record('2026-08-27', '1000')).status, 200);
+    assert.equal((await record('2026-09-24', '1200')).status, 200);
+    // A correction on the day that is about to go: a second version of it.
+    assert.equal((await record('2026-09-24', '1300')).status, 200);
+    assert.equal(
+      (await post('/api/holding-snapshots/delete', { asOf: '2026-09-24' }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await post('/api/holding-snapshots/delete', {
+          csrf,
+          asOf: 'the other day',
+        })
+      ).status,
+      400,
+    );
+    // Either member: the snapshots are the household's, not one member's.
+    const deleted = await post(
+      '/api/holding-snapshots/delete',
+      { csrf: kateCsrf, asOf: '2026-09-24' },
+      'katya',
+    );
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(await deleted.json(), { removed: 2 });
+    const without = await (await get('/api/holdings?at=2026-09-24')).json();
+    assert.deepEqual(without.dates, ['2026-08-27']);
+    // The figure from before the deleted day, carried, is what is left.
+    assert.equal(without.rows[0].quantity, '1000');
+    assert.equal(without.rows[0].carried, true);
+    // Deleting it again is not an error; there is simply nothing there.
+    assert.deepEqual(
+      await (
+        await post('/api/holding-snapshots/delete', {
+          csrf,
+          asOf: '2026-09-24',
+        })
+      ).json(),
+      { removed: 0 },
+    );
+  } finally {
+    server.close();
+    await db.close();
+  }
+});

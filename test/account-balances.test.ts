@@ -259,6 +259,59 @@ test('a total converts at the newest rate on or before the day observed, and say
   }
 });
 
+test('the converted figures are own money: an agreed overdraft is the bank’s, and never reaches the total', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    await new FxRates(db).insert({
+      source: 'test',
+      base: 'USD',
+      target: 'UAH',
+      rate: '41.5',
+      asOf: '2026-09-15',
+      retrievedAt: '2026-09-15T12:00:00.000Z',
+      version: 1,
+      provenance: 'synthetic test rate',
+    });
+    const observedAt = '2026-09-15T09:00:00.000Z';
+    const stored = (
+      accountId: string,
+      currency: string,
+      amountMinor: string,
+      creditLimitMinor: string | null,
+    ) => ({
+      source: 'monobank',
+      accountId,
+      currency,
+      amountMinor,
+      creditLimitMinor,
+      asOf: null,
+      observedAt,
+    });
+    const result = await convertedBalances(
+      db,
+      [
+        // Stated in the display currency itself: the limit still comes out.
+        stored('a', 'UAH', '5300000', '2000000'),
+        // And through a daily rate: 60.00 own of 100.00 stated, at 41.5.
+        stored('b', 'USD', '10000', '4000'),
+        // Spent past their own money, which is what a negative figure says.
+        stored('c', 'UAH', '1000', '5000'),
+      ],
+      'UAH',
+    );
+    assert.equal(result.rows[0]!.convertedMinor, '3300000');
+    assert.equal(result.rows[0]!.rateDate, null);
+    assert.equal(result.rows[1]!.convertedMinor, '249000');
+    assert.equal(result.rows[1]!.rateDate, '2026-09-15');
+    assert.equal(result.rows[2]!.convertedMinor, '-4000');
+    assert.equal(result.totalMinor, '3545000');
+    assert.deepEqual(result.coverage, { converted: 3, missing: 0 });
+  } finally {
+    await db.close();
+  }
+});
+
 test('a bank that will not state a balance still delivers its payments', async () => {
   const db = memoryDatabase();
   try {

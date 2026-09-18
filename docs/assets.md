@@ -37,6 +37,16 @@ kept. Between snapshots the last known quantity is **carried forward** — the
 screen marks such a figure and names the day it comes from — and a retired
 holding stops being carried after its last snapshot while keeping its history.
 
+A whole snapshot **day** can be deleted — every holding, every version of it,
+whatever recorded them — because a day entered against the wrong date cannot be
+corrected by recording over it: a new figure for one holding says nothing about
+the holdings that day should never have touched. Versioning protects a figure
+somebody meant to enter; it is not a reason to keep a day that should not exist.
+Afterwards every holding simply carries forward from the day before, which is
+what the report already does for a date with no snapshot of its own. Prices are
+not deleted with it: what a symbol was worth on a day is true whoever held it,
+and the other days value through the same rows.
+
 A **price** is USD for one unit of a symbol on a day. USD is the pivot for
 everything: for the currencies the daily PrivatBank quotes already stored for
 spending conversion are used (UAH per USD and UAH per EUR from the same source
@@ -100,6 +110,9 @@ remembers the choice.
   `revision`. Form-encoded with the CSRF token, like every write.
 - `POST /api/holding-snapshots` — record `amount` for `holdingId` on `asOf`,
   optionally in `currency`.
+- `POST /api/holding-snapshots/delete` — remove the snapshot day `asOf`
+  entirely, answering `{ removed }` with how many rows went. Either member,
+  like every other holdings route. Prices are left alone.
 - `POST /api/asset-prices` — record `usdPerUnit` for `symbol` on `asOf`.
 
 ## Loading the spreadsheet's history
