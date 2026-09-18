@@ -4,6 +4,7 @@ import type { Owner } from './domain.js';
 import {
   accountLine,
   activeQuestionForPayment,
+  ownerNames,
   type TelegramClarifications,
 } from './telegram.js';
 import { currencyExponent } from './fx.js';
@@ -115,7 +116,9 @@ export async function queueDailyClarifications(
         );
         const meaning = mcc ? mccLabels[mcc.code] : undefined;
         const context = `${account ? `\nAccount: ${account}` : ''}${meaning ? `\nBank category: ${meaning}` : ''}`;
-        const prompt = `${owner === 'rodion' ? 'Rodion' : 'Katya'}, ${String(
+        // The name opens the question because the question is that member's;
+        // it is sent as a Telegram mention, so it also notifies them.
+        const prompt = `${ownerNames[owner]}, ${String(
           row.state === 'ready'
             ? row.question
             : 'Automatic review could not determine this payment’s purpose. What was it for: personal spending, business, or a transfer?',
