@@ -105,10 +105,16 @@ search is anchored to the address at the head of the message and never sweeps
 the quoted text. Tagged this way: the clarification question, the refund
 question, the receipt reporting what was saved (both names, when the other
 member answered), the notes that say a reply reached nothing, and the bank
-approval reminder, which names the member whose approval it is. An entity that
-would not fit the text is dropped rather than sent, because Telegram rejects
-the whole message over one — untagged is better than unsent. A report is a
+approval reminder, which names the member whose approval it is. A report is a
 bulletin rather than a message to a person, and stays untagged.
+
+Untagged beats unsent, twice over. Telegram rejects a whole message over one
+entity that does not fit its text, so a range that does not fit is dropped
+before sending. And if Telegram refuses the mention itself — an id it cannot
+resolve to someone it has seen — the message goes again without it: a 400 is a
+refusal, nothing was delivered, so saying it once more cannot duplicate it. A
+timeout is not a refusal and is never repeated; that send stays uncertain, as
+it always has.
 
 ## Either member may answer, and the answer records who did
 

@@ -8,6 +8,7 @@ import {
   initializeTelegram,
   namedMentions,
   TelegramClarifications,
+  TelegramError,
   telegramTransport,
   type TelegramMention,
 } from '../src/telegram.js';
@@ -122,6 +123,64 @@ test('mentions travel as text_mention entities, and an impossible range is dropp
   assert.equal(bodies[2]?.text, 'Short');
   await transport.send('-123', 'Plain', {});
   assert.equal('entities' in bodies[3]!, false);
+});
+
+test('a refused mention costs the tag, not the message', async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const ok = JSON.stringify({
+    ok: true,
+    result: { message_id: 9, chat: { id: -123 } },
+  });
+  // Telegram refuses an entity it cannot resolve to a person it has seen with
+  // 400, having sent nothing. The question is worth more than the tag, so it
+  // goes again without it — once, and only because nothing was delivered.
+  const refusing = telegramTransport(token, async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return bodies.length === 1
+      ? new Response(
+          JSON.stringify({ ok: false, description: 'Bad Request' }),
+          { status: 400 },
+        )
+      : new Response(ok);
+  });
+  assert.deepEqual(
+    await refusing.send('-123', 'Rodion, what was this?', {
+      mentions: [{ offset: 0, length: 6, userId: '101' }],
+    }),
+    { messageId: 9 },
+  );
+  assert.equal(bodies.length, 2);
+  assert.ok(bodies[0]?.entities);
+  assert.equal('entities' in bodies[1]!, false);
+  assert.equal(bodies[1]?.text, 'Rodion, what was this?');
+  // A refusal of the untagged message is the end of it: no third attempt.
+  const stubborn = telegramTransport(
+    token,
+    async () =>
+      new Response(JSON.stringify({ ok: false }), { status: 400 }),
+  );
+  await assert.rejects(
+    stubborn.send('-123', 'Rodion, what was this?', {
+      mentions: [{ offset: 0, length: 6, userId: '101' }],
+    }),
+    (error: unknown) =>
+      error instanceof TelegramError && error.code === 'uncertain',
+  );
+  // A timeout or a server fault may have delivered the message, so it is never
+  // repeated: an uncertain send stays uncertain, tagged or not.
+  let calls = 0;
+  const unreachable = telegramTransport(token, async () => {
+    calls++;
+    return new Response('down', { status: 502 });
+  });
+  await assert.rejects(
+    unreachable.send('-123', 'Rodion, what was this?', {
+      mentions: [{ offset: 0, length: 6, userId: '101' }],
+    }),
+    (error: unknown) =>
+      error instanceof TelegramError && error.code === 'uncertain',
+  );
+  assert.equal(calls, 1);
 });
 
 test('a queued question is sent tagging the member whose payment it is', async () => {

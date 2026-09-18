@@ -114,6 +114,13 @@ export class TelegramError extends Error {
     super(`telegram_${code}`);
   }
 }
+/**
+ * Telegram answered 400: it refused the request rather than acting on it, so
+ * the message was certainly not delivered — unlike a timeout, where it may
+ * have been. Internal, and never the failure a caller sees: every send still
+ * reports `uncertain`, which is the only state the outbox knows.
+ */
+class TelegramRejection extends Error {}
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -185,7 +192,9 @@ export function telegramTransport(
     );
     if (!response.ok) {
       await response.body?.cancel();
-      throw new TelegramError('uncertain');
+      throw response.status === 400
+        ? new TelegramRejection()
+        : new TelegramError('uncertain');
     }
     const reader = response.body?.getReader();
     if (!reader) throw new TelegramError('uncertain');
@@ -259,19 +268,27 @@ export function telegramTransport(
   };
   return {
     async send(chatId, text, options) {
+      const entities = mentionEntities(text, options?.mentions);
+      const payload = (tagged: boolean) => ({
+        chat_id: chatId,
+        text,
+        ...(tagged && entities.length ? { entities } : {}),
+        ...(options?.forceReply === false
+          ? {}
+          : { reply_markup: { force_reply: true, selective: false } }),
+      });
       try {
-        const entities = mentionEntities(text, options?.mentions);
-        return sentMessage(
-          await call('sendMessage', {
-            chat_id: chatId,
-            text,
-            ...(entities.length ? { entities } : {}),
-            ...(options?.forceReply === false
-              ? {}
-              : { reply_markup: { force_reply: true, selective: false } }),
-          }),
-          chatId,
-        );
+        try {
+          return sentMessage(await call('sendMessage', payload(true)), chatId);
+        } catch (error) {
+          // The mention is the part Telegram can refuse — an id it cannot
+          // resolve to someone it has seen — and the message matters more than
+          // the tag. A refusal delivered nothing, so saying it again untagged
+          // cannot duplicate anything, and it is said once.
+          if (!entities.length || !(error instanceof TelegramRejection))
+            throw error;
+          return sentMessage(await call('sendMessage', payload(false)), chatId);
+        }
       } catch {
         throw new TelegramError('uncertain');
       }
@@ -290,21 +307,25 @@ export function telegramTransport(
       }
     },
     async reply(chatId, messageId, text, options) {
+      const entities = mentionEntities(text, options?.mentions);
+      // A plain reply: no force_reply keyboard, so it never opens an input prompt.
+      const payload = (tagged: boolean) => ({
+        chat_id: chatId,
+        text,
+        ...(tagged && entities.length ? { entities } : {}),
+        reply_parameters: {
+          message_id: messageId,
+          allow_sending_without_reply: true,
+        },
+      });
       try {
-        const entities = mentionEntities(text, options?.mentions);
-        // A plain reply: no force_reply keyboard, so it never opens an input prompt.
-        return sentMessage(
-          await call('sendMessage', {
-            chat_id: chatId,
-            text,
-            ...(entities.length ? { entities } : {}),
-            reply_parameters: {
-              message_id: messageId,
-              allow_sending_without_reply: true,
-            },
-          }),
-          chatId,
-        );
+        try {
+          return sentMessage(await call('sendMessage', payload(true)), chatId);
+        } catch (error) {
+          if (!entities.length || !(error instanceof TelegramRejection))
+            throw error;
+          return sentMessage(await call('sendMessage', payload(false)), chatId);
+        }
       } catch {
         throw new TelegramError('uncertain');
       }
