@@ -121,6 +121,25 @@ SQL access, payment tools or authority to overwrite human decisions. Revoke an
 exposed API key in project settings, install its replacement, and verify only a
 bounded test before enabling live requests.
 
+## Interactive Brokers and Binance: read-only feeds for the holdings snapshot
+
+Four files in the credentials directory, each mode 600 and owned by the
+application user, all optional — the snapshot reports a feed without credentials
+as not configured rather than failing:
+
+- `ibkr-flex-token` — the Flex Web Service token, generated in Client Portal →
+  Performance & Reports → Flex Queries → Flex Web Service Configuration
+- `ibkr-flex-query` — the Query ID of the Activity Flex Query it reads; see
+  [assets.md](assets.md) for the sections and fields that query must contain
+- `binance-api-key` and `binance-api-secret` — a read-only key restricted to the
+  server's address
+
+**The IBKR Flex token expires yearly.** Record the expiry Client Portal prints
+in `IBKR_FLEX_TOKEN_EXPIRES_AT` in `app.env`, so the 5/2/1-day reminders in
+[expiry monitoring](credential-health.md) arrive before the weekly snapshot
+stops reading the broker. Generating a replacement invalidates the old token;
+install the new file and update the expiry setting together.
+
 ## GitHub: development access, not runtime access
 
 Repository access is already configured through `~/.local/bin/pf-gh` on the operator's

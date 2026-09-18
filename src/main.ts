@@ -1,6 +1,6 @@
 import { LLM_OUTPUT_TOKEN_LIMIT } from './llm-budget.js';
 import { loadEnableBankingCredentials } from './enablebanking-credentials.js';
-import { credentialHealthFromEnv } from './credential-health.js';
+import { credentialsHealthFromEnv } from './credential-health.js';
 import { memoryDatabase, postgresDatabase, migrate } from './database.js';
 import { Repository } from './repository.js';
 import { web } from './web.js';
@@ -137,7 +137,7 @@ const server = web(repo, {
   consent,
   credentialHealth:
     mode === 'postgres'
-      ? () => credentialHealthFromEnv(process.env)
+      ? () => credentialsHealthFromEnv(process.env)
       : undefined,
   port,
   mode,

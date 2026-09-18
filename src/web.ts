@@ -64,7 +64,7 @@ import {
 
 export type WebConfig = {
   frontendDirectory?: string;
-  credentialHealth?: () => CredentialHealth;
+  credentialHealth?: () => CredentialHealth[];
   port: number;
   mode: 'demo' | 'postgres';
   // Credentials live in the `users` table, seeded from the environment by
@@ -959,9 +959,7 @@ export function web(
       if (req.method === 'GET' && route === '/api/ops') {
         json(200, {
           ...(await repo.health()),
-          credentials: config.credentialHealth
-            ? [config.credentialHealth()]
-            : [],
+          credentials: config.credentialHealth ? config.credentialHealth() : [],
         });
         return;
       }
@@ -986,7 +984,7 @@ export function web(
             'Import needs review. Previously completed account windows remain saved.',
         };
         html(
-          `<h1>System health</h1>${config.credentialHealth ? `<section class="total"><h2>OpenAI API key</h2><p>${escape(config.credentialHealth().state.replaceAll('_', ' '))} · Expires ${escape(config.credentialHealth().expiresOn ?? config.credentialHealth().expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>` : ''}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section></div><h2>Bank imports</h2>${
+          `<h1>System health</h1>${(config.credentialHealth?.() ?? []).map((credential) => `<section class="total"><h2>${escape(credential.label)}</h2><p>${escape(credential.state.replaceAll('_', ' '))} · Expires ${escape(credential.expiresOn ?? credential.expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>`).join('')}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section></div><h2>Bank imports</h2>${
             connections.length
               ? connections
                   .map((c) => {

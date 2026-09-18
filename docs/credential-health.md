@@ -1,5 +1,14 @@
 # Credential expiry monitoring
 
+Two credentials are watched: the **OpenAI API key** and the **IBKR Flex Web
+Service token**. Both use the same ladder — reminders **5, 2 and 1 days
+before**, counted in Europe/Riga calendar dates — and both appear on `/ops` and
+in `/api/ops` under `credentials`, each with its state and expiry. A credential
+with no expiry setting is still listed, as `unknown_expiry`; it is not omitted,
+because a silent row would read as a healthy one.
+
+## The OpenAI API key
+
 The owner supplied **December 10, 2026**, with reminders **5, 2 and 1 days before**.
 Use Europe/Riga calendar dates. The exact expiry time was not supplied.
 The OpenAI key is installed in a restricted server file. The runtime is enabled
@@ -26,19 +35,52 @@ when both exist. Timestamp metadata reports `expired` at that exact instant;
 advance thresholds still use Europe/Riga calendar dates. Never put the key value
 in either expiry setting.
 
-`credentialHealthFromEnv(env, now)` returns only the credential name, state,
-`expiresOn` or `expiresAt`, calendar days remaining and the active warning threshold.
-It can safely populate authenticated operations UI without reading or returning the
-key. `openAiCredentialHealth(value, now, timeZone)` exposes the underlying parser.
-Day calculations cover both Riga daylight-saving transitions.
+## The IBKR Flex Web Service token
+
+Interactive Brokers issues the Flex Web Service token for a year, and Client
+Portal prints the exact instant it dies. Record that instant:
+
+```dotenv
+IBKR_FLEX_TOKEN_EXPIRES_AT=2027-08-19T18:14:23Z
+```
+
+`IBKR_FLEX_TOKEN_EXPIRES_ON` takes a bare date for a token whose exact time was
+never written down. The instant takes precedence when both exist — the opposite
+of the OpenAI key, where no confirmed instant exists and the date is the better
+of the two. An ISO timestamp must carry an explicit timezone.
+
+The reminder names the token and the way back to a new one: generate it in
+Client Portal → Performance & Reports → Flex Queries → Flex Web Service
+Configuration, save it to the server's credentials directory as
+`ibkr-flex-token`, and update `IBKR_FLEX_TOKEN_EXPIRES_AT`. An expired token
+stops the weekly holdings snapshot from reading the broker
+([assets.md](assets.md)) and nothing else says so, which is why it is watched
+here. Never put the token value in either expiry setting.
+
+## The shared machinery
+
+`credentialsHealthFromEnv(env, now)` returns one entry per tracked credential;
+`credentialHealthFromEnv(env, now)` still returns the OpenAI key alone. Each
+entry carries only the credential name, its human label, state, `expiresOn` or
+`expiresAt`, calendar days remaining and the active warning threshold. It can
+safely populate authenticated operations UI without reading or returning any
+credential. `credentialExpiryHealth(credential, value, now, timeZone)` exposes
+the underlying parser, and `openAiCredentialHealth(value, now, timeZone)` is the
+OpenAI key's name for it. Day calculations cover both Riga daylight-saving
+transitions.
 
 The Telegram worker checks this metadata after its normal authenticated
 configuration. `initializeCredentialHealth` creates `credential_reminders`, and
 `CredentialReminders` queues and sends notices only to the existing verified group.
 The worker initializes this table idempotently alongside its polling cursor;
 schema migration 8 also includes the table in the application schema and restore inventory.
+The `credential` column is constrained to the names the application knows —
+`openai_api_key`, `bank_consent` and `ibkr_flex_token`; migration 56 replaced the
+constraint to admit the last of them, touching no rows.
 
-Reminders are unique per expiry value, warning threshold and group. There are only
+Reminders are unique per credential, expiry value, warning threshold and group,
+and each credential's series is retired on its own: replacing the Flex token
+cancels nothing queued for the OpenAI key. There are only
 5-, 2- and 1-day notices; `expires_today` and `expired` are UI states, not extra
 Telegram messages. If the worker recovers within a warning interval, it sends the
 current interval once rather than replaying all earlier thresholds. A newer
