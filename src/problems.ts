@@ -239,7 +239,7 @@ async function classifierProblems(db: Executor): Promise<Problem[]> {
       title: 'Automatic classification is paused',
       detail:
         'New payments arrive unclassified until it resumes, and none are lost meanwhile.',
-      href: '/operations',
+      href: '/ops',
       since: null,
     },
   ];
@@ -272,7 +272,7 @@ async function telegramProblems(db: Executor, now: Date): Promise<Problem[]> {
       title: `Telegram is not delivering (${waiting} waiting)`,
       detail:
         'Questions and warnings are not reaching the phone. Nothing is lost; it sends when the bot works again.',
-      href: '/operations',
+      href: '/ops',
       since: iso(row?.since),
     },
   ];
@@ -294,7 +294,7 @@ function credentialProblems(credentials: CredentialHealth[]): Problem[] {
             ? `${c.label} expires today`
             : `${c.label} expires in ${c.warningDays} days`,
       detail: 'Install a replacement and record its new expiry on the server.',
-      href: '/operations',
+      href: '/ops',
       since: c.expiresAt ?? c.expiresOn,
     }));
 }
@@ -346,7 +346,7 @@ function backupProblems(lastAt: string | null, now: Date): Problem[] {
         : 'No database backup has been taken',
       detail:
         'Every scheduled import requires a fresh backup first, so imports stop until this succeeds.',
-      href: '/operations',
+      href: '/ops',
       since: lastAt,
     },
   ];
