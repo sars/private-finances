@@ -27,6 +27,18 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
     port: 0,
     mode: 'postgres',
     release: 'test',
+    // A snapshot made from the screen may read the feeds: none configured
+    // here, and a fetcher that never answers, so only the stored bank
+    // balances and the (absent) wallets take part.
+    holdingFeeds: {
+      credentials: async () => ({}),
+      fetcher: async () => ({
+        ok: false,
+        status: 500,
+        headers: { get: () => null },
+        text: async () => '',
+      }),
+    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -164,6 +176,30 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
     const carried = await (await get('/api/holdings?at=2026-09-25')).json();
     assert.equal(carried.rows[0].carried, true);
     assert.equal(carried.series.length, 2);
+    // Reading the automatic figures is for today only, and reports each feed.
+    assert.equal(
+      (await post('/api/holdings/read-feeds', { csrf, asOf: '2026-09-24' }))
+        .status,
+      400,
+    );
+    const riga = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Riga',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const read = await post('/api/holdings/read-feeds', { csrf, asOf: riga });
+    assert.equal(read.status, 200);
+    const { outcomes } = await read.json();
+    assert.deepEqual(
+      outcomes.map((o: { feed: string; status: string }) => [o.feed, o.status]),
+      [
+        ['bank', 'ok'],
+        ['ibkr', 'not_configured'],
+        ['binance', 'not_configured'],
+        ['wallet', 'ok'],
+      ],
+    );
     // The accounts a bank holding may link to travel with the report, and a
     // linked holding is filled from the stored balance on demand.
     assert.deepEqual(carried.accounts, []);

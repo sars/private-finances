@@ -62,6 +62,11 @@ See [assets](assets.md) for the model and the plan.
       and arrived in another) and let the owner confirm them as a transfer, so a
       move is never read as a loss and a gain; show the unexplained remainder per
       holding. Wanted, later (owner, September 18, 2026).
+- [ ] **Bond maturity notices.** A bond or deposit reaching its maturity date
+      is announced — a due list on Assets, and a Telegram line once the round
+      exists — with a nudge to buy the next one. Wanted, later (owner,
+      September 18, 2026); until then the owner retires the old holding and
+      creates the new one by hand.
 - [ ] **Monthly income estimate.** A trailing average of salary and dividend
       inflows from the transactions system, shown as a separate figure. Wanted,
       later (owner, September 18, 2026).

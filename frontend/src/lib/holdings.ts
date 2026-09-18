@@ -171,6 +171,51 @@ export const deleteSnapshotDay = (csrf: string, asOf: string) =>
     asOf,
   });
 
+/** What one feed did when the automatic figures were read for a day. */
+export type FeedOutcome =
+  | {
+      feed: Feed;
+      status: 'ok';
+      summary: {
+        filled: number;
+        unchanged: number;
+        skipped: Record<string, number>;
+        pricesRecorded: number;
+        created: number;
+      };
+    }
+  | { feed: Feed; status: 'not_configured' }
+  | { feed: Feed; status: 'failed'; code: string };
+
+/**
+ * Read the automatic figures for today — stored bank balances, the broker,
+ * the exchange, the wallets — and write them into the day's snapshot. The
+ * server refuses any other day: a reading is of now.
+ */
+export const readFeeds = (csrf: string, asOf: string) =>
+  postForm<{ outcomes: FeedOutcome[] }>('/api/holdings/read-feeds', {
+    csrf,
+    asOf,
+  });
+
+/** One line per feed, counts only: "bank 14 read, 1 skipped · IBKR failed (auth)". */
+export function describeOutcomes(outcomes: FeedOutcome[]): string {
+  return outcomes
+    .map((outcome) => {
+      const name = feedNames[outcome.feed] ?? outcome.feed;
+      if (outcome.status === 'not_configured') return `${name} not configured`;
+      if (outcome.status === 'failed')
+        return `${name} failed (${outcome.code})`;
+      const { filled, unchanged, skipped, created } = outcome.summary;
+      const skippedCount = Object.values(skipped).reduce((a, b) => a + b, 0);
+      const parts = [`${filled + unchanged} read`];
+      if (created) parts.push(`${created} new`);
+      if (skippedCount) parts.push(`${skippedCount} skipped`);
+      return `${name} ${parts.join(', ')}`;
+    })
+    .join(' · ');
+}
+
 /** Every holdings view is stale once a figure is written. */
 export const refreshHoldings = () =>
   queryClient.invalidateQueries({ queryKey: ['holdings'] });

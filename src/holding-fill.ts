@@ -11,6 +11,8 @@
  * or figure, so a log line says how the run went without saying what the
  * household owns.
  */
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import type { Database } from './database.js';
 import { currencyExponent } from './fx.js';
 import { Holdings, type Holding } from './holdings.js';
@@ -472,4 +474,32 @@ export function rigaDate(now = new Date()): string {
     month: '2-digit',
     day: '2-digit',
   }).format(now);
+}
+
+async function secretFile(path: string): Promise<string | undefined> {
+  try {
+    const value = (await readFile(path, 'utf8')).trim();
+    return value || undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+/** The broker and exchange credentials that exist as files in the credentials
+ *  directory; a feed whose files are absent is simply not configured. */
+export async function loadFeedCredentials(
+  directory: string | undefined,
+): Promise<FeedCredentials> {
+  if (!directory) return {};
+  const [token, queryId, key, secretKey] = await Promise.all([
+    secretFile(resolve(directory, 'ibkr-flex-token')),
+    secretFile(resolve(directory, 'ibkr-flex-query')),
+    secretFile(resolve(directory, 'binance-api-key')),
+    secretFile(resolve(directory, 'binance-api-secret')),
+  ]);
+  return {
+    ...(token && queryId ? { ibkr: { token, queryId } } : {}),
+    ...(key && secretKey ? { binance: { key, secret: secretKey } } : {}),
+  };
 }

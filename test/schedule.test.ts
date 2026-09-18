@@ -373,7 +373,8 @@ for (const minutes of [30, 60]) {
         const retry = Number(
           await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
         );
-        assert.ok(retry >= initial + 86400000);
+        assert.ok(retry >= initial + 43200000);
+        assert.ok(retry < initial + 43200000 + 60000);
         assert.equal(
           await runScheduledSync({ ...options, now: new Date(retry - 1) }),
           'deferred',

@@ -162,7 +162,10 @@ export async function runScheduledSync(options: ScheduleOptions) {
   if (result === 'transient' || result === 'rate_limit')
     await writeFile(
       cooldown,
-      String(Math.max(options.now.getTime(), Date.now()) + 86400000),
+      // Twelve hours: long enough to let a bank's limit reset, short enough
+      // that a balance is not a day and a half old by the next attempt (the
+      // owner halved it from 24 hours on September 18, 2026).
+      String(Math.max(options.now.getTime(), Date.now()) + 43200000),
       { mode: 0o600 },
     );
   if (result !== 'blocked') await unlink(latch);
