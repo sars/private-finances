@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import {
+  CalendarDays,
   ChevronRight,
   CircleAlert,
   Clock3,
@@ -373,6 +374,14 @@ export default function Assets() {
               variant="outline"
               size="sm"
               render={<a href="/assets/snapshots" />}
+            >
+              <CalendarDays />
+              Snapshots
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<a href={`/assets/snapshots?date=${rigaToday()}`} />}
             >
               <Plus />
               New snapshot
