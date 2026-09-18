@@ -17,7 +17,6 @@ import {
   CircleAlert,
   Inbox,
   MessageCircle,
-  RefreshCw,
   Sparkles,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -29,8 +28,9 @@ import {
   EmptyState,
   Field,
   FilterBar,
-  PagedList,
   PageHeader,
+  PagedList,
+  RefreshButton,
 } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -252,17 +252,7 @@ export default function Review() {
       <PageHeader
         title="Review"
         description="Payments still waiting for a decision, newest first. Decide each one here or answer in Telegram."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pages.isFetching || busy}
-            onClick={() => refresh()}
-          >
-            <RefreshCw className={pages.isFetching ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       {notice && (
         <div

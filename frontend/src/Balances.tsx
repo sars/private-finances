@@ -1,12 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  ArrowRight,
-  Check,
-  GripVertical,
-  RefreshCw,
-  Wallet,
-} from 'lucide-react';
+import { ArrowRight, Check, GripVertical, Wallet } from 'lucide-react';
 import { apiGet, useSession, queryClient } from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useUrlField } from './lib/navigation';
@@ -16,6 +10,7 @@ import {
   EmptyState,
   Money,
   PageHeader,
+  RefreshButton,
 } from './components/finance';
 import { Button } from './components/ui/button';
 import { Card, CardContent } from './components/ui/card';
@@ -383,15 +378,7 @@ export default function Balances() {
         description="What every account of the household holds, as the banks last reported it. Balances arrive with each scheduled import; nothing here asks a bank for money to move."
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw />
-              Refresh
-            </Button>
+            <RefreshButton />
             <Button
               variant={arranging ? 'default' : 'outline'}
               size="sm"

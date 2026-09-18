@@ -1,20 +1,18 @@
 import { useUrlField } from './lib/navigation';
 import { money } from './lib/format';
-import { useSession, invalidateFinancialData } from './lib/query';
+import {
+  useSession,
+  invalidateFinancialData,
+  useRefreshSignal,
+} from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useEffect, useState, type FormEvent } from 'react';
-import {
-  CalendarDays,
-  CircleAlert,
-  FileText,
-  Plus,
-  RefreshCw,
-} from 'lucide-react';
+import { CalendarDays, CircleAlert, FileText, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice, Field, PageHeader } from '@/components/finance';
+import { Choice, Field, PageHeader, RefreshButton } from '@/components/finance';
 import type { ReportSnapshot } from '../../src/reports';
 
 type Scope = 'all' | 'rodion' | 'katya';
@@ -49,7 +47,7 @@ export default function Reports() {
   const [fetchError, setError] = useState('');
   const error = session.error?.message || fetchError;
   const [notice, setNotice] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const refresh = useRefreshSignal();
   useEffect(() => {
     if (!scope) return;
     const controller = new AbortController();
@@ -99,7 +97,7 @@ export default function Reports() {
         );
       await invalidateFinancialData();
       setNotice('Report refreshed. Unchanged records keep the same version.');
-      setRefresh((n) => n + 1);
+      void invalidateFinancialData();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to create report.');
     } finally {
@@ -111,19 +109,7 @@ export default function Reports() {
       <PageHeader
         title="Reports"
         description="Weekly and monthly snapshots, with every revision kept."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading || saving}
-            onClick={() =>
-              scope ? setRefresh((n) => n + 1) : void session.refetch()
-            }
-          >
-            <RefreshCw className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       <form
         onSubmit={create}
@@ -194,7 +180,7 @@ export default function Reports() {
             <Button
               variant="outline"
               onClick={() =>
-                scope ? setRefresh((n) => n + 1) : void session.refetch()
+                scope ? void invalidateFinancialData() : void session.refetch()
               }
             >
               Try again

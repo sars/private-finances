@@ -57,6 +57,19 @@ with `AccountBadge` (bank glyph on the card's tile, currency, holder), whose
 glyphs and colours come only from `lib/account-visuals.ts`; never a Lucide
 icon standing in for a bank.
 
+## Refreshing
+
+There is one way to re-read the server and it belongs to the shell, not to a
+screen. On a desktop it is `RefreshButton`, first among a `PageHeader`'s
+actions; on a phone or a tablet it is the pull-down gesture in
+`components/shell/pull-to-refresh.tsx`, and the button hides itself there
+(`pointer-coarse:hidden`) so the two never both appear. Both call
+`invalidateFinancialData()`, which empties the query cache **and** advances the
+`useRefreshSignal()` number the older hand-fetching screens depend on, so one
+refresh reaches every screen. A screen that fetches in an effect puts that
+number in the effect's dependencies; it does not keep a refresh counter of its
+own.
+
 ## Charts
 
 Recharts, imported only inside `src/components/charts/`, loaded lazily. Rules:
@@ -86,4 +99,5 @@ series and account tones `chart-1`…`chart-6`; the checker refuses both. No
 or card rows. No raw `Select`; use `Choice`, which carries the labels Base UI
 needs and never reports an empty pick. No `asChild`; Base UI composes with
 `render={<a href … />}`. No new spacing values, no new font sizes, no new
-shadows.
+shadows. No screen-specific Refresh button: use `RefreshButton`, which the
+phone hides in favour of the pull-down gesture.

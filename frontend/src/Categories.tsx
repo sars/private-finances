@@ -1,4 +1,8 @@
-import { invalidateFinancialData, observeSession } from './lib/query';
+import {
+  invalidateFinancialData,
+  observeSession,
+  useRefreshSignal,
+} from './lib/query';
 import {
   useCallback,
   useEffect,
@@ -14,7 +18,6 @@ import {
   FolderTree,
   ListFilter,
   Plus,
-  RefreshCw,
   ShieldCheck,
   Tag,
   X,
@@ -32,7 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Choice, PageHeader } from '@/components/finance';
+import { Choice, PageHeader, RefreshButton } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Node = {
@@ -152,11 +155,15 @@ export default function Categories() {
       if (!signal?.aborted) setLoading(false);
     }
   }, []);
+  // `refresh` changes whenever the workspace is told its data is stale — a
+  // save, the pull-down gesture, the Refresh button — so this screen re-reads
+  // with everything else rather than keeping a private button of its own.
+  const refresh = useRefreshSignal();
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [load]);
+  }, [load, refresh]);
   async function mutate(
     path: string,
     fields: Record<string, string>,
@@ -293,17 +300,7 @@ export default function Categories() {
       <PageHeader
         title="Categories & rules"
         description="Organise your spending and make repeat decisions easier, with you in control."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading || !!busy}
-            onClick={() => void load()}
-          >
-            <RefreshCw className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       {notice && (
         <div

@@ -223,6 +223,13 @@
   body {
     @apply m-0 bg-background font-sans text-foreground antialiased;
   }
+  /* The app has its own pull-down refresh (components/shell/pull-to-refresh).
+     Android's browser offers one too, and its answer is a full page reload —
+     slower, and it throws away where you were. This turns that one off so only
+     ours runs. An installed iOS app has none of its own to suppress. */
+  html {
+    overscroll-behavior-y: contain;
+  }
   button,
   input,
   select {

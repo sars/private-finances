@@ -1,5 +1,9 @@
 import { useUrlField, useSearchPatch } from './lib/navigation';
-import { useSession } from './lib/query';
+import {
+  invalidateFinancialData,
+  useRefreshSignal,
+  useSession,
+} from './lib/query';
 import { periodRange } from './lib/spending-period';
 import { useDisplayCurrency } from './lib/display-currency';
 import LlmBudget from './LlmBudget';
@@ -13,7 +17,6 @@ import {
   Clock3,
   History,
   Inbox,
-  RefreshCw,
   SlidersHorizontal,
   Wallet,
 } from 'lucide-react';
@@ -31,6 +34,7 @@ import {
   Money,
   PageHeader,
   PeriodPicker,
+  RefreshButton,
   previousPeriod,
 } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -158,7 +162,7 @@ export default function Overview() {
   const [previous, setPrevious] = useState<Totals | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const refresh = useRefreshSignal();
   const [visibleCount, setVisibleCount] = useState(8);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const dateError = Boolean(from && to && from > to);
@@ -344,17 +348,7 @@ export default function Overview() {
       <PageHeader
         title="Home"
         description="Household spending for the period, and what still needs a decision."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRefresh((n) => n + 1)}
-            disabled={loading || dateError}
-          >
-            <RefreshCw className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -490,7 +484,7 @@ export default function Overview() {
             action={
               <Button
                 variant="outline"
-                onClick={() => setRefresh((n) => n + 1)}
+                onClick={() => void invalidateFinancialData()}
               >
                 Try again
               </Button>

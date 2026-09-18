@@ -20,4 +20,5 @@ export { TransactionRow } from './transaction-row'; // one payment in a list: de
 export { PagedList } from './paged-list'; // a long list: only visible rows in the document, next page on approach
 export { EmptyState } from './empty-state'; // nothing to show, and what to do about it
 export { PageHeader } from './page-header'; // title, one line, actions
+export { RefreshButton } from './refresh-button'; // re-read everything from the server; desktop only, the phone pulls down
 export { AccountBadge } from './account-badge'; // which account: bank glyph on the card's tile, currency, holder; from lib/account-visuals

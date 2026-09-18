@@ -33,6 +33,7 @@ import {
   KpiCard,
   Money,
   PageHeader,
+  RefreshButton,
 } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { DonutSlice } from '@/components/charts/Donut';
@@ -370,6 +371,7 @@ export default function Assets() {
         description="What the household owns, counted on a date and valued in the display currency. A figure not counted again is carried from the last time it was."
         actions={
           <>
+            <RefreshButton />
             <Button
               variant="outline"
               size="sm"

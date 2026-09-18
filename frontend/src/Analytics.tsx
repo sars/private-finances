@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { CircleAlert, Inbox, RefreshCw } from 'lucide-react';
-import { apiGet, invalidateFinancialData, useSession } from './lib/query';
+import { CircleAlert, Inbox } from 'lucide-react';
+import { apiGet, useSession } from './lib/query';
 import { useSearchPatch, useUrlField } from './lib/navigation';
 import { useDisplayCurrency } from './lib/display-currency';
 import { periodRange, rigaToday } from './lib/spending-period';
@@ -21,6 +21,7 @@ import {
   KpiCard,
   PageHeader,
   PeriodPicker,
+  RefreshButton,
   TreeTable,
   type BucketBar,
   type HeatRow,
@@ -410,17 +411,7 @@ export default function Analytics() {
       <PageHeader
         title="Spending analytics"
         description="Where the money went, with every figure a step from the payments behind it."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void invalidateFinancialData()}
-            disabled={current.isFetching}
-          >
-            <RefreshCw className={current.isFetching ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       <FilterBar className="border-0 bg-transparent p-0">
         <Field label="Period" className="basis-full sm:basis-auto">

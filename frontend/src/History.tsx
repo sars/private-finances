@@ -2,6 +2,7 @@ import { useRouterState } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, History as HistoryIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { invalidateFinancialData, useRefreshSignal } from './lib/query';
 import { PageHeader } from '@/components/finance';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +44,7 @@ export default function History() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [refresh, setRefresh] = useState(0);
+  const refresh = useRefreshSignal();
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -95,7 +96,7 @@ export default function History() {
           <Button
             variant="outline"
             className="ml-3"
-            onClick={() => setRefresh((n) => n + 1)}
+            onClick={() => void invalidateFinancialData()}
           >
             <RefreshCw />
             Retry
