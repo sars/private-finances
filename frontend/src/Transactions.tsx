@@ -226,7 +226,7 @@ export default function Transactions() {
     who === 'all' ? 'Both of us' : owners[who as 'rodion' | 'katya'].name;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Transactions"
         description="Every payment on the household's accounts, newest first."

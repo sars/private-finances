@@ -348,7 +348,7 @@ export default function Imports() {
     ? data.connections.filter((c) => verdict(c, now).health === 'attention')
     : [];
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Bank imports"
         description="Every connection: what it last did, what it brought in, and how long its approval lasts."

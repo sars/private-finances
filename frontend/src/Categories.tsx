@@ -296,7 +296,7 @@ export default function Categories() {
   const ownerName = identity?.actor === 'rodion' ? 'Rodion' : 'Katya';
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Categories & rules"
         description="Organise your spending and make repeat decisions easier, with you in control."

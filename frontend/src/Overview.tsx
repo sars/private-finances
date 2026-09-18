@@ -1,4 +1,3 @@
-import { useUrlField, useSearchPatch } from './lib/navigation';
 import {
   invalidateFinancialData,
   useRefreshSignal,
@@ -6,36 +5,31 @@ import {
 } from './lib/query';
 import { periodRange } from './lib/spending-period';
 import { useDisplayCurrency } from './lib/display-currency';
-import LlmBudget from './LlmBudget';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDownLeft,
   ArrowRight,
-  ArrowUpRight,
   CheckCheck,
   CircleAlert,
-  Clock3,
-  History,
   Inbox,
-  SlidersHorizontal,
   Wallet,
 } from 'lucide-react';
+import { accountIdentity } from './lib/account-identity';
 import { money, toNumber } from './lib/format';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  AccountBadge,
   BarList,
-  Choice,
   EmptyState,
-  Field,
-  FilterBar,
   KpiCard,
   Money,
   PageHeader,
-  PeriodPicker,
+  ProblemsBlock,
   RefreshButton,
-  previousPeriod,
+  TransactionRow,
+  sameSpanLastMonth,
+  type Problem,
 } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
 const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
@@ -45,6 +39,7 @@ type Transaction = {
   revision?: number;
   spendingPattern?: { pattern: string; needsReview: boolean };
   owner: 'rodion' | 'katya';
+  source: string;
   bookedAt: string;
   currency: string;
   amountMinor: string;
@@ -111,17 +106,86 @@ async function fetchOverview(
   return {
     rows: data.transactions as Transaction[],
     reporting,
-    currencies: (data.byCurrency as { currency: string }[]).map(
-      (r) => r.currency,
-    ),
   };
+}
+
+/**
+ * The household's spending money, across both members.
+ *
+ * Read from the same endpoint the Balances screen uses, and totalled the same
+ * way: only the accounts whose purpose is personal, over figures the server
+ * already converted with each agreed overdraft taken out. Business and
+ * investment accounts are somebody's money but not money to spend, and a
+ * headline that mixed them in would flatter every month.
+ */
+type BalancesResponse = {
+  accounts: {
+    source: string;
+    accountId: string;
+    purpose: 'personal' | 'business' | 'investment' | 'unreviewed';
+    balances: { currency: string }[];
+  }[];
+  reporting?: {
+    currency: string;
+    rows: {
+      source: string;
+      accountId: string;
+      currency: string;
+      convertedMinor: string | null;
+    }[];
+  };
+};
+
+async function fetchOwnMoney(display: string, signal: AbortSignal) {
+  const response = await fetch(`/api/balances?display=${display}`, {
+    signal,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) return null;
+  const data = (await response.json()) as BalancesResponse;
+  if (!data.reporting) return null;
+  const converted = new Map(
+    data.reporting.rows.map((row) => [
+      `${row.source}:${row.accountId}:${row.currency}`,
+      row.convertedMinor,
+    ]),
+  );
+  let minor = 0n;
+  let missing = 0;
+  for (const account of data.accounts) {
+    if (account.purpose !== 'personal') continue;
+    for (const balance of account.balances) {
+      const amount = converted.get(
+        `${account.source}:${account.accountId}:${balance.currency}`,
+      );
+      if (amount) minor += BigInt(amount);
+      else missing += 1;
+    }
+  }
+  return {
+    minor: minor.toString(),
+    missing,
+    currency: data.reporting.currency,
+  };
+}
+
+async function fetchProblems(signal: AbortSignal): Promise<Problem[]> {
+  const response = await fetch('/api/problems', {
+    signal,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) return [];
+  const data = (await response.json()) as { problems?: Problem[] };
+  return Array.isArray(data.problems) ? data.problems : [];
 }
 
 function Loading() {
   return (
     <div role="status" aria-label="Loading overview" className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[0, 1, 2].map((n) => (
+      <div className="grid gap-4 sm:grid-cols-2">
+        {[0, 1].map((n) => (
           <Skeleton key={n} className="h-32 rounded-lg" />
         ))}
       </div>
@@ -141,93 +205,69 @@ const rigaDay = (iso: string) =>
   }).format(new Date(iso));
 
 export default function Overview() {
-  const patch = useSearchPatch();
   const actor = useSession().data?.actor;
   const isMobile = useIsMobile();
-  const [owner, setOwner] = useUrlField('owner', 'all');
-  const defaultRange = periodRange('month');
-  const [from] = useUrlField('from', defaultRange[0]!);
-  const [to] = useUrlField('to', defaultRange[1]!);
-  const period = { from, to };
-  const [currency, setCurrency] = useUrlField('currency', 'all');
-  const [category, setCategory] = useUrlField('category', '');
-  const [pattern, setPattern] = useUrlField('pattern', 'all');
-  const [scope, setScope] = useUrlField('scope', 'all');
-  const [knownCategories, setKnownCategories] = useState<string[]>([]);
+  // Home is this month, for the whole household, in the display currency, and
+  // offers no way to change any of that. Every control it used to carry exists
+  // on Spending analytics, which is the screen for asking questions; this one
+  // answers the two that do not need asking — what has gone wrong, and how the
+  // month is going.
+  const [from, to] = periodRange('month');
+  const period = { from: from!, to: to! };
   const { currency: focusCurrency } = useDisplayCurrency();
-  const [granularity, setGranularity] = useState('day');
-  const [knownCurrencies, setKnownCurrencies] = useState<string[]>([]);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [reporting, setReporting] = useState<Reporting | null>(null);
   const [previous, setPrevious] = useState<Totals | null>(null);
+  const [own, setOwn] = useState<{
+    minor: string;
+    missing: number;
+    currency: string;
+  } | null>(null);
+  const [problems, setProblems] = useState<Problem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const refresh = useRefreshSignal();
   const [visibleCount, setVisibleCount] = useState(8);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const dateError = Boolean(from && to && from > to);
-  const filterParams = useMemo(() => {
-    const params = new URLSearchParams();
-    if (owner !== 'all') params.set('owner', owner);
-    if (currency !== 'all') params.set('currency', currency);
-    if (category) params.set('category', category);
-    if (pattern !== 'all') params.set('pattern', pattern);
-    if (scope !== 'all') params.set('scope', scope);
-    return params;
-  }, [owner, currency, category, pattern, scope]);
   const query = useMemo(() => {
-    const params = new URLSearchParams(filterParams);
-    if (from) params.set('from', from);
-    if (to) params.set('to', to);
+    const params = new URLSearchParams();
+    params.set('from', period.from);
+    params.set('to', period.to);
     return params.toString();
-  }, [filterParams, from, to]);
-  // The same filters over the stretch of equal length just before this one,
-  // which is what the KPI deltas compare against.
-  const before = previousPeriod(period);
+  }, [period.from, period.to]);
+  const before = sameSpanLastMonth(period);
   const previousQuery = useMemo(() => {
     if (!before) return null;
-    const params = new URLSearchParams(filterParams);
+    const params = new URLSearchParams();
     params.set('from', before.from);
     params.set('to', before.to);
     return params.toString();
-  }, [filterParams, before?.from, before?.to]);
+  }, [before?.from, before?.to]);
   useEffect(() => {
-    if (dateError) return;
     const controller = new AbortController();
     setVisibleCount(8);
     setLoading(true);
     setError('');
     async function load() {
       try {
-        const [current, earlier] = await Promise.all([
+        const [current, earlier, money, faults] = await Promise.all([
           fetchOverview(query, focusCurrency, controller.signal),
           previousQuery
             ? fetchOverview(previousQuery, focusCurrency, controller.signal)
                 .then((r) => r.reporting as Totals)
                 .catch(() => null)
             : Promise.resolve(null),
+          // Neither of these may take the page down with them: a dashboard that
+          // shows nothing because one panel failed is worse than one panel
+          // short.
+          fetchOwnMoney(focusCurrency, controller.signal).catch(() => null),
+          fetchProblems(controller.signal).catch(() => []),
         ]);
         if (controller.signal.aborted) return;
         setRows(current.rows);
         setReporting(current.reporting);
         setPrevious(earlier);
-        setKnownCurrencies((known) =>
-          [...new Set([...known, ...current.currencies])].sort(),
-        );
-        setKnownCategories((known) =>
-          [
-            ...new Set([
-              ...known,
-              ...current.rows.flatMap((r) => {
-                if (!r.category) return [];
-                const parts = r.category.split(' / ');
-                return parts.map((_, index) =>
-                  parts.slice(0, index + 1).join(' / '),
-                );
-              }),
-            ]),
-          ].sort(),
-        );
+        setOwn(money);
+        setProblems(faults);
       } catch (e) {
         if (!controller.signal.aborted)
           setError(
@@ -239,7 +279,7 @@ export default function Overview() {
     }
     void load();
     return () => controller.abort();
-  }, [query, previousQuery, refresh, dateError, focusCurrency]);
+  }, [query, previousQuery, refresh, focusCurrency]);
   const activeCurrency = reporting?.currency ?? focusCurrency;
   const eligibleOutflow = (r: Transaction) =>
     BigInt(r.amountMinor) < 0n && !r.spendingPolicy?.excluded;
@@ -254,9 +294,6 @@ export default function Overview() {
       !r.refund?.fullyReduced,
   );
   const unresolved = reviewable.filter((r) => r.status !== 'pending').length;
-  const pending = rows.filter(
-    (r) => eligibleOutflow(r) && r.status === 'pending',
-  ).length;
   // This page reports the household; Review only ever shows the signed-in
   // owner's own payments, so say which of these they cannot open from here.
   const othersUnresolved = actor
@@ -280,30 +317,23 @@ export default function Overview() {
         : [];
     });
   }, [rows, reporting, activeCurrency]);
+  // Day by day, for the month in view. There is no interval to choose: a month
+  // has one useful shape and the other two answer questions Analytics asks.
   const chart = useMemo(() => {
-    const ordered = [...confirmed].sort((a, b) =>
-      a.bookedAt.localeCompare(b.bookedAt),
-    );
     const groups = new Map<string, bigint>();
-    for (const row of ordered) {
-      const day = rigaDay(row.bookedAt);
-      let key = granularity === 'month' ? day.slice(0, 7) : day;
-      if (granularity === 'week') {
-        const date = new Date(day + 'T12:00:00Z');
-        date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
-        key = date.toISOString().slice(0, 10);
-      }
-      groups.set(key, (groups.get(key) || 0n) - BigInt(row.amountMinor));
-    }
-    return {
-      monthly: granularity === 'month',
-      points: [...groups].map(([name, minor]) => ({
-        name,
-        minor: minor.toString(),
-        value: toNumber(minor.toString(), activeCurrency),
-      })) as Point[],
-    };
-  }, [confirmed, activeCurrency, granularity]);
+    for (const row of [...confirmed].sort((a, b) =>
+      a.bookedAt.localeCompare(b.bookedAt),
+    ))
+      groups.set(
+        rigaDay(row.bookedAt),
+        (groups.get(rigaDay(row.bookedAt)) || 0n) - BigInt(row.amountMinor),
+      );
+    return [...groups].map(([name, minor]) => ({
+      name,
+      minor: minor.toString(),
+      value: toNumber(minor.toString(), activeCurrency),
+    })) as Point[];
+  }, [confirmed, activeCurrency]);
   const categories = useMemo(() => {
     const groups = new Map<string, bigint>();
     for (const row of confirmed) {
@@ -319,161 +349,11 @@ export default function Overview() {
   const recent = [...rows]
     .sort((a, b) => b.bookedAt.localeCompare(a.bookedAt))
     .slice(0, visibleCount);
-  const filtered =
-    owner !== 'all' ||
-    currency !== 'all' ||
-    category ||
-    pattern !== 'all' ||
-    scope !== 'all';
-  function reset() {
-    patch({
-      owner: 'all',
-      currency: 'all',
-      category: '',
-      pattern: 'all',
-      scope: 'all',
-    });
-  }
-  const ownerName =
-    owner === 'all' ? 'Together' : owner === 'rodion' ? 'Rodion' : 'Katya';
-  const intervalName =
-    granularity === 'month'
-      ? 'monthly'
-      : granularity === 'week'
-        ? 'weekly'
-        : 'daily';
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
-      <PageHeader
-        title="Home"
-        description="Household spending for the period, and what still needs a decision."
-        actions={<RefreshButton />}
-      />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <PeriodPicker
-          value={period}
-          onChange={(next) => patch({ from: next.from, to: next.to })}
-        />
-        <Button
-          variant={filtered ? 'secondary' : 'ghost'}
-          size="sm"
-          aria-expanded={filtersExpanded}
-          aria-controls="overview-filters"
-          onClick={() => setFiltersExpanded(!filtersExpanded)}
-        >
-          <SlidersHorizontal />
-          Filters
-        </Button>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <p>
-          {from || 'Beginning of history'} – {to || 'Today'} · Europe/Riga ·{' '}
-          {ownerName} · {focusCurrency}
-        </p>
-        <a
-          className="font-medium text-primary"
-          href={`/analytics?display=${focusCurrency}`}
-        >
-          Explore spending analytics →
-        </a>
-      </div>
-      {filtersExpanded && (
-        <FilterBar id="overview-filters">
-          <Field label="Account owner" htmlFor="overview-owner">
-            <Choice
-              id="overview-owner"
-              className="w-full sm:w-40"
-              value={owner}
-              onChange={setOwner}
-              options={[
-                { value: 'all', label: 'Together' },
-                { value: 'rodion', label: 'Rodion' },
-                { value: 'katya', label: 'Katya' },
-              ]}
-            />
-          </Field>
-          <Field label="Original currency" htmlFor="overview-currency">
-            <Choice
-              id="overview-currency"
-              className="w-full sm:w-40"
-              value={currency}
-              onChange={setCurrency}
-              options={[
-                { value: 'all', label: 'All currencies' },
-                ...[
-                  ...new Set([
-                    ...knownCurrencies,
-                    ...(currency !== 'all' ? [currency] : []),
-                  ]),
-                ]
-                  .sort()
-                  .map((c) => ({ value: c, label: c })),
-              ]}
-            />
-          </Field>
-          <Field label="Category" htmlFor="overview-category">
-            <Choice
-              id="overview-category"
-              className="w-full sm:w-44"
-              value={category ? `category:${category}` : 'all'}
-              onChange={(value) =>
-                setCategory(value === 'all' ? '' : value.slice(9))
-              }
-              options={[
-                { value: 'all', label: 'All categories' },
-                ...[
-                  ...new Set([
-                    ...knownCategories,
-                    ...(category ? [category] : []),
-                  ]),
-                ]
-                  .sort()
-                  .map((name) => ({ value: `category:${name}`, label: name })),
-              ]}
-            />
-          </Field>
-          <Field label="Spending pattern" htmlFor="overview-pattern">
-            <Choice
-              id="overview-pattern"
-              className="w-full sm:w-44"
-              value={pattern}
-              onChange={setPattern}
-              options={[
-                { value: 'all', label: 'All patterns' },
-                { value: 'routine', label: 'Routine' },
-                { value: 'exceptional', label: 'Exceptional' },
-                { value: 'unreviewed', label: 'Not reviewed' },
-              ]}
-            />
-          </Field>
-          <Field label="Money movements" htmlFor="overview-scope">
-            <Choice
-              id="overview-scope"
-              className="w-full sm:w-44"
-              value={scope}
-              onChange={setScope}
-              options={[
-                { value: 'all', label: 'All movements' },
-                { value: 'spending', label: 'Personal expenses' },
-                { value: 'excluded', label: 'Excluded from spending' },
-                { value: 'unresolved', label: 'Unresolved' },
-              ]}
-            />
-          </Field>
-          {filtered && (
-            <Button size="sm" variant="ghost" onClick={reset}>
-              Reset
-            </Button>
-          )}
-        </FilterBar>
-      )}
-      {dateError ? (
-        <p role="alert" className="text-sm text-destructive">
-          Choose an end date on or after the start date.
-        </p>
-      ) : loading && !reporting ? (
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
+      <PageHeader title="Home" actions={<RefreshButton />} />
+      {loading && !reporting ? (
         <Loading />
       ) : error ? (
         <Card className="shadow-xs">
@@ -492,48 +372,37 @@ export default function Overview() {
           />
         </Card>
       ) : !rows.length ? (
-        <Card className="shadow-xs">
-          <EmptyState
-            icon={Inbox}
-            title={
-              filtered
-                ? 'No transactions match these filters'
-                : 'Your overview starts with your first import'
-            }
-            text={
-              filtered
-                ? 'Try a wider date range or another account owner. An empty view does not mean there was no spending.'
-                : 'Connect your accounts to see recorded spending here. Bank imports and unclassified payments will stay visible separately.'
-            }
-            action={
-              filtered ? (
-                <Button variant="outline" onClick={reset}>
-                  Clear filters
-                </Button>
-              ) : (
+        <>
+          <ProblemsBlock problems={problems} />
+          <Card className="shadow-xs">
+            <EmptyState
+              icon={Inbox}
+              title="Your overview starts with your first import"
+              text="Connect your accounts to see recorded spending here."
+              action={
                 <Button render={<a href="/connections" />}>
                   View bank connections
                   <ArrowRight />
                 </Button>
-              )
-            }
-          />
-        </Card>
+              }
+            />
+          </Card>
+        </>
       ) : (
         <>
-          {(unresolved > 0 || pending > 0) && (
+          <ProblemsBlock problems={problems} />
+          {unresolved > 0 && reporting && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
               <div className="flex items-start gap-3">
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                 <div>
                   <p className="text-sm font-medium">
-                    There’s more to the picture
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {unresolved} unresolved{' '}
-                    {unresolved === 1 ? 'transaction' : 'transactions'} ·{' '}
-                    {pending} pending. Outflows only; incoming money is not
-                    counted. These amounts are outside confirmed spending.
+                    <Money
+                      minor={reporting.unresolvedMinor}
+                      currency={activeCurrency}
+                    />{' '}
+                    across {unresolved}{' '}
+                    {unresolved === 1 ? 'payment' : 'payments'} needs a decision
                   </p>
                   {othersUnresolved > 0 && (
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
@@ -552,93 +421,57 @@ export default function Overview() {
                 size="sm"
                 render={<a href="/review?all=0&window=all" />}
               >
-                Review transactions
+                Review
                 <ArrowRight />
               </Button>
             </div>
           )}
-          {reporting &&
-            Object.values(reporting.coverage).some((c) => c.missing > 0) && (
-              <p role="status" className="text-sm text-warning">
-                Partial conversion: {reporting.coverage.confirmed.missing}{' '}
-                confirmed expenses, {reporting.coverage.unresolved.missing}{' '}
-                unclassified outflows and {reporting.coverage.pending.missing}{' '}
-                pending outflows lack a rate. Totals omit those amounts.{' '}
-                <a
-                  className="underline"
-                  href={`/fx?${query}&display=${focusCurrency}`}
-                >
-                  Inspect missing rates
-                </a>
-              </p>
-            )}
           {reporting && (
-            <section aria-label="Spending summary" className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                All selected accounts converted to {activeCurrency} · daily
-                rates
-                {before ? ` · compared with ${before.from} – ${before.to}` : ''}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <KpiCard
+                label="Spent this month"
+                minor={reporting.confirmedMinor}
+                previousMinor={previous?.confirmedMinor ?? null}
+                currency={activeCurrency}
+                previousLabel="over the same days last month"
+                icon={Wallet}
+                href={`/review?all=1&display=${focusCurrency}`}
+              />
+              {own && (
                 <KpiCard
-                  label="Classified spending"
-                  minor={reporting.confirmedMinor}
-                  previousMinor={previous?.confirmedMinor ?? null}
-                  currency={activeCurrency}
-                  note={`${confirmed.length} confirmed outflows`}
+                  label="Own money"
+                  minor={own.minor}
+                  currency={own.currency}
+                  note={
+                    own.missing > 0
+                      ? `${own.missing} without a rate`
+                      : 'Personal accounts'
+                  }
                   icon={Wallet}
-                  href={`/review?all=1&display=${focusCurrency}`}
+                  href="/balances"
                 />
-                <KpiCard
-                  label="Awaiting review"
-                  minor={reporting.unresolvedMinor}
-                  previousMinor={previous?.unresolvedMinor ?? null}
-                  currency={activeCurrency}
-                  note={`${unresolved} unclassified outflows`}
-                  icon={CircleAlert}
-                  href={`/review?all=0&window=all&display=${focusCurrency}`}
-                />
-                <KpiCard
-                  label="Pending payments"
-                  minor={reporting.pendingMinor}
-                  previousMinor={previous?.pendingMinor ?? null}
-                  currency={activeCurrency}
-                  note={`${pending} payments not yet booked`}
-                  icon={Clock3}
-                />
-              </div>
-            </section>
+              )}
+            </div>
           )}
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <Card className="min-w-0 shadow-xs">
               <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-                <div>
-                  <CardTitle className="text-sm font-medium">
-                    Spending over time
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {intervalName} · Europe/Riga
-                  </p>
-                </div>
-                <Choice
-                  aria-label="Chart interval"
-                  size="sm"
-                  className="w-24"
-                  value={granularity}
-                  onChange={setGranularity}
-                  options={[
-                    { value: 'day', label: 'Daily' },
-                    { value: 'week', label: 'Weekly' },
-                    { value: 'month', label: 'Monthly' },
-                  ]}
-                />
+                <CardTitle className="text-sm font-medium">
+                  Spending day by day
+                </CardTitle>
+                <a
+                  className="text-xs font-medium text-primary"
+                  href={`/analytics?display=${focusCurrency}`}
+                >
+                  Explore analytics →
+                </a>
               </CardHeader>
               <CardContent>
-                {chart.points.length ? (
+                {chart.length ? (
                   <div
                     className="mt-2 h-48 w-full sm:h-60"
                     role="img"
-                    aria-label={`Recorded ${intervalName} spending in ${activeCurrency}. Total ${money(reporting!.confirmedMinor, activeCurrency)}.`}
+                    aria-label={`Recorded daily spending in ${activeCurrency}. Total ${money(reporting!.confirmedMinor, activeCurrency)}.`}
                   >
                     <Suspense
                       fallback={
@@ -646,13 +479,13 @@ export default function Overview() {
                       }
                     >
                       <BarSeries
-                        data={chart.points}
+                        data={chart}
                         index="name"
                         series={[{ key: 'value', label: 'Spent' }]}
                         formatValue={(_, __, point) =>
                           money(String(point.minor), activeCurrency)
                         }
-                        formatIndex={(v) => (chart.monthly ? v : v.slice(5))}
+                        formatIndex={(v) => v.slice(5)}
                         formatHeading={(v) => v}
                         showYAxis={!isMobile}
                         minTickGap={isMobile ? 48 : 28}
@@ -674,30 +507,13 @@ export default function Overview() {
                 <CardTitle className="text-sm font-medium">
                   Where it went
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  Confirmed categories · {activeCurrency}
-                </p>
               </CardHeader>
               <CardContent>
                 {categories.length ? (
-                  <div className="space-y-4">
-                    <BarList
-                      rows={categories.slice(0, 6)}
-                      currency={activeCurrency}
-                    />
-                    {categories.length > 6 && (
-                      <p className="text-xs text-muted-foreground">
-                        The 6 largest of {categories.length} categories.
-                      </p>
-                    )}
-                    <a
-                      href="/categories"
-                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary"
-                    >
-                      Manage categories
-                      <ArrowRight className="size-3.5" />
-                    </a>
-                  </div>
+                  <BarList
+                    rows={categories.slice(0, 5)}
+                    currency={activeCurrency}
+                  />
                 ) : (
                   <EmptyState
                     icon={Wallet}
@@ -709,40 +525,11 @@ export default function Overview() {
               </CardContent>
             </Card>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <a
-              className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
-              href="/review?all=0&window=previous_month"
-            >
-              <p className="text-sm font-medium">
-                Finish last month’s review →
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Resolve recent payments in manageable groups.
-              </p>
-            </a>
-            <a
-              className="rounded-lg border bg-card p-4 shadow-xs transition-colors hover:bg-muted/40"
-              href="/review?all=0&window=historical"
-            >
-              <p className="text-sm font-medium">Check historical spending →</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Start with unclear large payments and inspect estimates.
-              </p>
-            </a>
-          </div>
           <Card className="overflow-hidden shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-sm font-medium">
-                  Recent activity
-                </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {rows.length} recorded{' '}
-                  {rows.length === 1 ? 'transaction' : 'transactions'}
-                  {currency === 'all' ? ' · all currencies' : ` · ${currency}`}
-                </p>
-              </div>
+              <CardTitle className="text-sm font-medium">
+                Recent activity
+              </CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
@@ -753,106 +540,52 @@ export default function Overview() {
               </Button>
             </CardHeader>
             <CardContent className="px-0 pb-0">
-              <div className="divide-y">
-                {recent.map((row) => {
-                  const negative = BigInt(row.amountMinor) < 0n;
-                  const attention =
-                    negative &&
-                    !row.spendingPolicy?.excluded &&
-                    (row.kind === 'unresolved' || row.status === 'pending');
-                  const status = row.spendingPolicy?.excluded
-                    ? row.status === 'pending'
-                      ? 'Pending · excluded by account rule'
-                      : 'Excluded by account rule'
-                    : row.status === 'pending'
-                      ? 'Pending'
-                      : row.kind === 'unresolved'
-                        ? negative
-                          ? 'Needs review'
-                          : 'Money in · not spending'
-                        : row.kind === 'personal_expense'
-                          ? row.category || 'Personal expense'
-                          : row.kind.replaceAll('_', ' ');
-                  return (
-                    <div
-                      key={row.id}
-                      className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:px-6"
-                    >
-                      <div className="hidden size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground sm:flex">
-                        {negative ? (
-                          <ArrowUpRight className="size-4" />
-                        ) : (
-                          <ArrowDownLeft className="size-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-sm font-medium"
-                          title={row.description}
-                        >
-                          {row.description || 'No description provided'}
-                        </p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                          <span>{rigaDay(row.bookedAt)}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="capitalize">{row.owner}</span>
-                          {row.spendingPattern?.pattern === 'exceptional' && (
-                            <span className="rounded border px-1.5 py-0.5">
-                              Exceptional
-                            </span>
-                          )}
-                          {row.spendingPattern?.needsReview && (
-                            <span>Pattern needs review</span>
-                          )}
-                          <span className="hidden sm:inline" aria-hidden="true">
-                            ·
-                          </span>
-                          <span
-                            className={`hidden truncate sm:inline ${attention ? 'text-warning' : ''}`}
-                          >
-                            {status}
-                          </span>
-                        </div>
-                        <p
-                          className={`mt-0.5 truncate text-xs sm:hidden ${attention ? 'text-warning' : 'text-muted-foreground'}`}
-                        >
-                          {status}
-                        </p>
-                        {row.spendingPolicy?.excluded && (
-                          <p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
-                            {row.spendingPolicy.accountLabel || 'This account'}{' '}
-                            ·{' '}
-                            {row.spendingPolicy.reason === 'investment_account'
-                              ? 'Investment account'
-                              : 'Business account'}{' '}
-                            — outside personal spending.{' '}
-                            <a
-                              href="/accounts"
-                              className="underline underline-offset-4 hover:text-foreground"
-                            >
-                              Account rules
-                            </a>
-                          </p>
-                        )}
-                      </div>
-                      <div className="min-w-0 max-w-[55%] text-right">
-                        <Money
-                          minor={row.amountMinor}
-                          currency={row.currency}
-                          signed
-                          className="block break-all text-sm font-semibold"
-                        />
-                        <a
-                          href={`/review?all=1&id=${row.id}`}
-                          className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                        >
-                          <History className="size-3" />
-                          <span>History</span>
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
+              {/* The date, the bank and what it was filed as. Whether the bank
+                  has settled it, the rule that excluded it and the link into
+                  its history were all taken out: each was a second line of
+                  small print on a row whose job is to let the reader recognise
+                  a payment. */}
+              <div className="px-4 sm:px-6">
+                {recent.map((row) => (
+                  <TransactionRow
+                    key={row.id}
+                    mark={
+                      <AccountBadge
+                        source={row.source}
+                        currency={row.currency}
+                        label={row.spendingPolicy?.accountLabel}
+                        owner={row.owner}
+                        size="md"
+                      />
+                    }
+                    markOnPhone
+                    description={
+                      row.description || 'Payment without a description'
+                    }
+                    meta={
+                      <>
+                        {rigaDay(row.bookedAt)}
+                        {' · '}
+                        {
+                          accountIdentity(
+                            row.source,
+                            row.currency,
+                            row.spendingPolicy?.accountLabel,
+                          ).name
+                        }
+                        {row.category ? ` · ${row.category}` : ''}
+                      </>
+                    }
+                    amount={
+                      <Money
+                        minor={row.amountMinor}
+                        currency={row.currency}
+                        signed
+                        className="text-sm font-semibold"
+                      />
+                    }
+                  />
+                ))}
               </div>
               {rows.length > recent.length && (
                 <div className="border-t px-6 py-3 text-xs text-muted-foreground">
@@ -869,13 +602,6 @@ export default function Overview() {
               )}
             </CardContent>
           </Card>
-          <LlmBudget compact refresh={refresh} />
-          <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground">
-            <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-            Based on imported records. Bank coverage may be incomplete.
-            Transfers, investments and non-personal payments are excluded from
-            personal spending.
-          </p>
         </>
       )}
     </div>

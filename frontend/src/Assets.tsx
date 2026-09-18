@@ -365,7 +365,7 @@ export default function Assets() {
   const selected = report?.at ?? at;
   const anyValue = report ? BigInt(report.totals.totalMinor) !== 0n : false;
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Assets"
         description="What the household owns, counted on a date and valued in the display currency. A figure not counted again is carried from the last time it was."

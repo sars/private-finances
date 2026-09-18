@@ -108,6 +108,40 @@ function ageOf(instant: string, now: number): string {
   return days === 1 ? 'yesterday' : `${days} days ago`;
 }
 
+/**
+ * One of the two figures at the top: a label, the money, and a count of what
+ * could not be converted. The warning is the only sentence here, and it earns
+ * its place — a total that silently leaves a balance out is the one number on
+ * this screen a reader could not catch being wrong.
+ */
+function Total({
+  label,
+  total,
+  currency,
+  muted = false,
+}: {
+  label: string;
+  total: { minor: string; missing: number };
+  currency: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <Money
+        minor={total.minor}
+        currency={currency}
+        className={`block break-all text-2xl font-semibold tracking-tight${
+          muted ? ' text-muted-foreground' : ''
+        }`}
+      />
+      {total.missing > 0 && (
+        <p className="text-xs text-warning">{total.missing} without a rate</p>
+      )}
+    </div>
+  );
+}
+
 export default function Balances() {
   const session = useSession();
   const actor = session.data?.actor;
@@ -150,12 +184,48 @@ export default function Balances() {
     : ((actor as Owner) ?? 'rodion');
   const mine = accounts.filter((account) => account.owner === who);
 
-  /**
-   * The household's own money, as the server already worked it out: every
-   * figure under `reporting` has the agreed overdraft taken out of it before
-   * it is converted, so the screen prints it and subtracts nothing again.
-   */
   const reporting = query.data?.reporting;
+
+  /**
+   * Two figures for the person whose tab is open: their spending money, and
+   * everything that is not spending money.
+   *
+   * The server converts each balance with the agreed overdraft already taken
+   * out of it — that subtraction happens before the rate is applied, so it
+   * stays exact — and then adds every balance in the household into one total.
+   * That total was what this screen printed under the heading "Own money",
+   * which made it wrong twice over: it held both members' accounts, and it held
+   * the business and investment ones. The owner read the label the way anyone
+   * would, as the money that is theirs to spend, and said so.
+   *
+   * So the sums are taken here, over the rows the server already converted.
+   * Nothing is subtracted again; a row without a rate is counted as missing
+   * rather than treated as zero, which is what lets the screen say a total is
+   * incomplete instead of quietly reporting a smaller one.
+   */
+  const totals = useMemo(() => {
+    const sum = (purposes: Purpose[]) => {
+      let minor = 0n;
+      let missing = 0;
+      let accounts = 0;
+      for (const account of mine) {
+        if (!purposes.includes(account.purpose)) continue;
+        accounts += 1;
+        for (const balance of account.balances) {
+          const row = converted.get(rowKey(balance));
+          if (row?.convertedMinor) minor += BigInt(row.convertedMinor);
+          else missing += 1;
+        }
+      }
+      return { minor: minor.toString(), missing, accounts };
+    };
+    return {
+      // An account nobody has classified yet is not counted as spending money
+      // on a guess; it waits with the rest until somebody says what it is.
+      own: sum(['personal']),
+      other: sum(['business', 'investment', 'unreviewed']),
+    };
+  }, [mine, converted]);
 
   /** That person's cards, split into the sections the screen shows them in. */
   const sections = useMemo(
@@ -335,7 +405,7 @@ export default function Balances() {
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted-foreground">
-              This bank has not reported a balance yet.
+              No balance reported
             </p>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
@@ -375,7 +445,6 @@ export default function Balances() {
     <div className="space-y-5">
       <PageHeader
         title="Balances"
-        description="What every account of the household holds, as the banks last reported it. Balances arrive with each scheduled import; nothing here asks a bank for money to move."
         actions={
           <>
             <RefreshButton />
@@ -402,10 +471,7 @@ export default function Balances() {
         </p>
       )}
       {arranging && (
-        <p className="text-sm text-muted-foreground">
-          Drag a card to move it. Your arrangement is yours alone and follows
-          you to any device you sign in on.
-        </p>
+        <p className="text-sm text-muted-foreground">Drag a card to move it.</p>
       )}
       <Tabs value={who} onValueChange={(next) => setTab(String(next))}>
         <TabsList variant="line" className="h-auto gap-1">
@@ -423,24 +489,22 @@ export default function Balances() {
             {owner === who && (
               <>
                 {reporting && (
-                  <section aria-label="Own money" className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Own money · {reporting.currency}
-                    </p>
-                    <Money
-                      minor={reporting.totalMinor}
+                  <section
+                    aria-label="Totals"
+                    className="flex flex-wrap items-start gap-x-10 gap-y-4"
+                  >
+                    <Total
+                      label={`Own money · ${reporting.currency}`}
+                      total={totals.own}
                       currency={reporting.currency}
-                      className="text-2xl font-semibold tracking-tight break-all"
                     />
-                    {reporting.coverage.missing > 0 && (
-                      <p className="text-xs text-warning">
-                        {reporting.coverage.missing}{' '}
-                        {reporting.coverage.missing === 1
-                          ? 'balance is'
-                          : 'balances are'}{' '}
-                        not in this total: no rate, or the bank has not reported
-                        one.
-                      </p>
+                    {totals.other.accounts > 0 && (
+                      <Total
+                        label={`Non-personal · ${reporting.currency}`}
+                        total={totals.other}
+                        currency={reporting.currency}
+                        muted
+                      />
                     )}
                   </section>
                 )}

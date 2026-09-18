@@ -251,7 +251,7 @@ export default function AssetsSnapshots() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-8">
+    <div className="mx-auto max-w-5xl space-y-5 pb-8">
       <div>
         <Button
           variant="ghost"

@@ -315,7 +315,7 @@ export default function Accounts() {
         : 'you';
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Accounts & exclusions"
         description="Which accounts belong in personal spending. Business and investment account rules keep their past and future payments out of personal totals."

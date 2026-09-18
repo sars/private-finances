@@ -75,7 +75,7 @@ export default function History() {
     return () => controller.abort();
   }, [refresh, id]);
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-8">
+    <div className="mx-auto max-w-4xl space-y-5 pb-8">
       <Button
         variant="ghost"
         className="-ml-3"

@@ -41,6 +41,34 @@ function shift(day: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * The same days of the month before, which is what "versus last month" means.
+ *
+ * Comparing the first eighteen days of September against the eighteen days
+ * before them lands on 14–31 August — two thirds of a month against the end of
+ * another, with a different count of weekends and every month-end bill in one
+ * side and not the other. The household compares like with like: 1–18 August.
+ *
+ * A day the earlier month does not have is pulled back to its last day, so the
+ * 29th to the 31st of March compare against the 28th of February rather than
+ * silently rolling into March and comparing a month against itself.
+ */
+export function sameSpanLastMonth({ from, to }: Period): Period | null {
+  if (!from || !to || from > to) return null;
+  const shift = (day: string) => {
+    const [year, month, date] = day.split('-').map(Number);
+    if (!year || !month || !date) return null;
+    const earlier =
+      month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
+    const lastDay = new Date(Date.UTC(earlier.y, earlier.m, 0)).getUTCDate();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${earlier.y}-${pad(earlier.m)}-${pad(Math.min(date, lastDay))}`;
+  };
+  const start = shift(from);
+  const end = shift(to);
+  return start && end ? { from: start, to: end } : null;
+}
+
 /** The stretch of the same length that ends the day before this one. */
 export function previousPeriod({ from, to }: Period): Period | null {
   if (!from || !to || from > to) return null;

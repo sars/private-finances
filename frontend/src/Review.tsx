@@ -248,7 +248,7 @@ export default function Review() {
     { value: 'all', label: 'Both of us' },
   ];
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Review"
         description="Payments still waiting for a decision, newest first. Decide each one here or answer in Telegram."

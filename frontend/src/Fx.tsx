@@ -248,7 +248,7 @@ export default function Fx() {
     });
   }
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Currency conversion"
         description="The same transactions in another currency, with missing rates clearly marked."

@@ -156,7 +156,7 @@ export default function Connections() {
     }
   }
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Bank connections"
         description="Approval for your own accounts, and whether each one still has access."

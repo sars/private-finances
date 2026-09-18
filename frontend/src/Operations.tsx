@@ -139,7 +139,7 @@ export default function Operations() {
     return () => controller.abort();
   }, [refresh]);
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="System health"
         description="Bank imports, access expiry and the status of your workspace."

@@ -8,8 +8,10 @@ export {
   periodPresets,
   presetPeriod,
   previousPeriod,
+  sameSpanLastMonth,
   type Period,
 } from './period-picker'; // preset ranges plus a custom one; Riga calendar days
+export { ProblemsBlock, type Problem } from './problems-block'; // what has stopped and needs the owner; renders nothing when nothing is wrong
 export { FilterBar, Field } from './filter-bar'; // a row of labelled controls
 export { BarList, type BarListRow } from './bar-list'; // ranked horizontal bars; the phone-friendly breakdown
 export { BucketBars, type BucketBar } from './bucket-bars'; // one bar per time bucket with the figure on it, an average rule, the open bucket hatched

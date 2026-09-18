@@ -407,14 +407,14 @@ export default function Analytics() {
     owner === 'all' ? 'Both of us' : owners[owner as 'rodion' | 'katya'].name;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Spending analytics"
         description="Where the money went, with every figure a step from the payments behind it."
         actions={<RefreshButton />}
       />
       <FilterBar className="border-0 bg-transparent p-0">
-        <Field label="Period" className="basis-full sm:basis-auto">
+        <Field hideLabel label="Period" className="basis-full sm:basis-auto">
           <PeriodPicker
             size="default"
             className="max-w-full"
@@ -422,7 +422,7 @@ export default function Analytics() {
             onChange={(next) => patch({ from: next.from, to: next.to })}
           />
         </Field>
-        <Field label="Whose" htmlFor="analytics-owner">
+        <Field hideLabel label="Whose" htmlFor="analytics-owner">
           <Choice
             id="analytics-owner"
             className="w-full sm:w-36"
@@ -435,10 +435,10 @@ export default function Analytics() {
             ]}
           />
         </Field>
-        <Field label="By" htmlFor="analytics-bucket">
+        <Field hideLabel label="By" htmlFor="analytics-bucket">
           <Choice
             id="analytics-bucket"
-            className="w-full sm:w-32"
+            className="w-full sm:w-36"
             value={bucketChoice}
             onChange={setBucketChoice}
             options={[
@@ -449,15 +449,21 @@ export default function Analytics() {
             ]}
           />
         </Field>
-        <Field label="Investments & business" htmlFor="analytics-others">
+        <Field
+          hideLabel
+          label="Investments & business"
+          htmlFor="analytics-others"
+        >
           <Choice
             id="analytics-others"
             className="w-full sm:w-40"
             value={others}
             onChange={setOthers}
+            // The label above these is off the screen now, so the values carry
+            // it: "Hidden" alone on a button says nothing about what is hidden.
             options={[
-              { value: 'hidden', label: 'Hidden' },
-              { value: 'included', label: 'Included' },
+              { value: 'hidden', label: 'Personal only' },
+              { value: 'included', label: 'With investments' },
             ]}
           />
         </Field>
@@ -499,7 +505,7 @@ export default function Analytics() {
               {from} – {to} · {whoLabel} · converted to {currency} at daily
               rates
               {data.totals.missingFx
-                ? ` · ${data.totals.missingFx} payments have no rate and are missing from every figure`
+                ? ` · ${data.totals.missingFx} ${data.totals.missingFx === 1 ? 'payment has' : 'payments have'} no rate and ${data.totals.missingFx === 1 ? 'is' : 'are'} missing from every figure`
                 : ''}
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -105,7 +105,7 @@ export default function Reports() {
     }
   }
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="Reports"
         description="Weekly and monthly snapshots, with every revision kept."
