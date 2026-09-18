@@ -5,6 +5,8 @@ export type Session = {
   csrf: string;
   mode: string;
   isAdmin?: boolean;
+  /** The commit the server is running; the app compares its own against it. */
+  release?: string;
   features: { ai: boolean; telegram: boolean };
   reviewDefaults?: {
     hideNonPersonal: boolean;

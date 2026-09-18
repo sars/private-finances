@@ -33,6 +33,13 @@ import { AppSidebar } from '@/components/shell/app-sidebar';
 import { useReviewCount } from './lib/payments';
 import { TabBar } from '@/components/shell/tab-bar';
 import { PullToRefresh } from '@/components/shell/pull-to-refresh';
+import { AppUpdate } from '@/components/shell/app-update';
+import {
+  checkForUpdate,
+  noteLoadedRelease,
+  recoverFromStaleBundle,
+  startUpdateWatch,
+} from './lib/app-update';
 import SignIn from './SignIn';
 import './index.css';
 
@@ -173,6 +180,10 @@ function App() {
   // came back showing whatever it held hours ago, with no browser reload button
   // to escape it. A minute away is the line: shorter than that is switching to
   // the bank's app and back, which should not cost a round trip.
+  //
+  // The same moment is when the app asks whether it is still the current
+  // release: an installed app is resumed far more often than it is started, so
+  // returning to it is the closest thing it has to opening a page.
   useEffect(() => {
     let leftAt = 0;
     const onVisibility = () => {
@@ -180,13 +191,21 @@ function App() {
         leftAt = Date.now();
         return;
       }
-      if (leftAt && Date.now() - leftAt > 60_000)
+      if (leftAt && Date.now() - leftAt > 60_000) {
         void invalidateFinancialData();
+        void checkForUpdate();
+      }
       leftAt = 0;
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
+  // The release the server reported to this document. Every later check is
+  // compared against it, so a release that lands while the app is open is seen
+  // even when the browser is still holding the worker back.
+  useEffect(() => {
+    noteLoadedRelease(identity?.release);
+  }, [identity?.release]);
 
   const isAdmin = !!identity?.isAdmin;
   // What waits for the signed-in member, shown beside Review everywhere the
@@ -242,6 +261,7 @@ function App() {
                 </Button>
               )}
             </div>
+            <AppUpdate release={identity?.release} />
           </div>
         }
       />
@@ -309,7 +329,16 @@ function App() {
       </SidebarInset>
       <TabBar counts={counts} />
       <PullToRefresh />
-      <Toaster theme="system" position="top-center" closeButton />
+      {/* The installed app draws under the status bar — that is what
+          viewport-fit=cover buys, and why the header pads for the same inset.
+          A toast at the top of the screen has to clear it too, and the update
+          prompt is the one the household will meet on a phone. */}
+      <Toaster
+        theme="system"
+        position="top-center"
+        closeButton
+        mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+      />
     </SidebarProvider>
   );
 }
@@ -357,6 +386,15 @@ class WorkspaceBoundary extends React.Component<
   static getDerivedStateFromError() {
     return { failed: true };
   }
+  // A document left open across a release asks for a hashed chunk the server
+  // has since replaced, and every screen past the first is one of those. There
+  // is nothing for the household to decide here: the shell is never cached, so
+  // reloading lands on the current release. `recoverFromStaleBundle` allows one
+  // attempt per ten minutes, so a build that truly cannot load still shows the
+  // card below rather than reloading in a circle.
+  componentDidCatch(error: unknown) {
+    recoverFromStaleBundle(error);
+  }
   render() {
     return this.state.failed ? (
       <main className="mx-auto max-w-lg space-y-4 p-8">
@@ -385,6 +423,17 @@ function Root() {
     </QueryClientProvider>
   );
 }
+// The worker is no longer registered by the script vite-plugin-pwa injects
+// into the shell: that one runs on `load` and never again, which an installed
+// app — resumed rather than started — almost never fires. Registering here puts
+// the same worker under the app's own watch; see lib/app-update.ts.
+startUpdateWatch();
+// Vite raises this when a modulepreload or a lazy import cannot be fetched,
+// which is what a release does to a page that was already open. It reaches the
+// window before React sees an error, and for a preload it may be all there is.
+window.addEventListener('vite:preloadError', (event) => {
+  if (recoverFromStaleBundle(event.payload)) event.preventDefault();
+});
 const rootRoute = createRootRoute({
   component: Root,
   validateSearch: stringSearch,

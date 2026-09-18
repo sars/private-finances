@@ -140,13 +140,43 @@ def pwa_rules() -> list[str]:
             'dist/frontend/index.html: manifest link needs crossorigin="use-credentials" '
             "(VitePWA useCredentials); the root stops answering the moment anything there needs the session cookie"
         )
-    if worker.is_file():
-        precached_html = re.findall(r"[\"']([^\"']*\.html)[\"']", worker.read_text(encoding="utf-8"))
+    if not worker.is_file():
+        errors.append("dist/frontend/sw.js is missing; is VitePWA still enabled?")
+    else:
+        worker_source = worker.read_text(encoding="utf-8")
+        precached_html = re.findall(r"[\"']([^\"']*\.html)[\"']", worker_source)
         if precached_html:
             errors.append(
                 "dist/frontend/sw.js precaches " + ", ".join(sorted(set(precached_html)))
                 + "; the server has no such route, so the whole install fails"
             )
+        # An installed app cannot be updated without these two, and both are a
+        # one-word change in vite.config.ts away from disappearing.
+        # With workbox `skipWaiting: false` the worker gets a message listener
+        # and exactly one skipWaiting() call, inside it. With it true there is
+        # no listener and the call runs at the top, which claims the open page
+        # and drops the assets it is still running from. One extra call would
+        # mean the same thing, so the count is part of the rule.
+        if "SKIP_WAITING" not in worker_source or worker_source.count("skipWaiting()") != 1:
+            errors.append(
+                "dist/frontend/sw.js does not hand over on a SKIP_WAITING message alone "
+                "(workbox skipWaiting must stay false); the release would replace the app under a screen in use, "
+                "and the Update button would have nothing to ask"
+            )
+        if "clientsClaim" in worker_source:
+            errors.append(
+                "dist/frontend/sw.js claims open pages; a waiting worker must leave the running document alone"
+            )
+    entry = re.search(r'src="/assets/(index-[^"]+\.js)"', html)
+    if not entry:
+        errors.append("dist/frontend/index.html: entry script not found")
+    elif "serviceWorker.register" not in (built / "assets" / entry.group(1)).read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            "the entry chunk does not register a service worker; lib/app-update.ts must be reached from "
+            "main.tsx, or an installed app never learns that a release has landed"
+        )
     return errors
 
 

@@ -95,13 +95,48 @@ Select reports `null` when cleared, which every handler now tolerates.
 The app installs to a phone's home screen: `vite-plugin-pwa` writes the
 manifest and a service worker that precaches the built bundle, fonts and icons.
 Nothing under `/api` is cached and navigations always go to the server, so
-financial data never rests in browser storage and a new release is picked up on
-the next load. The server serves the root files this needs — fonts, icons,
-`manifest.webmanifest`, `sw.js` — from an explicit allow-list, with the worker
-marked `no-cache`.
+financial data never rests in browser storage and the shell always comes from
+the release that is running. The server serves the root files this needs —
+fonts, icons, `manifest.webmanifest`, `sw.js` — from an explicit allow-list,
+with the worker marked `no-cache`.
 
-Two details follow from that and are easy to undo by accident, so
-`scripts/check_frontend.py` holds both against the built output:
+### Moving an installed app to a new release
+
+An installed app is resumed far more often than it is started, and iOS keeps
+the same document alive for days. The plugin's own registration script runs on
+the document's `load` event and never again, so a resumed app never checked;
+a release could be live for a week while the phone sat on the previous one, and
+deleting and reinstalling the app was the only reliable way out. Worse, the
+worker was `autoUpdate`, which claims the open page the moment the new worker
+activates and drops the old precache with it — so a page that had been open
+across a release failed on the next lazily loaded screen, which asks for a
+hashed file the release had already removed.
+
+`frontend/src/lib/app-update.ts` replaces all of that, and its own comment
+carries the reasoning. Four parts:
+
+- **The app registers the worker itself** (`injectRegister: false`) and checks
+  on its own schedule: every thirty minutes in the foreground, and on the way
+  back from more than a minute in the background — the same moment the query
+  cache is invalidated in `main.tsx`, because for an installed app returning to
+  it is the closest thing to opening a page.
+- **Two independent signals.** `registration.update()` re-fetches `sw.js`, and
+  `/health/live` reports the running release, which the app compares against
+  the release `/api/bootstrap` gave this document. A browser can hold a worker
+  back under its own 24-hour update throttle long after the release has moved.
+- **The new worker waits** (`registerType: 'prompt'`, workbox `skipWaiting` and
+  `clientsClaim` both off). Nothing under a screen in use changes until the
+  household says go, from the toast or from the version line in the sidebar
+  footer, which also offers an on-demand check. Applying it posts
+  `SKIP_WAITING` to the waiting worker and reloads once it has taken over.
+- **A page that started before a release still recovers.** A stale dynamic
+  import — from React's error boundary or Vite's `vite:preloadError` — reloads
+  the document once per ten minutes. The shell is never cached, so the reload
+  lands on the current release; the window keeps a genuinely broken build from
+  reloading in a circle.
+
+Four details follow from all of this and are easy to undo by accident, so
+`scripts/check_frontend.py` holds them against the built output:
 
 - **The shell is not precached.** `index.html` is deliberately absent from the
   worker's glob patterns. The server answers every screen route with the shell
@@ -118,6 +153,14 @@ Two details follow from that and are easy to undo by accident, so
   `manifest-src 'self'` in the Content-Security-Policy: `default-src 'none'`
   is the fallback for manifests too, so without the directive the browser
   refuses the manifest before it is ever requested.
+- **The worker hands over only when asked.** `sw.js` must carry the
+  `SKIP_WAITING` message listener and exactly one `skipWaiting()` call — the one
+  inside it — and must not call `clientsClaim`. Any other shape means the
+  release replaces the app under a screen in use and the Update button has
+  nothing to ask.
+- **The entry chunk registers a worker.** With the injected script gone, the
+  registration lives in the bundle; if `lib/app-update.ts` stops being reached
+  from `main.tsx`, an installed app silently stops learning that releases exist.
 
 ## Spacing review convention
 
