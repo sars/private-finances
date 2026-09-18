@@ -20,11 +20,11 @@ OpenAI key expiry is tracked with requested 5/2/1-day Telegram reminders.
 AI spending has a shared $10 monthly cap, conservative reservations and dashboard
 usage visibility; model pricing and usage anomalies pause further calls.
 
-Local backup and a restore comparison of all 36 tables verified the current release.
-This is not off-server protection. The daily encrypted backup to Amazon S3 is built
-and tested, and System health now states plainly whether a copy exists off this
-server and how old it is; until the owner creates the bucket and its credential the
-page reads "Never". See [the backup runbook](backups.md).
+The household's data now exists off this server. A daily encrypted backup runs to a
+private Amazon S3 bucket, restic encrypts it before upload, System health states how
+old the last copy is, and a stopped backup reaches the list of what is broken. The
+restore was proved into a separate disposable database on 19 September 2026, not
+assumed. See [the backup runbook](backups.md).
 
 Clear transactions now receive category suggestions before Telegram question selection;
 first-run owner catalogs are initialized. The owner authorized automatic classification of clear expenses on September 12;

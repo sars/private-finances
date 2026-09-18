@@ -9,17 +9,17 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**997972a89797db05181df51661b29f872fb51174**, live since September 18, 2026 at
+**860801e2153434400378a8103e0b2cfe3786e249**, live since September 19, 2026 at
 schema version 59, deployed with `deploy/release.sh` in one pass over
-`a4e5b17e89044b39e064073d320ddaa24bdc78d9`: every gate passed, imports and the
-worker paused and resumed around the switch, and verification afterwards
-reported both services active, release `997972a`, schema 59 and 4,176
-transactions. It carries PR #90 and adds migration 59, the `backup_runs` table,
-which creates one empty table and touches nothing existing.
+`997972a89797db05181df51661b29f872fb51174`: the rehearsal on a restored copy
+reached schema 59 in 23 milliseconds with 4,176 transactions, 140 active refund
+links, no expense without a category and nothing filed on a heading; imports and
+the worker paused and resumed around the switch, and verification afterwards
+reported both services active, release `860801e`, schema 59 and 4,176
+transactions. It carries PR #92 and adds no migration.
 
-`backup_runs` is empty, which is the true and intended state: no off-server
-backup has ever run, and System health now says **Never** rather than nothing at
-all. The bucket and its credential are still the owner's to create.
+Off-server backup is live. The daily timer is enabled, two snapshots are in the
+bucket, and System health reads the age of the last copy rather than **Never**.
 
 The installed app moves itself to a new release now. Getting one onto the phone
 had meant deleting the app and installing it again, for two reasons that had
@@ -922,8 +922,27 @@ the INSERT out of `scripts/backup.sh`, substitutes the placeholders and runs it
 against a real PostgreSQL, so the script's own SQL has to parse and satisfy the
 table's constraints. All three fail against the shipped version.
 
-Restore proof and retention are still ahead. A backup nobody has restored is a
-belief.
+The restore was then proved rather than assumed. `restic check --read-data`
+re-read every pack and found no errors; snapshot `7db29d4b` was restored to a
+temporary directory and loaded with `pg_restore --exit-on-error --no-owner
+--no-acl` into a separate disposable database, never the live one. All 50 tables
+were compared by row count and the per-currency transaction totals by digest.
+Every table matched except two, and both are accounted for: `backup_runs` holds
+one row the dump could not contain, because the status row is written after the
+dump is taken, and `bank_import_windows` holds three rows whose `completed_at`
+falls seconds after the dump, from the worker resuming after the release. The
+per-currency totals were identical. The disposable database and the restored
+file were destroyed afterwards, and
+`/etc/private-finances/off-server-restore-verified` now records the result.
+
+One method note worth keeping. The first comparison reported all fifty tables
+identical, and it was measuring nothing: the query had been written with `chr()`
+calls to dodge shell quoting and was returning empty rows, so both sides matched
+trivially. A comparison that cannot fail is not evidence. The rewritten one was
+checked by confirming it reported the differences that genuinely existed.
+
+Retention is still ahead. `restic forget --prune` remains unscheduled, because
+pruning deletes.
 
 # System health says whether a backup exists — September 18, 2026
 
