@@ -93,12 +93,28 @@ flavour (`components.json` style `base-nova`); `asChild` became `render`, and a
 Select reports `null` when cleared, which every handler now tolerates.
 
 The app installs to a phone's home screen: `vite-plugin-pwa` writes the
-manifest and a service worker that precaches only the built shell, fonts and
-icons. Nothing under `/api` is cached and navigations always go to the server,
-so financial data never rests in browser storage and a new release is picked up
-on the next load. The server serves the root files this needs — fonts, icons,
+manifest and a service worker that precaches the built bundle, fonts and icons.
+Nothing under `/api` is cached and navigations always go to the server, so
+financial data never rests in browser storage and a new release is picked up on
+the next load. The server serves the root files this needs — fonts, icons,
 `manifest.webmanifest`, `sw.js` — from an explicit allow-list, with the worker
 marked `no-cache`.
+
+Two details follow from that and are easy to undo by accident, so
+`scripts/check_frontend.py` holds both against the built output:
+
+- **The shell is not precached.** `index.html` is deliberately absent from the
+  worker's glob patterns. The server answers every screen route with the shell
+  but has no `/index.html` route of its own, and a precache entry that 404s
+  fails the entire install with `bad-precaching-response` — leaving nothing
+  cached at all.
+- **The manifest is fetched with credentials.** The browser, not the bundle,
+  asks for `manifest.webmanifest`, and by default it omits credentials, which
+  HTTP Basic authentication answers with 401. `useCredentials: true` puts
+  `crossorigin="use-credentials"` on the link. The response also needs
+  `manifest-src 'self'` in the Content-Security-Policy: `default-src 'none'`
+  is the fallback for manifests too, so without the directive the browser
+  refuses the manifest before it is ever requested.
 
 ## Spacing review convention
 

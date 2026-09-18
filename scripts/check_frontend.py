@@ -101,8 +101,42 @@ def bundle_rules() -> list[str]:
     return errors
 
 
+def pwa_rules() -> list[str]:
+    """The installable app is only as good as its two entry files.
+
+    Both rules here failed in the browser once. The service worker precached
+    index.html, which the server never serves under that path, so every install
+    died with bad-precaching-response and no asset was cached at all. And the
+    manifest link had no crossorigin attribute, so the browser asked for it with
+    credentials omitted and HTTP Basic authentication answered 401.
+    """
+    built = ROOT / "dist" / "frontend"
+    index_html = built / "index.html"
+    worker = built / "sw.js"
+    if not index_html.is_file():
+        return []
+    errors = []
+    html = index_html.read_text(encoding="utf-8")
+    link = re.search(r"<link[^>]*rel=[\"']manifest[\"'][^>]*>", html)
+    if not link:
+        errors.append("dist/frontend/index.html: no manifest link; is VitePWA still enabled?")
+    elif "use-credentials" not in link.group(0):
+        errors.append(
+            'dist/frontend/index.html: manifest link needs crossorigin="use-credentials" '
+            "(VitePWA useCredentials) or Basic authentication answers it with 401"
+        )
+    if worker.is_file():
+        precached_html = re.findall(r"[\"']([^\"']*\.html)[\"']", worker.read_text(encoding="utf-8"))
+        if precached_html:
+            errors.append(
+                "dist/frontend/sw.js precaches " + ", ".join(sorted(set(precached_html)))
+                + "; the server has no such route, so the whole install fails"
+            )
+    return errors
+
+
 def main() -> int:
-    errors = source_rules() + bundle_rules()
+    errors = source_rules() + bundle_rules() + pwa_rules()
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
