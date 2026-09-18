@@ -23,8 +23,10 @@ four background fetches/day. Never send fabricated online-user PSU headers.
 60-second statement/client-info limits. Both sources checked September 12, 2026.
 
 Timers start once after boot and do not replay every missed interval. Each firing
-makes one bounded attempt. Existing transient/rate-limit errors retain a 24-hour
-cooldown; auth/uncertain failures stay latched for investigation. The app retains
+makes one bounded attempt. Transient/rate-limit errors set a 12-hour cooldown
+(24 hours until September 18, 2026, halved at the owner's request so a limited
+bank is asked again the same day); auth/uncertain failures stay latched for
+investigation. The app retains
 connection leases and never overlaps the same scheduled instance.
 
 Install the Monobank owner-specific timer drop-ins alongside the timer template.
@@ -129,8 +131,8 @@ exclusive invocation latch. Do not send fake PSU headers to represent background
 requests as interactive requests.
 
 A rate-limit or transient error writes `<instance>.conservative` in the scheduler
-state directory. The existing 24-hour error cooldown remains (covering the
-connector's maximum supported Retry-After); subsequent successes use six hours.
+state directory. The 12-hour error cooldown applies; subsequent successes use
+six hours.
 The one-hour timer may wake during this cooldown but performs no bank calls.
 Fallback is sticky across restarts and isolated by connection. Auth, schema and
 uncertain errors remain latched for operator review. Empty successful responses
@@ -155,8 +157,8 @@ Katya Wise. Install their tracked 30-minute timer drop-ins and root-owned 644
 `<instance>.half-hourly` markers containing the exact instance name. This marker
 takes priority over a legacy hourly marker. The default without either opt-in is
 six hours. Existing sticky conservative state always wins over both markers.
-After a rate-limit/transient error, wait the existing 24-hour cooldown, then use
-six hours between successful attempts. Auth/uncertain latches stay blocked.
+After a rate-limit/transient error, wait the 12-hour cooldown, then use six
+hours between successful attempts. Auth/uncertain latches stay blocked.
 No empty-result fallback and no fabricated online-user headers. On rollout shorten
 only a known successful cooldown with no conservative marker or failure latch.
 
