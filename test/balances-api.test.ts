@@ -5,6 +5,7 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { web, type WebConfig } from '../src/web.js';
 import { AccountBalances } from '../src/account-balances.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('balances report the household, arrive in each person’s own order and refuse a stale arrangement', async () => {
   const db = memoryDatabase();
@@ -27,10 +28,6 @@ test('balances report the household, arrive in each person’s own order and ref
     mode: 'postgres',
     port: 0,
     release: 'balances-test',
-    passwords: {
-      rodion: 'synthetic-rodion-password',
-      katya: 'synthetic-katya-password',
-    },
     monobankJarsExcluded: true,
   };
   const server = web(repo, config, () => {});
@@ -38,14 +35,18 @@ test('balances report the household, arrive in each person’s own order and ref
   // The server checks the Host it is reached on, so it has to know its port.
   config.port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${config.port}`;
-  const auth = (who: 'rodion' | 'katya') =>
-    'Basic ' +
-    Buffer.from(`${who}:synthetic-${who}-password`).toString('base64');
+  const cookies: Record<'rodion' | 'katya', string> = {
+    rodion: '',
+    katya: '',
+  };
   const get = (path: string, who: 'rodion' | 'katya' = 'rodion') =>
-    fetch(base + path, { headers: { authorization: auth(who) } });
+    fetch(base + path, { headers: { cookie: cookies[who] } });
   try {
     // Financial data, so it is behind the same sign-in as everything else.
     assert.equal((await fetch(base + '/api/balances')).status, 401);
+    await seedTestOwners(db);
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
 
     const first = await (await get('/api/balances?display=UAH')).json();
     // The household, both members, as the overview already reports it.
@@ -72,7 +73,7 @@ test('balances report the household, arrive in each person’s own order and ref
     ) =>
       fetch(base + '/api/ui-layout', {
         method: 'POST',
-        headers: { authorization: auth(who) },
+        headers: { cookie: cookies[who] },
         body: new URLSearchParams({
           csrf: token,
           key: 'balances',
@@ -110,7 +111,7 @@ test('balances report the household, arrive in each person’s own order and ref
       (
         await fetch(base + '/api/ui-layout', {
           method: 'POST',
-          headers: { authorization: auth('rodion') },
+          headers: { cookie: cookies.rodion },
           body: new URLSearchParams({
             csrf,
             key: 'NOT A KEY',

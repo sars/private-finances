@@ -110,8 +110,11 @@ Two details follow from that and are easy to undo by accident, so
   cached at all.
 - **The manifest is fetched with credentials.** The browser, not the bundle,
   asks for `manifest.webmanifest`, and by default it omits credentials, which
-  HTTP Basic authentication answers with 401. `useCredentials: true` puts
-  `crossorigin="use-credentials"` on the link. The response also needs
+  the authentication of the day answered with 401. The manifest is part of the
+  shell and now answers without a session, but `useCredentials: true` stays: it
+  puts `crossorigin="use-credentials"` on the link, and the moment anything at
+  the root needs the session cookie again the omission returns. The response
+  also needs
   `manifest-src 'self'` in the Content-Security-Policy: `default-src 'none'`
   is the fallback for manifests too, so without the directive the browser
   refuses the manifest before it is ever requested.

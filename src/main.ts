@@ -15,6 +15,7 @@ import {
   ensureStarterCategories,
 } from './categories.js';
 import { ConsentService } from './consent.js';
+import { forgetExpiredSessions, seedOwners } from './auth.js';
 
 const mode = process.env.APP_MODE ?? 'demo';
 if (mode !== 'demo' && mode !== 'postgres')
@@ -32,6 +33,24 @@ const db =
 await migrate(db);
 const repo = new Repository(db);
 if (mode === 'postgres') await ensureStarterCategories(db);
+// The environment is still where a password is set, exactly as it was under
+// Basic authentication: edit the file on the server and restart. That is also
+// the only way back in, because nothing resets a password by email yet.
+if (mode === 'postgres') {
+  await seedOwners(db, [
+    {
+      owner: 'rodion',
+      email: process.env.RODION_EMAIL ?? '',
+      password: process.env.RODION_PASSWORD ?? '',
+    },
+    {
+      owner: 'katya',
+      email: process.env.KATYA_EMAIL ?? '',
+      password: process.env.KATYA_PASSWORD ?? '',
+    },
+  ]);
+  await forgetExpiredSessions(db);
+}
 let consent: ConsentService | undefined;
 const credentialsByOwner =
   mode === 'postgres'
@@ -122,13 +141,6 @@ const server = web(repo, {
       : undefined,
   port,
   mode,
-  passwords:
-    mode === 'postgres'
-      ? {
-          rodion: process.env.RODION_PASSWORD ?? '',
-          katya: process.env.KATYA_PASSWORD ?? '',
-        }
-      : undefined,
   release: process.env.RELEASE_SHA ?? 'local',
   publicOrigin: process.env.PUBLIC_ORIGIN,
   monobankJarsExcluded: process.env.MONOBANK_INCLUDE_JARS === 'false',

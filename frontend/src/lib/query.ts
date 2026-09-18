@@ -25,6 +25,12 @@ export const queryClient = new QueryClient({
     mutations: { retry: false },
   },
 });
+/**
+ * Thrown only when the server said 401. The shell shows the sign-in screen for
+ * this and nothing else: a 503 during a deployment must not put up a password
+ * field that cannot possibly help.
+ */
+export class NotSignedIn extends Error {}
 let authorizationLost = false;
 export function observeSession(value: unknown): void {
   if (!value || typeof value !== 'object') return;
@@ -49,7 +55,7 @@ export function observeSession(value: unknown): void {
 }
 export async function apiGet<T>(url: string, signal?: AbortSignal): Promise<T> {
   if (authorizationLost && url !== '/api/bootstrap')
-    throw new Error('Your session needs attention. Reload to sign in.');
+    throw new NotSignedIn('Your session needs attention. Reload to sign in.');
   const response = await fetch(url, {
     signal,
     credentials: 'same-origin',
@@ -62,10 +68,10 @@ export async function apiGet<T>(url: string, signal?: AbortSignal): Promise<T> {
         predicate: (q) => q.queryKey[0] !== 'session',
       });
     }
+    if (response.status === 401)
+      throw new NotSignedIn('Your session needs attention. Reload to sign in.');
     throw new Error(
-      response.status === 401
-        ? 'Your session needs attention. Reload to sign in.'
-        : `Could not load this view (${response.status}). Please retry.`,
+      `Could not load this view (${response.status}). Please retry.`,
     );
   }
   const data = (await response.json()) as T;
@@ -77,6 +83,20 @@ export function useSession() {
     queryKey: ['session'],
     queryFn: ({ signal }) => apiGet<Session>('/api/bootstrap', signal),
   });
+}
+export async function signOut(csrf: string): Promise<void> {
+  try {
+    await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrf }).toString(),
+    });
+  } finally {
+    // Reloading is the one certain way to leave no figure behind in a cache,
+    // and the shell comes straight back as the sign-in screen.
+    window.location.reload();
+  }
 }
 export function invalidateFinancialData() {
   return queryClient.invalidateQueries({

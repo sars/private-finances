@@ -8,6 +8,7 @@ import {
   updateAppSettings,
 } from '../src/app-settings.js';
 import { web } from '../src/web.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 test('settings migration upgrades v16 without changing ledger and audits optimistic admin updates', async () => {
   const db = memoryDatabase();
   await migrate(db);
@@ -107,15 +108,15 @@ test('admin settings routes enforce ownership and CSRF; shared defaults and dire
     port: 0,
     mode: 'postgres' as const,
     release: 'test',
-    passwords: {
-      rodion: 'synthetic-rodion-password',
-      katya: 'synthetic-katya-password',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   config.port = (server.address() as { port: number }).port;
   const base = `http://127.0.0.1:${config.port}`;
+  const cookies: Record<'rodion' | 'katya', string> = {
+    rodion: '',
+    katya: '',
+  };
   const request = (
     path: string,
     owner: 'rodion' | 'katya' = 'rodion',
@@ -123,9 +124,7 @@ test('admin settings routes enforce ownership and CSRF; shared defaults and dire
   ) =>
     fetch(base + path, {
       headers: {
-        authorization:
-          'Basic ' +
-          Buffer.from(owner + ':' + config.passwords[owner]).toString('base64'),
+        cookie: cookies[owner],
         ...(form
           ? { 'content-type': 'application/x-www-form-urlencoded' }
           : {}),
@@ -133,6 +132,9 @@ test('admin settings routes enforce ownership and CSRF; shared defaults and dire
       ...(form ? { method: 'POST', body: new URLSearchParams(form) } : {}),
     });
   try {
+    await seedTestOwners(db);
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
     for (const route of ['/api/settings', '/settings'])
       assert.equal((await request(route, 'katya')).status, 403);
     const rb = await (await request('/api/bootstrap')).json(),

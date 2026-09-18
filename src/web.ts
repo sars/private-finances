@@ -45,6 +45,14 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { parseFilters, filterTransactions } from './filters.js';
 import { pageTransactions, parsePageQuery } from './transaction-page.js';
 import { Repository, Conflict } from './repository.js';
+import {
+  normalizeEmail,
+  resolveSession,
+  signIn,
+  signOut,
+  SESSION_DAYS,
+  type ActiveSession,
+} from './auth.js';
 import { importStatus } from './import-status.js';
 import { expenseSummary, type Owner } from './domain.js';
 import {
@@ -59,7 +67,8 @@ export type WebConfig = {
   credentialHealth?: () => CredentialHealth;
   port: number;
   mode: 'demo' | 'postgres';
-  passwords?: Record<Owner, string>;
+  // Credentials live in the `users` table, seeded from the environment by
+  // `seedOwners` before the server listens — see src/auth.ts.
   release: string;
   publicOrigin?: string;
   monobankJarsExcluded?: boolean;
@@ -167,20 +176,30 @@ function equals(a: string, b: string): boolean {
     right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
 }
-export function authenticate(
-  req: IncomingMessage,
-  config: WebConfig,
-): Owner | null {
-  if (config.mode === 'demo') return 'rodion';
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Basic ')) return null;
-  const decoded = Buffer.from(header.slice(6), 'base64').toString();
-  const index = decoded.indexOf(':');
-  const owner = decoded.slice(0, index);
-  if (owner !== 'rodion' && owner !== 'katya') return null;
-  return equals(decoded.slice(index + 1), config.passwords?.[owner] ?? '')
-    ? owner
-    : null;
+export const SESSION_COOKIE = 'pf_session';
+
+export function sessionToken(req: IncomingMessage): string | null {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const index = part.indexOf('=');
+    if (index < 0) continue;
+    if (part.slice(0, index).trim() === SESSION_COOKIE)
+      return decodeURIComponent(part.slice(index + 1).trim()) || null;
+  }
+  return null;
+}
+
+// Lax rather than Strict: the bank approval returns here as a redirect from
+// the provider, and a Strict cookie is withheld on that first cross-site
+// navigation, which would drop the owner on the sign-in screen mid-consent.
+function cookie(token: string, seconds: number, secure: boolean): string {
+  return [
+    `${SESSION_COOKIE}=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    ...(secure ? ['Secure'] : []),
+    `Max-Age=${seconds}`,
+  ].join('; ');
 }
 async function body(req: IncomingMessage): Promise<Record<string, string>> {
   if (
@@ -215,12 +234,6 @@ export function web(
   log: (event: Record<string, unknown>) => void = (event) =>
     process.stdout.write(JSON.stringify(event) + '\n'),
 ) {
-  if (
-    config.mode === 'postgres' &&
-    (!config.passwords ||
-      Object.values(config.passwords).some((p) => p.length < 20))
-  )
-    throw new Error('Both owner passwords must contain at least 20 characters');
   let publicHost: string | undefined;
   if (config.publicOrigin) {
     const origin = new URL(config.publicOrigin);
@@ -235,10 +248,37 @@ export function web(
       throw new Error('publicOrigin must be an HTTPS origin');
     publicHost = origin.host;
   }
-  const csrfByOwner = {
-    rodion: randomBytes(32).toString('hex'),
-    katya: randomBytes(32).toString('hex'),
+  // Demo mode signs itself in — there is nobody to authenticate and nothing
+  // real behind it — so it needs one token of its own rather than a session
+  // row. Every other mode reads the token off the session.
+  const demoSession: ActiveSession = {
+    owner: 'rodion',
+    csrf: randomBytes(32).toString('hex'),
+    expiresAt: new Date(8640000000000000),
   };
+  // A password guessed at machine speed is the one attack a two-person login
+  // actually faces. Failures are counted per address and per caller, both
+  // decay, and the delay they buy is the whole defence: there is no lockout
+  // to trip deliberately and lock a household member out with.
+  const failures = new Map<string, { count: number; until: number }>();
+  const penalise = (key: string, now: number) => {
+    const seen = failures.get(key);
+    const count = (seen && seen.until > now ? seen.count : 0) + 1;
+    failures.set(key, {
+      count,
+      until: now + Math.min(2 ** count * 250, 60_000),
+    });
+    if (failures.size > 256)
+      for (const [k, v] of failures) if (v.until <= now) failures.delete(k);
+  };
+  const blockedUntil = (keys: string[], now: number) =>
+    Math.max(
+      0,
+      ...keys.map((k) => {
+        const seen = failures.get(k);
+        return seen && seen.until > now && seen.count > 3 ? seen.until : 0;
+      }),
+    );
   /**
    * The member whose account a payment sits on, or null when no such payment
    * exists. Either member may read and decide the other's payment in the
@@ -293,22 +333,12 @@ export function web(
         json(200, { status: 'alive', release: config.release });
         return;
       }
-      const actor = authenticate(req, config);
-      if (!actor) {
-        res.setHeader('WWW-Authenticate', 'Basic realm="Private Finances"');
-        json(401, { error: 'unauthorized', requestId });
-        return;
-      }
-      const csrf = csrfByOwner[actor];
-      if (
-        (route === '/settings' || route === '/api/settings') &&
-        actor !== 'rodion'
-      ) {
-        json(403, { error: 'admin_required', requestId });
-        return;
-      }
-      if (req.method === 'GET' && route === '/api/settings') {
-        json(200, { settings: await readAppSettings(repo.db) });
+      // Readiness precedes the session gate: the release script polls it over
+      // the loopback interface with no session to present, and its answer is
+      // whether the database replies and which release is live, nothing more.
+      if (req.method === 'GET' && route === '/health/ready') {
+        await repo.db.query('SELECT 1');
+        json(200, { status: 'ready', release: config.release });
         return;
       }
       // Besides the hashed bundle under /assets/, the built frontend has a few
@@ -319,21 +349,21 @@ export function web(
         /^\/(?:fonts\/[A-Za-z0-9_-]+\.woff2|icon(?:-\d+)?\.(?:svg|png)|manifest\.webmanifest|sw\.js|registerSW\.js|workbox-[A-Za-z0-9_-]+\.js)$/.test(
           route,
         );
-      if (
+      const shellRoute =
         req.method === 'GET' &&
-        config.frontendDirectory &&
+        Boolean(config.frontendDirectory) &&
         (frontendRoutes.has(route) ||
           /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(route) ||
           route.startsWith('/assets/') ||
-          rootFile)
-      ) {
+          rootFile);
+      const serveShell = async () => {
         const asset = route.startsWith('/assets/') || rootFile;
         const path = asset ? decodeURIComponent(route.slice(1)) : 'index.html';
         const type = asset
           ? assetTypes[extname(path)]
           : 'text/html; charset=utf-8';
         const content = type
-          ? await frontendFile(config.frontendDirectory, path)
+          ? await frontendFile(config.frontendDirectory!, path)
           : null;
         if (!content) {
           json(404, { error: 'not_found', requestId });
@@ -355,6 +385,94 @@ export function web(
           res.setHeader('Cache-Control', 'private, max-age=86400');
         res.writeHead(200, { 'Content-Type': type! });
         res.end(content);
+      };
+      const secure = config.mode !== 'demo';
+      const token = sessionToken(req);
+      const session =
+        config.mode === 'demo'
+          ? demoSession
+          : token
+            ? await resolveSession(repo.db, token)
+            : null;
+      if (req.method === 'POST' && route === '/api/login') {
+        if (config.mode === 'demo') {
+          json(404, { error: 'not_found', requestId });
+          return;
+        }
+        const form = await body(req);
+        const email = (form.email ?? '').slice(0, 320);
+        const now = Date.now();
+        // Two keys, so guessing one address cannot lock the other member out
+        // and moving between addresses does not reset the caller's own count.
+        const keys = [
+          `email:${normalizeEmail(email)}`,
+          `caller:${req.socket.remoteAddress ?? ''}`,
+        ];
+        const until = blockedUntil(keys, now);
+        if (until) {
+          log({ event: 'login_throttled', route, requestId });
+          res.setHeader('Retry-After', String(Math.ceil((until - now) / 1000)));
+          json(429, { error: 'too_many_attempts', requestId });
+          return;
+        }
+        // The address is somebody's identity and the password is a secret:
+        // neither belongs in a log line, so only the outcome is recorded.
+        const signedIn = await signIn(repo.db, email, form.password ?? '');
+        if (!signedIn) {
+          for (const key of keys) penalise(key, now);
+          log({ event: 'login_failed', route, requestId });
+          json(401, { error: 'invalid_credentials', requestId });
+          return;
+        }
+        for (const key of keys) failures.delete(key);
+        res.setHeader(
+          'Set-Cookie',
+          cookie(signedIn.token, SESSION_DAYS * 24 * 60 * 60, secure),
+        );
+        log({ event: 'login', actor: signedIn.owner, route, requestId });
+        json(200, { actor: signedIn.owner, csrf: signedIn.csrf });
+        return;
+      }
+      if (!session) {
+        // The shell and its assets are the sign-in screen as much as they are
+        // the application, they carry no household data, and this repository
+        // publishes the same files — so they load before there is a session.
+        if (shellRoute) {
+          await serveShell();
+          return;
+        }
+        // An expired or forged token should stop being presented.
+        if (token) res.setHeader('Set-Cookie', cookie('', 0, secure));
+        json(401, { error: 'unauthorized', requestId });
+        return;
+      }
+      const actor = session.owner;
+      const csrf = session.csrf;
+      if (req.method === 'POST' && route === '/api/logout') {
+        const form = await body(req);
+        if (!equals(form.csrf ?? '', csrf)) {
+          json(403, { error: 'invalid_csrf', requestId });
+          return;
+        }
+        if (token) await signOut(repo.db, token);
+        res.setHeader('Set-Cookie', cookie('', 0, secure));
+        log({ event: 'logout', actor, route, requestId });
+        json(200, { signedOut: true });
+        return;
+      }
+      if (
+        (route === '/settings' || route === '/api/settings') &&
+        actor !== 'rodion'
+      ) {
+        json(403, { error: 'admin_required', requestId });
+        return;
+      }
+      if (req.method === 'GET' && route === '/api/settings') {
+        json(200, { settings: await readAppSettings(repo.db) });
+        return;
+      }
+      if (shellRoute) {
+        await serveShell();
         return;
       }
       if (req.method === 'GET' && route === '/api/bootstrap') {
@@ -701,11 +819,6 @@ export function web(
       if (req.method === 'GET' && route === '/style.css') {
         res.writeHead(200, { 'Content-Type': 'text/css' });
         res.end(style);
-        return;
-      }
-      if (req.method === 'GET' && route === '/health/ready') {
-        await repo.db.query('SELECT 1');
-        json(200, { status: 'ready', release: config.release });
         return;
       }
       if (req.method === 'GET' && route === '/categories') {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { memoryDatabase, migrate } from '../src/database.js';
 import { Accounts } from '../src/accounts.js';
 import { Repository } from '../src/repository.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('account rules expose exact impact and reject stale edits with audited reasons', async () => {
   const db = memoryDatabase();
@@ -141,28 +142,23 @@ test('account HTTP edits change effective totals reversibly and preserve revisio
     port: 0,
     mode: 'postgres' as const,
     release: 'test',
-    passwords: {
-      rodion: 'synthetic-owner-password',
-      katya: 'synthetic-katya-password',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   config.port = (server.address() as { port: number }).port;
   const base = `http://127.0.0.1:${config.port}`;
-  const authorization =
-    'Basic ' +
-    Buffer.from('rodion:synthetic-owner-password').toString('base64');
-  const get = (path: string) =>
-    fetch(base + path, { headers: { authorization } });
+  let cookie = '';
+  const get = (path: string) => fetch(base + path, { headers: { cookie } });
   const post = (fields: Record<string, string>) =>
     fetch(base + '/accounts', {
       method: 'POST',
-      headers: { authorization },
+      headers: { cookie },
       body: new URLSearchParams(fields),
       redirect: 'manual',
     });
   try {
+    await seedTestOwners(db);
+    cookie = await signInAs(base, 'rodion');
     const csrf = (await (await get('/api/bootstrap')).json()).csrf;
     const input = {
       csrf,

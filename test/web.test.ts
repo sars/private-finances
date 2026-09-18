@@ -6,6 +6,8 @@ import { Repository } from '../src/repository.js';
 import { web, type WebConfig } from '../src/web.js';
 import { synthetic } from '../src/synthetic.js';
 import type { AddressInfo } from 'node:net';
+import { seedOwners } from '../src/auth.js';
+import { seedTestOwners, signInAs, TEST_OWNERS } from './sign-in.js';
 
 test('HTTP flow: CSRF, duplicate import, classification, escaping, exact summary and safe logs', async () => {
   const db = memoryDatabase();
@@ -172,9 +174,29 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
   await migrate(db);
   const repo = new Repository(db);
   await repo.importBatch(synthetic);
-  assert.throws(
-    () => web(repo, { port: 3300, mode: 'postgres', release: 'test' }),
-    /passwords/,
+  // Credentials are checked where they are set rather than where the server
+  // starts, so a missing or feeble one stops the boot before it listens.
+  await assert.rejects(
+    seedOwners(db, [
+      { owner: 'rodion', email: 'rodion@example.test', password: 'short' },
+      ...TEST_OWNERS.slice(1),
+    ]),
+    /at least 20 characters/,
+  );
+  await assert.rejects(
+    seedOwners(db, [
+      { ...TEST_OWNERS[0]!, email: 'not an address' },
+      ...TEST_OWNERS.slice(1),
+    ]),
+    /email address/,
+  );
+  // One address each, or signing in would be ambiguous.
+  await assert.rejects(
+    seedOwners(db, [
+      TEST_OWNERS[0]!,
+      { ...TEST_OWNERS[1]!, email: TEST_OWNERS[0]!.email },
+    ]),
+    /address of their own/,
   );
   let starts = 0;
   let finishes = 0;
@@ -199,45 +221,35 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     mode: 'postgres',
     publicOrigin: 'https://finances.example.test:8443',
     release: 'test',
-    passwords: {
-      rodion: 'synthetic-rodion-password',
-      katya: 'synthetic-katya-password',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   config.port = (server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${config.port}`;
-  const authorization =
-    'Basic ' +
-    Buffer.from('rodion:synthetic-rodion-password').toString('base64');
+  let cookie = '';
   try {
     assert.equal((await fetch(base + '/api/transactions')).status, 401);
+    await seedTestOwners(db);
+    cookie = await signInAs(base, 'rodion');
     const withHost = (host: string) =>
       new Promise<number>((resolve, reject) => {
-        const req = request(
-          base,
-          { headers: { host, authorization } },
-          (res) => {
-            res.resume();
-            resolve(res.statusCode!);
-          },
-        );
+        const req = request(base, { headers: { host, cookie } }, (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        });
         req.on('error', reject);
         req.end();
       });
     assert.equal(await withHost('attacker.example'), 403);
     assert.equal(await withHost('finances.example.test:8443'), 200);
 
-    const html = await (
-      await fetch(base, { headers: { authorization } })
-    ).text();
+    const html = await (await fetch(base, { headers: { cookie } })).text();
     const csrf = /name="csrf" value="([a-f0-9]+)"/.exec(html)![1]!;
     assert.equal(html.includes('Import example transactions'), false);
     const demoImport = await fetch(`${base}/import`, {
       method: 'POST',
       headers: {
-        authorization,
+        cookie,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({ csrf }),
@@ -247,7 +259,7 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     const startConsent = (token: string) =>
       fetch(base + '/connections/enablebanking/start', {
         method: 'POST',
-        headers: { authorization },
+        headers: { cookie },
         body: new URLSearchParams({ csrf: token, bank: 'Wise', country: 'lv' }),
       });
     assert.equal((await startConsent('invalid')).status, 403);
@@ -264,7 +276,7 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     const callback = await fetch(
       base +
         '/connections/enablebanking/callback?state=test-state&code=test-code',
-      { headers: { authorization }, redirect: 'manual' },
+      { headers: { cookie }, redirect: 'manual' },
     );
     assert.equal(callback.status, 303);
     assert.equal(callback.headers.get('location'), '/connections');
@@ -275,7 +287,7 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     // account and the audit event names rodion as the member who decided.
     const response = await fetch(base + '/classify', {
       method: 'POST',
-      headers: { authorization },
+      headers: { cookie },
       redirect: 'manual',
       body: new URLSearchParams({
         csrf,
@@ -300,12 +312,10 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
       ).rows,
       [{ actor: 'rodion' }],
     );
-    const katyaAuth =
-      'Basic ' +
-      Buffer.from('katya:synthetic-katya-password').toString('base64');
+    const katyaCookie = await signInAs(base, 'katya');
     const forgedCsrf = await fetch(base + '/classify', {
       method: 'POST',
-      headers: { authorization: katyaAuth },
+      headers: { cookie: katyaCookie },
       body: new URLSearchParams({
         csrf,
         id: katya.id,
@@ -316,13 +326,13 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
     });
     assert.equal(forgedCsrf.status, 403);
     const katyaHtml = await (
-      await fetch(base, { headers: { authorization: katyaAuth } })
+      await fetch(base, { headers: { cookie: katyaCookie } })
     ).text();
     const katyaCsrf = /name="csrf" value="([a-f0-9]+)"/.exec(katyaHtml)![1]!;
     assert.notEqual(katyaCsrf, csrf);
     const allowed = await fetch(base + '/classify', {
       method: 'POST',
-      headers: { authorization: katyaAuth },
+      headers: { cookie: katyaCookie },
       redirect: 'manual',
       body: new URLSearchParams({
         csrf: katyaCsrf,

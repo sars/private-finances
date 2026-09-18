@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Switch an already verified root-owned release. Caller must verify schema compatibility."""
-import base64
 import fcntl
 import json
 import os
@@ -25,11 +24,12 @@ def switch(target):
     staged.replace('/opt/private-finances/current')
 
 
-def ready(sha, password):
-    auth = 'Basic ' + base64.b64encode(('rodion:' + password).encode()).decode()
+def ready(sha):
+    # Readiness carries no household data and the service listens on loopback
+    # only, so it answers without a session. A deploy has no session to hold.
     for attempt in range(30):
         try:
-            req = urllib.request.Request('http://127.0.0.1:3300/health/ready', headers={'Authorization': auth})
+            req = urllib.request.Request('http://127.0.0.1:3300/health/ready')
             with urllib.request.urlopen(req, timeout=2) as response:
                 if json.load(response).get('release') == sha:
                     return
@@ -71,12 +71,12 @@ def main():
             staged_env.replace(env_path)
             switch(release)
             command('systemctl', 'restart', 'private-finances.service')
-            ready(sha, values['RODION_PASSWORD'])
+            ready(sha)
         except Exception:
             env_path.write_text(previous_env)
             switch(current)
             command('systemctl', 'restart', 'private-finances.service')
-            ready(previous_sha, values['RODION_PASSWORD'])
+            ready(previous_sha)
             raise RuntimeError('deployment_failed_previous_release_restored') from None
         print(json.dumps({'event': 'deployment_succeeded', 'release': sha, 'previousRelease': previous_sha}))
 

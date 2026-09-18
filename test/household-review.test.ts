@@ -7,6 +7,7 @@ import { Categories } from '../src/categories.js';
 import { Refunds } from '../src/refunds.js';
 import { TelegramClarifications } from '../src/telegram.js';
 import { web } from '../src/web.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 
 /**
  * The household is the unit the totals describe, so either member may read and
@@ -79,15 +80,15 @@ test("either member decides the other's payment, and the record says who did", a
     mode: 'postgres' as const,
     release: 'test',
     telegram,
-    passwords: {
-      rodion: 'synthetic-rodion-password',
-      katya: 'synthetic-katya-password',
-    },
   };
   const server = web(repo, config, () => {});
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   config.port = (server.address() as { port: number }).port;
+  const cookies: Record<'rodion' | 'katya', string> = {
+    rodion: '',
+    katya: '',
+  };
   const request = (
     path: string,
     actor: 'rodion' | 'katya' = 'rodion',
@@ -97,9 +98,7 @@ test("either member decides the other's payment, and the record says who did", a
       redirect: 'manual',
       method: body ? 'POST' : 'GET',
       headers: {
-        authorization:
-          'Basic ' +
-          Buffer.from(actor + ':' + config.passwords[actor]).toString('base64'),
+        cookie: cookies[actor],
         ...(body
           ? { 'content-type': 'application/x-www-form-urlencoded' }
           : {}),
@@ -119,6 +118,9 @@ test("either member decides the other's payment, and the record says who did", a
   try {
     // Nothing here is open to an unauthenticated caller.
     assert.equal((await fetch(base + '/api/review?detailOnly=1')).status, 401);
+    await seedTestOwners(db);
+    cookies.rodion = await signInAs(base, 'rodion');
+    cookies.katya = await signInAs(base, 'katya');
     const csrf = (await (await request('/api/bootstrap')).json()).csrf;
 
     // Reading katya's payment as rodion.

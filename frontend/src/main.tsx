@@ -8,7 +8,13 @@ import {
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { queryClient, useSession, invalidateFinancialData } from './lib/query';
+import {
+  queryClient,
+  useSession,
+  invalidateFinancialData,
+  signOut,
+  NotSignedIn,
+} from './lib/query';
 import { isAppPath, stringSearch } from './lib/navigation-state';
 import {
   DisplayCurrencyProvider,
@@ -16,7 +22,7 @@ import {
 } from './lib/display-currency';
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { CircleHelp, Monitor, Moon, Sun } from 'lucide-react';
+import { CircleHelp, LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   SidebarInset,
@@ -26,6 +32,7 @@ import {
 import { AppSidebar } from '@/components/shell/app-sidebar';
 import { useReviewCount } from './lib/payments';
 import { TabBar } from '@/components/shell/tab-bar';
+import SignIn from './SignIn';
 import './index.css';
 
 const Cash = lazy(() => import('./Cash'));
@@ -79,7 +86,7 @@ function App() {
       return 'system';
     }
   });
-  const { data: identity } = useSession();
+  const { data: identity, error: sessionError } = useSession();
   const router = useRouter();
 
   // Every internal navigation goes through here: the sidebar's plain anchors,
@@ -168,7 +175,8 @@ function App() {
         leftAt = Date.now();
         return;
       }
-      if (leftAt && Date.now() - leftAt > 60_000) void invalidateFinancialData();
+      if (leftAt && Date.now() - leftAt > 60_000)
+        void invalidateFinancialData();
       leftAt = 0;
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -180,6 +188,12 @@ function App() {
   // screens are listed.
   const reviewCount = useReviewCount(identity?.actor);
   const counts = { '/review': reviewCount.data };
+  // The server answers /api/bootstrap with 401 when the session has expired or
+  // was never opened. That is the only thing standing between the shell and
+  // the workspace, so the sign-in screen replaces the workspace in place and
+  // the member returns to the page they were already on. Any other failure is
+  // the workspace's own to report.
+  if (sessionError instanceof NotSignedIn) return <SignIn />;
   return (
     <SidebarProvider>
       <a
@@ -208,6 +222,20 @@ function App() {
                     : 'Private workspace'}
                 </div>
               </div>
+              {/* Demo signs itself in and has nothing to sign out of. */}
+              {identity && identity.mode !== 'demo' && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Sign out"
+                  title="Sign out"
+                  className="ml-auto"
+                  onClick={() => void signOut(identity.csrf)}
+                >
+                  <LogOut className="size-4" />
+                </Button>
+              )}
             </div>
           </div>
         }
