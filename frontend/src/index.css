@@ -220,6 +220,10 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
   body {
     @apply m-0 bg-background font-sans text-foreground antialiased;
   }
