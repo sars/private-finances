@@ -151,7 +151,11 @@ the file keeps the quotes and fails authentication.
 
 The spreadsheet's own rates — units per USD on each snapshot date — are
 imported as prices with the source `spreadsheet`, so the history is valued
-exactly as the spreadsheet valued it. Dates after the import use the daily
+exactly as the spreadsheet valued it. Verified on September 18, 2026 by
+recomputing every date's total from the imported document with the same
+valuation code: on each of the eleven dates where the workbook carries its
+own total, the two agree to within two dollars, which is the workbook's own
+rounding of each row to whole dollars. Dates after the import use the daily
 bank quotes and whatever prices are recorded.
 
 ## Feeds: what fills itself

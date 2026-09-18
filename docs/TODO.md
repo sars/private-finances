@@ -57,11 +57,19 @@ See [assets](assets.md) for the model and the plan.
       and wallets filled, the broker's cash from the base-currency summary
       (b22a37a), the exchange per coin and the wallet by extended key
       (9d5d882). Only LHV awaits its first stated balance.
+- [ ] **PF-020 / AS-6: movements between holdings.** When a snapshot is made,
+      pair equal-and-opposite changes between two holdings (money that left one
+      and arrived in another) and let the owner confirm them as a transfer, so a
+      move is never read as a loss and a gain; show the unexplained remainder per
+      holding. Wanted, later (owner, September 18, 2026).
+- [ ] **Monthly income estimate.** A trailing average of salary and dividend
+      inflows from the transactions system, shown as a separate figure. Wanted,
+      later (owner, September 18, 2026).
 - [ ] **PF-020 / AS-5: the company sheet feed.** A holding fed from a small
       Google Sheet the company file copies a few labelled cells into on a timer,
       read through the Sheets API as a service account the sheet is shared with;
-      first use: the FOP's personal USD share. Awaits the sheet's ID and the
-      service-account key on the server.
+      first use: the FOP's personal USD share. Parked by the owner on
+      September 18, 2026; the FOP USD share is typed by hand for now.
 
 ## 2. Finish smooth frontend behavior
 
