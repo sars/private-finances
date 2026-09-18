@@ -9,12 +9,12 @@ import {
   type FormEvent,
 } from 'react';
 import {
+  ChevronRight,
   CircleAlert,
   Clock3,
   Landmark,
   Pencil,
   Plus,
-  RefreshCw,
   Gem,
 } from 'lucide-react';
 import { apiGet, queryClient, useSession } from './lib/query';
@@ -222,6 +222,10 @@ export default function Assets() {
   const isMobile = useIsMobile();
   const [at, setAt] = useUrlField('at', '');
   const [showRetired, setShowRetired] = useState(false);
+  const [grouped, setGrouped] = useState(true);
+  const [showZero, setShowZero] = useState(false);
+  const [onlyManual, setOnlyManual] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Holding | null | undefined>();
   const [filling, setFilling] = useState(false);
   const [notice, setNotice] = useState('');
@@ -242,9 +246,48 @@ export default function Assets() {
       .reverse()
       .map((day) => ({ value: day, label: day }));
   }, [report?.dates, at]);
+  const isZero = (row: Row) =>
+    row.quantity !== null && /^-?0(?:\.0+)?$/.test(row.quantity);
   const rows = (report?.rows ?? []).filter(
-    (row) => showRetired || !row.holding.archived,
+    (row) =>
+      (showRetired || !row.holding.archived) &&
+      (showZero || !isZero(row)) &&
+      (!onlyManual || !row.holding.feed),
   );
+  // Rows by their group, with each group's value in the display currency;
+  // a holding without a group sits under its kind.
+  const groups = useMemo(() => {
+    const byKey = new Map<string, { label: string; rows: Row[] }>();
+    for (const row of rows) {
+      const label = row.holding.group ?? kinds[row.holding.kind] ?? 'Other';
+      const key = row.holding.group ? `g:${label}` : `k:${label}`;
+      const entry = byKey.get(key) ?? { label, rows: [] };
+      entry.rows.push(row);
+      byKey.set(key, entry);
+    }
+    return [...byKey.entries()].map(([key, entry]) => {
+      let sum = 0n;
+      let missing = 0;
+      for (const row of entry.rows) {
+        if (row.valueMinor !== null) sum += BigInt(row.valueMinor);
+        else if (row.quantity !== null && row.quantity !== '0') missing += 1;
+      }
+      return {
+        key,
+        label: entry.label,
+        rows: entry.rows,
+        totalMinor: sum.toString(),
+        missing,
+      };
+    });
+  }, [rows]);
+  const toggleGroup = (key: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const chart = useMemo(
     () =>
       (report?.series ?? []).map((point) => ({
@@ -291,15 +334,6 @@ export default function Assets() {
         description="What the household owns, counted on a date and valued in the display currency. A figure not counted again is carried from the last time it was."
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={query.isFetching}
-              onClick={() => void refresh()}
-            >
-              <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
-              Refresh
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -384,6 +418,27 @@ export default function Assets() {
                 : ''}
             </span>
             <label className="ml-auto flex items-center gap-2">
+              <Checkbox
+                checked={onlyManual}
+                onCheckedChange={(checked) => setOnlyManual(Boolean(checked))}
+              />
+              Only what I type
+            </label>
+            <label className="flex items-center gap-2">
+              <Checkbox
+                checked={showZero}
+                onCheckedChange={(checked) => setShowZero(Boolean(checked))}
+              />
+              Show zero holdings
+            </label>
+            <label className="flex items-center gap-2">
+              <Checkbox
+                checked={grouped}
+                onCheckedChange={(checked) => setGrouped(Boolean(checked))}
+              />
+              Group rows
+            </label>
+            <label className="flex items-center gap-2">
               <Checkbox
                 checked={showRetired}
                 onCheckedChange={(checked) => setShowRetired(Boolean(checked))}
@@ -496,15 +551,43 @@ export default function Assets() {
                 />
               ) : isMobile ? (
                 <ul className="divide-y">
-                  {rows.map((row) => (
-                    <li key={row.holding.id} className="px-4 py-3">
-                      <HoldingCard
-                        row={row}
-                        asOf={selected}
-                        display={display}
-                        csrf={session?.csrf}
-                        onEdit={() => setEditing(row.holding)}
-                      />
+                  {(grouped
+                    ? groups
+                    : [
+                        {
+                          key: 'all',
+                          label: '',
+                          rows,
+                          totalMinor: '0',
+                          missing: 0,
+                        },
+                      ]
+                  ).map((group) => (
+                    <li key={group.key}>
+                      {grouped && (
+                        <GroupHeader
+                          group={group}
+                          display={display}
+                          open={!collapsed.has(group.key)}
+                          onToggle={() => toggleGroup(group.key)}
+                          compact
+                        />
+                      )}
+                      {(!grouped || !collapsed.has(group.key)) && (
+                        <ul className="divide-y">
+                          {group.rows.map((row) => (
+                            <li key={row.holding.id} className="px-4 py-3">
+                              <HoldingCard
+                                row={row}
+                                asOf={selected}
+                                display={display}
+                                csrf={session?.csrf}
+                                onEdit={() => setEditing(row.holding)}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -520,16 +603,48 @@ export default function Assets() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rows.map((row) => (
-                      <HoldingTableRow
-                        key={row.holding.id}
-                        row={row}
-                        asOf={selected}
-                        display={display}
-                        csrf={session?.csrf}
-                        onEdit={() => setEditing(row.holding)}
-                      />
-                    ))}
+                    {(grouped
+                      ? groups
+                      : [
+                          {
+                            key: 'all',
+                            label: '',
+                            rows,
+                            totalMinor: '0',
+                            missing: 0,
+                          },
+                        ]
+                    ).flatMap((group) => [
+                      ...(grouped
+                        ? [
+                            <TableRow
+                              key={`${group.key}:head`}
+                              className="bg-muted/40 hover:bg-muted/40"
+                            >
+                              <TableCell colSpan={5} className="py-2">
+                                <GroupHeader
+                                  group={group}
+                                  display={display}
+                                  open={!collapsed.has(group.key)}
+                                  onToggle={() => toggleGroup(group.key)}
+                                />
+                              </TableCell>
+                            </TableRow>,
+                          ]
+                        : []),
+                      ...(!grouped || !collapsed.has(group.key)
+                        ? group.rows.map((row) => (
+                            <HoldingTableRow
+                              key={row.holding.id}
+                              row={row}
+                              asOf={selected}
+                              display={display}
+                              csrf={session?.csrf}
+                              onEdit={() => setEditing(row.holding)}
+                            />
+                          ))
+                        : []),
+                    ])}
                   </TableBody>
                 </Table>
               )}
@@ -546,6 +661,48 @@ export default function Assets() {
         />
       )}
     </div>
+  );
+}
+
+/** One line per group: its name, how many holdings, their value together. */
+function GroupHeader({
+  group,
+  display,
+  open,
+  onToggle,
+  compact,
+}: {
+  group: { label: string; rows: Row[]; totalMinor: string; missing: number };
+  display: string;
+  open: boolean;
+  onToggle: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={`flex w-full items-center justify-between gap-3 text-left ${compact ? 'bg-muted/40 px-4 py-2' : ''}`}
+    >
+      <span className="flex items-center gap-2 text-sm font-medium">
+        <ChevronRight
+          className={`size-4 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        {group.label}
+        <span className="text-xs font-normal text-muted-foreground">
+          {group.rows.length}
+        </span>
+      </span>
+      <span className="flex items-center gap-2 text-sm font-medium tabular-nums">
+        {group.missing > 0 && (
+          <span className="text-xs font-normal text-warning">
+            {group.missing} without a price
+          </span>
+        )}
+        <Money minor={group.totalMinor} currency={display} />
+      </span>
+    </button>
   );
 }
 
@@ -713,6 +870,26 @@ function AmountEntry({
   );
 }
 
+/** A figure a feed writes: shown, not typed; the feed is named beside it. */
+function FedAmount({ row }: { row: Row }) {
+  return (
+    <div className="space-y-0.5 text-sm tabular-nums">
+      <div>
+        {row.quantity ?? <span className="text-muted-foreground">—</span>}{' '}
+        <span className="text-xs text-muted-foreground">
+          {row.holding.denomination}
+        </span>
+      </div>
+      {row.price && !isCurrency(row.holding.denomination) && (
+        <div className="text-xs text-muted-foreground">
+          × {row.price.usdPerUnit} USD
+          {row.price.approximate ? ` from ${row.price.asOf}` : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ValueCell({ row, display }: { row: Row; display: string }) {
   if (row.quantity === null)
     return <span className="text-xs text-muted-foreground">Not counted</span>;
@@ -764,7 +941,11 @@ function HoldingTableRow({
         <HoldingName holding={row.holding} />
       </TableCell>
       <TableCell className="align-top">
-        <AmountEntry row={row} asOf={asOf} csrf={csrf} />
+        {row.holding.feed ? (
+          <FedAmount row={row} />
+        ) : (
+          <AmountEntry row={row} asOf={asOf} csrf={csrf} />
+        )}
       </TableCell>
       <TableCell className="text-right align-top tabular-nums">
         <ValueCell row={row} display={display} />
@@ -817,7 +998,11 @@ function HoldingCard({
           </Button>
         </div>
       </div>
-      <AmountEntry row={row} asOf={asOf} csrf={csrf} compact />
+      {row.holding.feed ? (
+        <FedAmount row={row} />
+      ) : (
+        <AmountEntry row={row} asOf={asOf} csrf={csrf} compact />
+      )}
       <CountedCell row={row} />
     </div>
   );

@@ -58,8 +58,14 @@ into the row. Enter saves the figure for the chosen date; a currency picker
 beside a money figure converts a number typed in another currency; a holding
 with a symbol shows a price field for that day. The date picker moves between
 snapshots, and **Snapshot today** starts a new one on today's Riga date,
-showing every quantity as carried until it is counted again. Retired holdings
-are hidden unless asked for. Either member sees and records the whole
+showing every quantity as carried until it is counted again. Rows are grouped
+by the holding's group — a holding without one sits under its kind — with a
+line per group giving its count and its value together, collapsible, and a
+switch for the flat list. A holding whose quantity is zero is hidden unless
+asked for, and so are retired holdings; **Only what I type** hides every
+holding a feed fills, which is the view for the monthly round of manual
+figures. A fed holding's figure is shown, not typed — the feed owns it — while
+its settings stay editable. Either member sees and records the whole
 household's holdings; there is no per-member scope here, only an optional
 owner label on a holding.
 
@@ -122,12 +128,12 @@ bank quotes and whatever prices are recorded.
 A holding may name the **feed** that fills it and a **reference** the feed
 looks it up by; the edit dialog offers both. Four feeds exist:
 
-| Feed                | Reference                                                  | What is written                                                                                                                                                                                                                       |
-| ------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bank balance        | an account from the Balances page (`source\|accountId`)    | the balance the bank last stated in the holding's currency, less the agreed overdraft the bank counts inside it; a balance older than three days or later than the day is skipped, by reason                                          |
-| Interactive Brokers | a symbol, or `CASH` for the cash in the holding's currency | the summary position (zero once it is gone from the statement) or the ending cash; each position's mark price in USD is stored as that day's price; a position with no holding yet gets one, shaped like the existing broker holdings |
-| Binance             | `TOTAL` on a USD holding, or one asset symbol              | the dollar value of every Spot balance at the exchange's own last prices, or that asset's quantity; the prices are stored                                                                                                             |
-| Wallet address      | a public BTC or ETH address                                | the address's balance from a public ledger — mempool.space for bitcoin, a public JSON-RPC node for ethereum — with the coin's price from the exchange's open ticker                                                                   |
+| Feed                | Reference                                                                                       | What is written                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bank balance        | an account from the Balances page (`source\|accountId`)                                         | the balance the bank last stated in the holding's currency, less the agreed overdraft the bank counts inside it; a balance older than three days or later than the day is skipped, by reason                                                                                                                                                                                                                                                                                                             |
+| Interactive Brokers | a symbol, or `CASH` for the cash in the holding's currency                                      | the summary position (zero once it is gone from the statement) or the ending cash; each position's mark price in USD is stored as that day's price; a position with no holding yet gets one, shaped like the existing broker holdings                                                                                                                                                                                                                                                                    |
+| Binance             | one asset symbol, or `TOTAL` on a USD holding                                                   | every Spot coin worth at least a dollar gets a holding of its own under the exchange's group, created when new and zeroed when gone, priced at the exchange's own last prices; dust below a dollar is left out. A `TOTAL` holding takes the dollar value of everything, but is skipped as superseded once per-coin holdings exist, so nothing is counted twice                                                                                                                                           |
+| Wallet address      | a public BTC or ETH address, or a bitcoin wallet's extended public key (`zpub`, `ypub`, `xpub`) | the address's balance from a public ledger — mempool.space for bitcoin, a public JSON-RPC node for ethereum — with the coin's price from the exchange's open ticker. An extended key is the whole wallet: its receive and change addresses are derived on the server (`src/bitcoin-wallet.ts`, BIP32 over secp256k1 with BIP44/49/84 encoding, tested against the standards' vectors), looked up one by one and summed, stopping after twenty unused addresses in a row; the key never leaves the server |
 
 Every feed is read-only, talks to one fixed host with a timeout, a size limit
 and no redirects, and reduces failure to a code; one feed failing never stops
