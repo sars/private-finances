@@ -346,10 +346,9 @@ async function main(): Promise<void> {
         nextReceiptMatchCheck = Date.now() + 60000;
       }
       await bot.recoverExpired();
-      await credentialReminders.enqueue(
-        process.env.OPENAI_API_KEY_EXPIRES_ON ??
-          process.env.OPENAI_API_KEY_EXPIRES_AT,
-      );
+      // Every credential this application watches expire: the OpenAI key and
+      // the IBKR Flex token, each on its own 5/2/1-day series.
+      await credentialReminders.enqueueConfigured(process.env);
       // A bank approval lasts days, not months, and when it lapses the imports
       // stop without a word anywhere else.
       await credentialReminders.enqueueBankConsents();
