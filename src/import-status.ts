@@ -42,8 +42,8 @@ export type ImportConnection = {
   bank: string | null;
   /** The bank as the owner knows it. */
   label: string;
-  /** A per-owner connection from before banks were tracked separately. */
-  legacy: boolean;
+  /** A key this build cannot name a bank for; shown as the key says it. */
+  unrecognised: boolean;
   state: string;
   lastSuccessAt: string | null;
   errorCode: string | null;
@@ -85,7 +85,7 @@ export function describeConnection(connection: string): {
   owner: string;
   bank: string | null;
   label: string;
-  legacy: boolean;
+  unrecognised: boolean;
 } {
   const [provider = '', owner = '', bank] = connection.split(':');
   if (provider === 'monobank')
@@ -94,17 +94,28 @@ export function describeConnection(connection: string): {
       owner,
       bank: 'monobank',
       label: 'Monobank',
-      legacy: false,
+      unrecognised: false,
     };
   if (provider === 'enablebanking') {
     if (isBankSlug(bank))
-      return { provider, owner, bank, label: bankLabel(bank), legacy: false };
+      return {
+        provider,
+        owner,
+        bank,
+        label: bankLabel(bank),
+        unrecognised: false,
+      };
+    // A key this build has no bank for. The importer only writes a bank it
+    // knows, so this is a release older than the key it is reading — a bank
+    // added by a newer release and seen again after a rollback. The key's own
+    // slug is what an operator needs to recognise it, and it is still a bank
+    // name rather than the aggregator's, which the owner must never be shown.
     return {
       provider,
       owner,
       bank: null,
-      label: 'Combined bank status',
-      legacy: true,
+      label: bank || 'Unknown bank',
+      unrecognised: true,
     };
   }
   return {
@@ -112,7 +123,7 @@ export function describeConnection(connection: string): {
     owner,
     bank: null,
     label: connection,
-    legacy: true,
+    unrecognised: true,
   };
 }
 

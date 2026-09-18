@@ -307,9 +307,6 @@ export default function Operations() {
                       : NaN;
                     const fresh =
                       Number.isFinite(last) && Date.now() - last <= 86400000;
-                    const legacy = /^enablebanking:(rodion|katya)$/.test(
-                      connection.connection,
-                    );
                     return (
                       <Card
                         key={connection.connection}
@@ -331,11 +328,6 @@ export default function Operations() {
                               {connection.state}
                             </Badge>
                           </div>
-                          {legacy && (
-                            <p className="text-xs text-muted-foreground">
-                              Legacy combined status
-                            </p>
-                          )}
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <p className="text-sm">

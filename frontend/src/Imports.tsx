@@ -154,7 +154,7 @@ function ConnectionCard({
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 {ownerName(c.owner)}
-                {c.legacy ? ' · before banks were tracked separately' : ''}
+                {c.unrecognised ? ' · this release cannot name this bank' : ''}
               </p>
             </div>
           </div>

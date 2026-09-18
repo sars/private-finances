@@ -1021,7 +1021,7 @@ export function web(
                       : null;
                     const fresh =
                       last && Date.now() - last.getTime() <= 86400000;
-                    return `<section class="total"><h2>${escape(String(c.connection).replaceAll(':', ' · ') + (/^enablebanking:(rodion|katya)$/.test(String(c.connection)) ? ' (legacy combined status)' : ''))}</h2><p>${escape(c.state)} · ${last ? (fresh ? 'Updated within 24 hours' : 'Last complete run is over 24 hours old') : 'No complete run yet'}</p>${last ? `<p>Last complete run: ${escape(last.toISOString())}</p>` : ''}${c.error_code ? `<p class="warning">${escape(advice[String(c.error_code)] ?? 'Import needs review before retrying.')}</p>` : ''}</section>`;
+                    return `<section class="total"><h2>${escape(String(c.connection).replaceAll(':', ' · '))}</h2><p>${escape(c.state)} · ${last ? (fresh ? 'Updated within 24 hours' : 'Last complete run is over 24 hours old') : 'No complete run yet'}</p>${last ? `<p>Last complete run: ${escape(last.toISOString())}</p>` : ''}${c.error_code ? `<p class="warning">${escape(advice[String(c.error_code)] ?? 'Import needs review before retrying.')}</p>` : ''}</section>`;
                   })
                   .join('')
               : '<p>No bank import has run yet. Live imports are being configured.</p>'

@@ -13,19 +13,29 @@ test('a connection key is named as the owner knows the bank, never as the provid
     owner: 'katya',
     bank: 'monobank',
     label: 'Monobank',
-    legacy: false,
+    unrecognised: false,
   });
   assert.deepEqual(describeConnection('enablebanking:rodion:lhv'), {
     provider: 'enablebanking',
     owner: 'rodion',
     bank: 'lhv',
     label: 'LHV',
-    legacy: false,
+    unrecognised: false,
   });
-  const legacy = describeConnection('enablebanking:rodion');
-  assert.equal(legacy.legacy, true);
-  assert.equal(legacy.bank, null);
-  assert.doesNotMatch(legacy.label, /enable/i);
+  // A key written by a newer release and read back after a rollback. The slug
+  // is all this build knows, and it says so rather than guessing a bank.
+  const rolledBack = describeConnection('enablebanking:rodion:monzo');
+  assert.equal(rolledBack.unrecognised, true);
+  assert.equal(rolledBack.bank, null);
+  assert.equal(rolledBack.label, 'monzo');
+  assert.doesNotMatch(rolledBack.label, /enable/i);
+  // A per-owner key names no bank at all. Retired from the database, but the
+  // reading must still hold: the owner is never shown the aggregator's name.
+  const perOwner = describeConnection('enablebanking:rodion');
+  assert.equal(perOwner.unrecognised, true);
+  assert.equal(perOwner.bank, null);
+  assert.equal(perOwner.label, 'Unknown bank');
+  assert.doesNotMatch(perOwner.label, /enable/i);
 });
 
 test('the imports view is a reading of what the importer recorded', async () => {

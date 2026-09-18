@@ -893,6 +893,18 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (56)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=57'))
+        .rows.length
+    ) {
+      // The per-owner Enable Banking connection stopped importing when banks
+      // were scheduled separately, but the dashboard still listed it as a
+      // connection of its own — a card the owner never made, named after the
+      // scheme it predates. Its import windows move to the bank that owns
+      // those accounts today and the empty row goes.
+      await retirePerOwnerBankConnections(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (57)');
+    }
   });
 }
 
@@ -947,6 +959,52 @@ export async function nameTheBankOnAccounts(tx: Executor): Promise<number> {
      RETURNING a.label`,
   );
   return renamed.rows.length;
+}
+
+/**
+ * Before banks were tracked separately, every Enable Banking import of an owner
+ * leased one key: `enablebanking:<owner>`. Per-bank scheduling replaced it with
+ * `enablebanking:<owner>:<bank>`, and the old row was left behind so the import
+ * windows hanging off it kept their parent. It has recorded nothing since, but
+ * it still reaches the screen as a connection the owner never made.
+ *
+ * A window already says which account and currency it covered; only its
+ * connection is stale. The bank is recovered the way `nameTheBankOnAccounts`
+ * already recovers it — from a per-bank window for the same account — so the
+ * coverage moves to the connection that owns those accounts today rather than
+ * being thrown away. An account that never imported under a per-bank key has no
+ * bank to recover and is left alone.
+ *
+ * The delete is therefore conditional: a per-owner row still holding windows
+ * keeps its children and stays on screen, which is the honest outcome. Both
+ * statements are idempotent, so a re-run changes nothing.
+ */
+export async function retirePerOwnerBankConnections(
+  tx: Executor,
+): Promise<{ moved: number; removed: number }> {
+  const moved = await tx.query(
+    `UPDATE bank_import_windows w
+     SET connection = 'enablebanking:' || w.owner || ':' || bank.slug
+     FROM (SELECT account_id, min(split_part(connection, ':', 3)) AS slug
+             FROM bank_import_windows
+            WHERE connection LIKE 'enablebanking:%:%'
+            GROUP BY account_id
+           -- One account belongs to one bank. Anything else is a contradiction
+           -- in the data, and guessing which half is right would be worse than
+           -- leaving the windows where they are.
+           HAVING count(DISTINCT split_part(connection, ':', 3)) = 1) bank
+     WHERE bank.account_id = w.account_id
+       AND w.connection ~ '^enablebanking:[^:]+$'
+     RETURNING w.id`,
+  );
+  const removed = await tx.query(
+    `DELETE FROM bank_sync_runs s
+      WHERE s.connection ~ '^enablebanking:[^:]+$'
+        AND NOT EXISTS (SELECT 1 FROM bank_import_windows w
+                         WHERE w.connection = s.connection)
+     RETURNING s.connection`,
+  );
+  return { moved: moved.rows.length, removed: removed.rows.length };
 }
 
 // Snapshot of a freshly migrated throwaway database, built once per process.

@@ -61,11 +61,14 @@ argument (or ENABLEBANKING_BANK for a manual pilot). Scheduled instances must be
 `enablebanking-<owner>-<slug>`;
 Monobank remains `monobank-<owner>`. Each instance has its own enable marker,
 retry cooldown and failure latch. Legacy bank-unspecified Enable Banking
-instances are rejected; do not enable them. Existing provider:owner history stays
-in the database as historical coverage; new status uses provider:owner:bank.
-No schema migration or transaction/account identity change is needed. Before
+instances are rejected; do not enable them. Status uses provider:owner:bank; the
+provider:owner history it replaced was moved onto the bank that owns those
+accounts by migration 57, and the empty per-owner row removed, so no connection
+on the dashboard predates per-bank scheduling. Before
 switching releases, confirm no old CLI/scheduler process is running: old and new
-Enable Banking lease keys differ. The dashboard labels old combined status as legacy.
+Enable Banking lease keys differ. A connection this release has no bank slug for
+is shown by its slug and marked unrecognised — expected only after a rollback
+past the release that added that bank.
 The command imports one explicit complete window; it does not schedule or retry.
 Never run concurrent CLI processes using the same bank token against different databases.
 
