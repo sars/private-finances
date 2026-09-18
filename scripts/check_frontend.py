@@ -26,6 +26,11 @@ PALETTE = re.compile(
     r"orange|lime|teal|cyan|sky|indigo|violet|purple|fuchsia|pink|rose)-\d+\b"
 )
 RECHARTS_IMPORT = re.compile(r"""from\s+['"]recharts""")
+# A dialog and a bottom sheet are both fixed and neither scrolls the page
+# behind it, so one taller than the screen cannot be reached at either end --
+# the Add holding form was unusable on a phone for exactly this. The primitives
+# come from the registry and are never edited, so the bound belongs on the call.
+OVERLAY = re.compile(r"<(?:Dialog|Sheet)Content\b[^>]*>", re.S)
 
 
 def source_rules() -> list[str]:
@@ -48,6 +53,16 @@ def source_rules() -> list[str]:
             errors.append(f"{rel}: pick from a list with Choice (components/finance), not a raw Select")
         if "<table" in text and (SRC / "components" / "ui") not in path.parents:
             errors.append(f"{rel}: raw <table>; use the Table primitive or card rows")
+        if (SRC / "components" / "ui") not in path.parents:
+            for opening in OVERLAY.finditer(text):
+                tag = opening.group(0)
+                if "overflow-y-auto" in tag and "max-h-" in tag:
+                    continue
+                line_number = text.count("\n", 0, opening.start()) + 1
+                errors.append(
+                    f"{rel}:{line_number}: dialog and sheet content needs max-h-[90dvh] overflow-y-auto; "
+                    "it is fixed, so content taller than the screen cannot be scrolled to"
+                )
         # Base UI's Button renders type="button", so a form's Button submits
         # nothing unless it says type="submit". The save-explanation button
         # once did nothing at all for exactly this reason.
