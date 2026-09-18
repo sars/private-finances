@@ -137,6 +137,14 @@ it. A successful upload whose status row could not be written shows as a backup
 that is ageing — erring towards alarm rather than towards false comfort — and
 logs `backup_status_unrecorded`.
 
+A backup that has stopped also reaches the Home page's list of what is broken,
+as a **warning** rather than a critical: nothing stops arriving when an
+off-server backup fails — no import is blocked and no figure goes missing — but
+the household's only protection against losing the server has gone, and the
+local snapshot would go with it. A backup that has never run is deliberately not
+listed there: that is configuration the owner has not finished, and Home reports
+faults rather than unbuilt things.
+
 The stored row holds a destination _label_ (`amazon-s3`), never the bucket URL:
 that row travels inside the very dump that gets uploaded, and the bucket address
 is private configuration. No financial content and no credentials reach the

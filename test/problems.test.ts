@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { memoryDatabase, migrate } from '../src/database.js';
 import { connectionLabel, systemProblems } from '../src/problems.js';
 import type { CredentialHealth } from '../src/credential-health.js';
+import { recordBackupRun } from '../src/backup-health.js';
 
 const NOW = new Date('2026-09-18T18:00:00.000Z');
 const hoursAgo = (n: number) =>
@@ -264,6 +265,62 @@ test('critical problems are listed before warnings, longest-standing first', asy
       problems.map((p) => p.id),
       ['bank:enablebanking:rodion:lhv', 'bank:monobank:katya', 'fx:stale'],
     );
+  } finally {
+    await db.close();
+  }
+});
+
+test('an off-server backup that has never run is not reported as broken', async () => {
+  const db = await healthy();
+  try {
+    // Configuration the owner has not finished yet. System health states it
+    // plainly as "Never"; this page reports faults, not unbuilt things.
+    assert.deepEqual((await systemProblems(db, { now: NOW })).problems, []);
+  } finally {
+    await db.close();
+  }
+});
+
+test('an off-server backup that stops is a warning, not a critical', async () => {
+  const db = await healthy();
+  try {
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'succeeded',
+      startedAt: new Date(hoursAgo(10)),
+      finishedAt: new Date(hoursAgo(10)),
+      sizeBytes: 4096,
+    });
+    assert.deepEqual((await systemProblems(db, { now: NOW })).problems, []);
+
+    await db.query('DELETE FROM backup_runs');
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'succeeded',
+      startedAt: new Date(hoursAgo(40)),
+      finishedAt: new Date(hoursAgo(40)),
+      sizeBytes: 4096,
+    });
+    const late = (await systemProblems(db, { now: NOW })).problems;
+    assert.deepEqual(ids(late), ['backup:off-server']);
+    // Nothing has stopped arriving, so it is not the same shade as a bank that
+    // has gone silent; what has gone is the protection.
+    assert.equal(late[0]!.severity, 'warning');
+    assert.match(late[0]!.title, /No off-server backup for 40 hours/);
+    assert.equal(late[0]!.href, '/ops');
+
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'failed',
+      stage: 'upload',
+      startedAt: new Date(hoursAgo(1)),
+      finishedAt: new Date(hoursAgo(1)),
+    });
+    const failing = (await systemProblems(db, { now: NOW })).problems;
+    assert.deepEqual(ids(failing), ['backup:off-server']);
+    assert.equal(failing[0]!.title, 'Off-server backup failed');
+    assert.match(failing[0]!.detail, /upload stage failed/);
+    assert.equal(failing[0]!.since, new Date(hoursAgo(1)).toISOString());
   } finally {
     await db.close();
   }

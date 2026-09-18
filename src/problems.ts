@@ -30,6 +30,7 @@
  */
 import type { Executor } from './database.js';
 import type { CredentialHealth } from './credential-health.js';
+import { backupHealth, type BackupHealth } from './backup-health.js';
 import {
   bankLabel,
   bankSlug,
@@ -351,6 +352,41 @@ function backupProblems(lastAt: string | null, now: Date): Problem[] {
   ];
 }
 
+/**
+ * The copy that is not on this machine.
+ *
+ * Separate from the local snapshot above, and deliberately a warning rather
+ * than a critical: nothing stops when an off-server backup fails — no import
+ * is blocked and no figure goes missing — but the household's only protection
+ * against losing the server has quietly gone, and the local snapshot would go
+ * with it. Nothing is said while no backup has ever run: that is configuration
+ * the owner has not finished, which the System health page states plainly, and
+ * a fault this page reports is something that broke rather than something not
+ * yet built.
+ */
+function offServerBackupProblems(backup: BackupHealth): Problem[] {
+  if (backup.state === 'never_run' || backup.state === 'healthy') return [];
+  const since = backup.lastAttemptAt;
+  return [
+    {
+      id: 'backup:off-server',
+      severity: 'warning',
+      title:
+        backup.state === 'failing'
+          ? backup.consecutiveFailures > 1
+            ? `Off-server backup has failed ${backup.consecutiveFailures} times`
+            : 'Off-server backup failed'
+          : `No off-server backup for ${backup.hoursSinceSuccess === null ? 'over a day' : `${Math.round(backup.hoursSinceSuccess)} hours`}`,
+      detail:
+        backup.state === 'failing'
+          ? `The ${backup.lastFailureStage === 'dump' ? 'database export' : 'upload'} stage failed. Until it succeeds, losing the server loses the data.`
+          : 'A backup is expected every day. Until one succeeds, losing the server loses the data.',
+      href: '/ops',
+      since,
+    },
+  ];
+}
+
 /** Critical first, then longest-standing first within each level. */
 function ranked(problems: Problem[]): Problem[] {
   const weight = (p: Problem) => (p.severity === 'critical' ? 0 : 1);
@@ -366,13 +402,16 @@ export async function systemProblems(
   inputs: ProblemInputs = {},
 ): Promise<{ generatedAt: string; problems: Problem[] }> {
   const now = inputs.now ?? new Date();
-  const [banks, rates, classifier, telegram, feeds] = await Promise.all([
-    bankProblems(db, now),
-    rateProblems(db, now),
-    classifierProblems(db),
-    telegramProblems(db, now),
-    feedProblems(db),
-  ]);
+  const [banks, rates, classifier, telegram, feeds, backup] = await Promise.all(
+    [
+      bankProblems(db, now),
+      rateProblems(db, now),
+      classifierProblems(db),
+      telegramProblems(db, now),
+      feedProblems(db),
+      backupHealth(db, now),
+    ],
+  );
   return {
     generatedAt: now.toISOString(),
     problems: ranked([
@@ -387,6 +426,7 @@ export async function systemProblems(
       ...(inputs.lastBackupAt === undefined
         ? []
         : backupProblems(inputs.lastBackupAt, now)),
+      ...offServerBackupProblems(backup),
     ]),
   };
 }
