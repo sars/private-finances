@@ -24,6 +24,10 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
   );
   await writeFile(join(frontend, 'assets/app.css'), 'body { color: black; }');
   await writeFile(
+    join(frontend, 'manifest.webmanifest'),
+    '{"name":"Private Finances","start_url":"/"}',
+  );
+  await writeFile(
     join(frontend, 'assets/app-Abcd1234.js'),
     'export const version = 1;',
   );
@@ -158,7 +162,22 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
       assert.ok(csp.includes("script-src 'self';"));
       assert.ok(csp.includes("style-src 'self' 'unsafe-inline';"));
       assert.ok(csp.includes("connect-src 'self';"));
+      // default-src 'none' is the fallback for manifest-src too, so without
+      // this directive the browser refuses the installable app's manifest.
+      assert.ok(csp.includes("manifest-src 'self';"));
     }
+    // The manifest is fetched by the browser itself, not by the bundle: it
+    // needs its own route, its own type, and the credentials the link carries.
+    const manifest = await get('/manifest.webmanifest');
+    assert.equal(manifest.status, 200);
+    assert.equal(
+      manifest.headers.get('content-type'),
+      'application/manifest+json',
+    );
+    assert.equal((await fetch(base + '/manifest.webmanifest')).status, 401);
+    // The shell answers screen routes, never a literal /index.html; the worker
+    // must not precache a path the server does not serve.
+    assert.equal((await get('/index.html')).status, 404);
     const budgetResponse = await get('/api/llm-budget');
     assert.equal(budgetResponse.status, 200);
     const budget = await budgetResponse.json();

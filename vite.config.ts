@@ -8,12 +8,16 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // Installable on the phone. The worker precaches only the built shell and
-    // static files; nothing under /api is ever cached or served offline, so
-    // financial data stays out of browser storage, and navigations always go
-    // to the server, which serves the app for every screen route.
+    // Installable on the phone. The worker precaches the built static files
+    // only; nothing under /api is ever cached or served offline, so financial
+    // data stays out of browser storage, and navigations always go to the
+    // server, which serves the app for every screen route.
     VitePWA({
       registerType: 'autoUpdate',
+      // Every route is behind HTTP Basic authentication. Without this the
+      // browser fetches the manifest with credentials omitted, the server
+      // answers 401 and the install prompt never appears.
+      useCredentials: true,
       includeAssets: ['icon.svg', 'fonts/*.woff2'],
       manifest: {
         name: 'Private Finances',
@@ -35,8 +39,13 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // No navigation is ever served from the cache, so the shell is not
+        // precached either: html is left out of the patterns deliberately.
+        // The server answers screen routes with index.html but has no
+        // /index.html route of its own, so precaching it fails the whole
+        // install with bad-precaching-response.
         navigateFallback: null,
-        globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
+        globPatterns: ['**/*.{js,css,woff2,svg,png}'],
       },
     }),
   ],
