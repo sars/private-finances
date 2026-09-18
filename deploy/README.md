@@ -104,6 +104,17 @@ attempt leaves the previous release serving and the build directory in place for
 inspection. The rehearsal exists because the release rolled back on 13 September
 2026 carried a migration that had only ever run on an empty database.
 
+A failure after the pause restores the timers and the worker on its way out,
+under a `restoring the imports and the worker a failed step had paused` heading,
+and the release still exits with the status the failing step gave it. That was
+added on 18 September 2026, when the pause itself refused — an import was still
+running after the five minutes it waits — and left the imports and Telegram
+stopped until the next run happened to resume them. If even the restore cannot
+reach the host it says so loudly; start `private-finances-telegram.service` and
+the `private-finances-sync@*` timers by hand in that case.
+`bash deploy/test-resume.sh` proves all of this against a stubbed `ssh`, without
+touching the server; run it whenever `release.sh` changes.
+
 ## Latest release
 
 864c90d deployed 2026-09-14 with `bash deploy/release.sh 864c90d…`, replacing
