@@ -61,7 +61,11 @@ snapshots, and **Snapshot today** starts a new one on today's Riga date,
 showing every quantity as carried until it is counted again. Rows are grouped
 by the holding's group — a holding without one sits under its kind — with a
 line per group giving its count and its value together, collapsible, and a
-switch for the flat list. Retired holdings are hidden unless asked for. Either member sees and records the whole
+switch for the flat list. A holding whose quantity is zero is hidden unless
+asked for, and so are retired holdings; **Only what I type** hides every
+holding a feed fills, which is the view for the monthly round of manual
+figures. A fed holding's figure is shown, not typed — the feed owns it — while
+its settings stay editable. Either member sees and records the whole
 household's holdings; there is no per-member scope here, only an optional
 owner label on a holding.
 

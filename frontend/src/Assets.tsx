@@ -15,7 +15,6 @@ import {
   Landmark,
   Pencil,
   Plus,
-  RefreshCw,
   Gem,
 } from 'lucide-react';
 import { apiGet, queryClient, useSession } from './lib/query';
@@ -224,6 +223,8 @@ export default function Assets() {
   const [at, setAt] = useUrlField('at', '');
   const [showRetired, setShowRetired] = useState(false);
   const [grouped, setGrouped] = useState(true);
+  const [showZero, setShowZero] = useState(false);
+  const [onlyManual, setOnlyManual] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Holding | null | undefined>();
   const [filling, setFilling] = useState(false);
@@ -245,8 +246,13 @@ export default function Assets() {
       .reverse()
       .map((day) => ({ value: day, label: day }));
   }, [report?.dates, at]);
+  const isZero = (row: Row) =>
+    row.quantity !== null && /^-?0(?:\.0+)?$/.test(row.quantity);
   const rows = (report?.rows ?? []).filter(
-    (row) => showRetired || !row.holding.archived,
+    (row) =>
+      (showRetired || !row.holding.archived) &&
+      (showZero || !isZero(row)) &&
+      (!onlyManual || !row.holding.feed),
   );
   // Rows by their group, with each group's value in the display currency;
   // a holding without a group sits under its kind.
@@ -331,15 +337,6 @@ export default function Assets() {
             <Button
               variant="outline"
               size="sm"
-              disabled={query.isFetching}
-              onClick={() => void refresh()}
-            >
-              <RefreshCw className={query.isFetching ? 'animate-spin' : ''} />
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
               disabled={!report || selected === today}
               onClick={() => setAt(today)}
             >
@@ -421,6 +418,20 @@ export default function Assets() {
                 : ''}
             </span>
             <label className="ml-auto flex items-center gap-2">
+              <Checkbox
+                checked={onlyManual}
+                onCheckedChange={(checked) => setOnlyManual(Boolean(checked))}
+              />
+              Only what I type
+            </label>
+            <label className="flex items-center gap-2">
+              <Checkbox
+                checked={showZero}
+                onCheckedChange={(checked) => setShowZero(Boolean(checked))}
+              />
+              Show zero holdings
+            </label>
+            <label className="flex items-center gap-2">
               <Checkbox
                 checked={grouped}
                 onCheckedChange={(checked) => setGrouped(Boolean(checked))}
@@ -859,6 +870,26 @@ function AmountEntry({
   );
 }
 
+/** A figure a feed writes: shown, not typed; the feed is named beside it. */
+function FedAmount({ row }: { row: Row }) {
+  return (
+    <div className="space-y-0.5 text-sm tabular-nums">
+      <div>
+        {row.quantity ?? <span className="text-muted-foreground">—</span>}{' '}
+        <span className="text-xs text-muted-foreground">
+          {row.holding.denomination}
+        </span>
+      </div>
+      {row.price && !isCurrency(row.holding.denomination) && (
+        <div className="text-xs text-muted-foreground">
+          × {row.price.usdPerUnit} USD
+          {row.price.approximate ? ` from ${row.price.asOf}` : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ValueCell({ row, display }: { row: Row; display: string }) {
   if (row.quantity === null)
     return <span className="text-xs text-muted-foreground">Not counted</span>;
@@ -910,7 +941,11 @@ function HoldingTableRow({
         <HoldingName holding={row.holding} />
       </TableCell>
       <TableCell className="align-top">
-        <AmountEntry row={row} asOf={asOf} csrf={csrf} />
+        {row.holding.feed ? (
+          <FedAmount row={row} />
+        ) : (
+          <AmountEntry row={row} asOf={asOf} csrf={csrf} />
+        )}
       </TableCell>
       <TableCell className="text-right align-top tabular-nums">
         <ValueCell row={row} display={display} />
@@ -963,7 +998,11 @@ function HoldingCard({
           </Button>
         </div>
       </div>
-      <AmountEntry row={row} asOf={asOf} csrf={csrf} compact />
+      {row.holding.feed ? (
+        <FedAmount row={row} />
+      ) : (
+        <AmountEntry row={row} asOf={asOf} csrf={csrf} compact />
+      )}
       <CountedCell row={row} />
     </div>
   );
