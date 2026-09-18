@@ -1090,6 +1090,14 @@ export function web(
           json(200, { snapshot });
           return;
         }
+        if (route === '/api/holding-snapshots/delete') {
+          // A whole mistaken day, every holding and version of it. Shared by
+          // both members like the rest of the holdings routes: the snapshots
+          // are the household's, not one member's, and a day entered by one is
+          // as wrong for the other. Prices are not touched.
+          json(200, await new Holdings(repo.db).deleteDay(form.asOf!));
+          return;
+        }
         if (route === '/api/asset-prices') {
           const price = await new Holdings(repo.db).recordPrice(actor, {
             symbol: form.symbol!,

@@ -58,6 +58,16 @@ until it had run. Each card names the date of the rate it used. A balance with
 no rate in that window is reported as missing rather than dropped, so the page
 says a total is incomplete instead of quietly reporting a smaller one.
 
+**What is converted is own money, not the stated balance.** Each row converts
+the stated figure less the agreed overdraft the bank publishes with it
+(`amountMinor − creditLimitMinor`), so `reporting.totalMinor` and every
+`reporting.rows[].convertedMinor` are the household's, with none of the bank's
+money in them. The subtraction happens before the conversion, in exact minor
+units, because a difference of two rounded conversions is not the same figure.
+An account overdrawn past its own money converts a negative, which is the
+truthful answer and is shown as such. The stated amount and the limit travel
+with each account unchanged, so a card can still show what the bank said.
+
 ## Whose money is shown
 
 Both members' accounts, to either sign-in, as the overview already reports the
@@ -98,11 +108,11 @@ Where a bank publishes an agreed overdraft it counts that limit inside the
 balance, so the figure the bank states is not what the household owns. The
 page's main figure per account is the stated balance less the limit — the
 household's own money — with the stated figure and the limit in a small line
-beneath; a negative result is shown as such. The household total is given
-twice: as stated by the banks, converted at the daily rates, and as own
-money where the limits can be taken out exactly, with a plain "—" and the
-reason where a limit is in another currency and no converted limit exists.
-Nothing is estimated to fill that gap.
+beneath; a negative result is shown as such. The household total is own money
+too, and it is the API that makes it so: `reporting` subtracts each limit from
+its own balance in that balance's own currency, before any conversion, so there
+is no case left where a limit in another currency cannot be taken out. Nothing
+is estimated, and nothing of the bank's is counted.
 
 Accounts are listed in three sections: Personal, Non-personal (business and
 investment accounts) and, only when any exist, Purpose to review. Each card

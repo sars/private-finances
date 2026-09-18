@@ -303,3 +303,77 @@ test('snapshots are versioned, converted from a typed currency at that day, and 
     await db.close();
   }
 });
+
+test('deleting a snapshot day removes every version of it, leaves the days around it alone, and keeps the prices', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const service = new Holdings(db);
+    const cash = await service.upsert('rodion', {
+      name: 'Tin USD',
+      kind: 'cash',
+      denomination: 'USD',
+      invested: false,
+      liquid: true,
+    });
+    const fund = await service.upsert('rodion', {
+      name: 'Fund units',
+      kind: 'fund',
+      denomination: 'VWRL',
+      invested: true,
+      liquid: true,
+    });
+    await service.recordPrice('rodion', {
+      symbol: 'VWRL',
+      asOf: '2026-09-24',
+      usdPerUnit: '120',
+    });
+    await service.recordSnapshot('rodion', {
+      holdingId: cash.id,
+      asOf: '2026-08-27',
+      amount: '1000',
+    });
+    await service.recordSnapshot('rodion', {
+      holdingId: cash.id,
+      asOf: '2026-09-24',
+      amount: '1200',
+    });
+    // A correction on the same day is a second version, and it goes too.
+    await service.recordSnapshot('katya', {
+      holdingId: cash.id,
+      asOf: '2026-09-24',
+      amount: '1300',
+    });
+    await service.recordSnapshot('rodion', {
+      holdingId: fund.id,
+      asOf: '2026-09-24',
+      amount: '10',
+    });
+    for (const bad of ['yesterday', '2026-13-01', '2026-02-30', ''])
+      await assert.rejects(service.deleteDay(bad), /snapshot_invalid_date/);
+    // A day nobody recorded removes nothing, which is not an error.
+    assert.deepEqual(await service.deleteDay('2026-09-01'), { removed: 0 });
+    assert.deepEqual(await service.deleteDay('2026-09-24'), { removed: 3 });
+    assert.deepEqual(await service.snapshotDates(), ['2026-08-27']);
+    assert.equal((await service.snapshots()).length, 1);
+    // The price the deleted day valued through says what the symbol was worth,
+    // which is true whoever held it, so it stays.
+    assert.equal(
+      (await db.query('SELECT count(*)::int AS n FROM asset_prices')).rows[0]!
+        .n,
+      1,
+    );
+    // The day is gone from the report, and everything carries from before it.
+    const report = await service.report('USD', '2026-09-24');
+    assert.deepEqual(report.dates, ['2026-08-27']);
+    const row = report.rows.find((r) => r.holding.id === cash.id)!;
+    assert.equal(row.quantity, '1000');
+    assert.equal(row.carried, true);
+    assert.equal(
+      report.rows.find((r) => r.holding.id === fund.id)!.quantity,
+      null,
+    );
+  } finally {
+    await db.close();
+  }
+});

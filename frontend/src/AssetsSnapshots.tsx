@@ -1,12 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type FormEvent } from 'react';
-import { CalendarDays, Clock3, Plus } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronLeft,
+  Clock3,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { apiGet, useSession } from './lib/query';
 import { useDisplayCurrency } from './lib/display-currency';
+import { useUrlField, useUrlSearch } from './lib/navigation';
 import {
   byGroupThenName,
+  deleteSnapshotDay,
   feedNames,
   holdingsUrl,
+  isDay,
   isDecimal,
   refreshHoldings,
   rigaToday,
@@ -32,43 +42,50 @@ import { EmptyState, Money, PageHeader } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 /**
- * Every snapshot the household has taken, and the one form that takes the next
- * one. The figures are written into the page first and saved together: counting
- * the house is one sitting, not thirty separate saves.
+ * Every snapshot the household has taken, and the one form that writes a day's
+ * figures. Which day the form is for is in the address (`?date=`), so counting
+ * today and correcting a day counted last month are the same screen, reached
+ * by two different links.
  */
 export default function AssetsSnapshots() {
   const { currency: display } = useDisplayCurrency();
   const { data: session } = useSession();
   const isMobile = useIsMobile();
   const today = rigaToday();
+  // The form's day comes from the URL; its absence is what keeps the form shut.
+  const [date] = useUrlField('date', today);
+  const search = useUrlSearch();
+  const formOpen = search.date !== undefined;
+  const day = isDay(date) ? date : today;
+
   const query = useQuery({
-    queryKey: ['holdings', display, today],
+    queryKey: ['holdings', display, day],
     queryFn: ({ signal }) =>
-      apiGet<HoldingsReport>(holdingsUrl(display, today), signal),
+      apiGet<HoldingsReport>(holdingsUrl(display, day), signal),
   });
   const report = query.data;
-  const [opened, setOpened] = useState(false);
   const [showFed, setShowFed] = useState(false);
-  const [typed, setTyped] = useState<Record<string, string>>({});
+  const [edited, setEdited] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<{ done: number; total: number } | null>(
     null,
   );
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [removeError, setRemoveError] = useState('');
 
-  // Asking for today adds today to the series even when nothing was counted
-  // then — the report values the holdings on any date. `dates` is the list of
-  // days a figure was actually written, so the history follows that.
+  // Asking for a day adds it to the series even when nothing was counted then —
+  // the report values the holdings on any date. `dates` is the list of days a
+  // figure was actually written, so the history follows that.
   const snapshots = useMemo(() => {
     const real = new Set(report?.dates ?? []);
     return (report?.series ?? [])
       .filter((point) => real.has(point.asOf))
       .sort((a, b) => b.asOf.localeCompare(a.asOf));
   }, [report?.series, report?.dates]);
-  const countedToday = (report?.dates ?? []).includes(today);
-  // The form is the point of the page when today is uncounted; once it has been
-  // counted it waits behind the action, so the history reads first.
-  const formOpen = opened || (Boolean(report) && !countedToday);
+  const countedThatDay = (report?.dates ?? []).includes(day);
 
   const manual = useMemo(
     () =>
@@ -84,19 +101,45 @@ export default function AssetsSnapshots() {
         .sort((a, b) => byGroupThenName(a.holding, b.holding)),
     [report?.rows],
   );
+  // What the boxes start with: the figure this holding has on that day, even
+  // when it was carried from an earlier one. Editing a day begins from what
+  // the day already says, not from an empty form.
+  const prefill = useMemo(() => {
+    const values: Record<string, string> = {};
+    for (const row of manual) values[row.holding.id] = row.quantity ?? '';
+    return values;
+  }, [manual]);
+
+  // Moving to another day is a different form; nothing typed for the old one
+  // carries over, and neither does what the old one reported.
+  const [openedDay, setOpenedDay] = useState(day);
+  if (openedDay !== day) {
+    setOpenedDay(day);
+    setEdited({});
+    setSummary('');
+    setError('');
+  }
+
+  const valueOf = (id: string) => edited[id] ?? prefill[id] ?? '';
+  // Only what a person actually changed is written; an untouched box re-saving
+  // its own figure would record a count that never happened.
+  const changed = manual
+    .map((row) => ({
+      row,
+      amount: valueOf(row.holding.id).trim(),
+      before: (prefill[row.holding.id] ?? '').trim(),
+    }))
+    .filter((entry) => entry.amount !== '' && entry.amount !== entry.before);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session || saving) return;
-    const entries = manual
-      .map((row) => ({ row, amount: (typed[row.holding.id] ?? '').trim() }))
-      .filter((entry) => entry.amount !== '');
-    if (!entries.length) {
-      setError('Nothing typed yet. Write at least one figure.');
+    if (!changed.length) {
+      setError('Nothing changed yet. Edit at least one figure.');
       setSummary('');
       return;
     }
-    const wrong = entries.filter((entry) => !isDecimal(entry.amount));
+    const wrong = changed.filter((entry) => !isDecimal(entry.amount));
     if (wrong.length) {
       setError(
         `Not a number: ${wrong.map((entry) => entry.row.holding.name).join(', ')}. Write digits, with a dot for the fraction.`,
@@ -106,19 +149,16 @@ export default function AssetsSnapshots() {
     }
     setError('');
     setSummary('');
-    // Saving makes today counted, which would otherwise fold the form away and
-    // take the summary of what was written with it.
-    setOpened(true);
-    setSaving({ done: 0, total: entries.length });
+    setSaving({ done: 0, total: changed.length });
     const failed: string[] = [];
     const written: string[] = [];
-    for (const [index, entry] of entries.entries()) {
-      setSaving({ done: index, total: entries.length });
+    for (const [index, entry] of changed.entries()) {
+      setSaving({ done: index, total: changed.length });
       try {
         await postForm('/api/holding-snapshots', {
           csrf: session.csrf,
           holdingId: entry.row.holding.id,
-          asOf: today,
+          asOf: day,
           amount: entry.amount,
         });
         written.push(entry.row.holding.id);
@@ -129,29 +169,62 @@ export default function AssetsSnapshots() {
       }
     }
     setSaving(null);
-    // Only what the server took is cleared; a failed figure stays in its box so
-    // it can be tried again without being typed a second time.
-    setTyped((current) => {
+    // A saved figure goes back to being the box's own starting value; a failed
+    // one stays edited, so it can be tried again without being typed twice.
+    setEdited((current) => {
       const next = { ...current };
       for (const id of written) delete next[id];
       return next;
     });
     await refreshHoldings();
     setSummary(
-      `${written.length} saved${failed.length ? `, ${failed.length} failed: ${failed.join('; ')}` : ''}.`,
+      `${written.length} saved for ${day}${failed.length ? `, ${failed.length} failed: ${failed.join('; ')}` : ''}.`,
     );
+  }
+
+  async function remove(asOf: string) {
+    if (!session || removing) return;
+    setRemoving(asOf);
+    setRemoveError('');
+    setNotice('');
+    try {
+      const { removed } = await deleteSnapshotDay(session.csrf, asOf);
+      setConfirming(null);
+      await refreshHoldings();
+      setNotice(
+        `${removed === 1 ? '1 figure' : `${removed} figures`} removed from ${asOf}.`,
+      );
+    } catch (cause) {
+      setRemoveError(
+        `${asOf} not removed: ${cause instanceof Error ? cause.message : 'try again'}`,
+      );
+    } finally {
+      setRemoving(null);
+    }
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-8">
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          render={<a href={`/assets?display=${display}`} />}
+        >
+          <ChevronLeft />
+          Back to Assets
+        </Button>
+      </div>
       <PageHeader
         title="Snapshots"
-        description="Each date the household counted what it owns. Count today by writing every figure, then saving them together."
+        description="Each date the household counted what it owns. Open a date to correct it, or count today."
         actions={
           <Button
             size="sm"
-            disabled={!report || !session || formOpen}
-            onClick={() => setOpened(true)}
+            disabled={!report}
+            render={
+              <a href={`/assets/snapshots?date=${today}&display=${display}`} />
+            }
           >
             <Plus />
             New snapshot for today
@@ -185,12 +258,13 @@ export default function AssetsSnapshots() {
             <Card className="shadow-xs">
               <CardHeader>
                 <CardTitle className="text-sm font-medium">
-                  Count today · {today}
+                  {day === today ? `Count today · ${day}` : `Figures of ${day}`}
                 </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Each figure is in the holding’s own unit — the currency is
-                  fixed for an asset. Leave a box empty to carry the last figure
-                  forward. One Save writes them all.
+                  Each box holds what this holding is worth on {day}, in the
+                  holding’s own unit — carried from an earlier count where that
+                  day has none. Change the ones that are wrong; a box left as it
+                  was is not written. One Save writes them all.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4 p-0 sm:p-0">
@@ -220,11 +294,15 @@ export default function AssetsSnapshots() {
                         <li key={row.holding.id}>
                           <EntryRow
                             row={row}
-                            today={today}
-                            value={typed[row.holding.id] ?? ''}
+                            day={day}
+                            value={valueOf(row.holding.id)}
+                            changed={
+                              valueOf(row.holding.id).trim() !==
+                              (prefill[row.holding.id] ?? '').trim()
+                            }
                             disabled={!session || saving !== null}
                             onChange={(value) =>
-                              setTyped((current) => ({
+                              setEdited((current) => ({
                                 ...current,
                                 [row.holding.id]: value,
                               }))
@@ -293,12 +371,14 @@ export default function AssetsSnapshots() {
                       >
                         {saving
                           ? `Saving ${saving.done + 1} of ${saving.total}…`
-                          : 'Save all figures'}
+                          : changed.length
+                            ? `Save ${changed.length} changed`
+                            : 'Save changed figures'}
                       </Button>
                       <span className="text-xs text-muted-foreground">
-                        {countedToday
-                          ? 'Today already has a snapshot; saving again replaces the figures you typed.'
-                          : 'Today has no snapshot yet.'}
+                        {countedThatDay
+                          ? `${day} already has a snapshot; saving replaces the figures you changed.`
+                          : `${day} has no snapshot yet.`}
                       </span>
                     </div>
                   </div>
@@ -311,18 +391,44 @@ export default function AssetsSnapshots() {
               <CardTitle className="text-sm font-medium">
                 Every snapshot · {display}
               </CardTitle>
+              {notice && (
+                <p
+                  role="status"
+                  className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
+                >
+                  {notice}
+                </p>
+              )}
+              {removeError && (
+                <p role="alert" className="mt-2 text-sm text-destructive">
+                  {removeError}
+                </p>
+              )}
             </CardHeader>
             <CardContent className="p-0 sm:p-0">
               {snapshots.length === 0 ? (
                 <EmptyState
                   icon={Clock3}
                   title="No snapshot yet"
-                  text="Write today’s figures above and save them; this list starts there."
+                  text="Count today’s figures and save them; this list starts there."
+                  action={
+                    <Button
+                      size="sm"
+                      render={
+                        <a
+                          href={`/assets/snapshots?date=${today}&display=${display}`}
+                        />
+                      }
+                    >
+                      <Plus />
+                      New snapshot
+                    </Button>
+                  }
                 />
               ) : isMobile ? (
                 <ul className="divide-y border-t">
                   {snapshots.map((point) => (
-                    <li key={point.asOf} className="px-4 py-3">
+                    <li key={point.asOf} className="space-y-2 px-4 py-3">
                       <a
                         href={`/assets?at=${point.asOf}&display=${display}`}
                         className="flex items-center justify-between gap-3"
@@ -357,6 +463,20 @@ export default function AssetsSnapshots() {
                           </span>
                         </span>
                       </a>
+                      <DayActions
+                        asOf={point.asOf}
+                        display={display}
+                        asking={confirming === point.asOf}
+                        busy={removing === point.asOf}
+                        disabled={!session || removing !== null}
+                        onAsk={() => {
+                          setConfirming(point.asOf);
+                          setRemoveError('');
+                          setNotice('');
+                        }}
+                        onCancel={() => setConfirming(null)}
+                        onConfirm={() => void remove(point.asOf)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -369,6 +489,9 @@ export default function AssetsSnapshots() {
                       <TableHead className="text-right">Invested</TableHead>
                       <TableHead className="text-right">Liquid</TableHead>
                       <TableHead className="text-right">Holdings</TableHead>
+                      <TableHead className="text-right">
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -400,6 +523,22 @@ export default function AssetsSnapshots() {
                             ? ` · ${point.missing} without a price`
                             : ''}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <DayActions
+                            asOf={point.asOf}
+                            display={display}
+                            asking={confirming === point.asOf}
+                            busy={removing === point.asOf}
+                            disabled={!session || removing !== null}
+                            onAsk={() => {
+                              setConfirming(point.asOf);
+                              setRemoveError('');
+                              setNotice('');
+                            }}
+                            onCancel={() => setConfirming(null)}
+                            onConfirm={() => void remove(point.asOf)}
+                          />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -413,29 +552,97 @@ export default function AssetsSnapshots() {
   );
 }
 
-/** One holding to write a figure for: what it is, what it last was, a box. */
+/**
+ * What a date row offers: open it in the form, or take the whole day out. The
+ * question is asked in the row itself — a browser dialog would be dismissed
+ * without being read, and this one says which day it means.
+ */
+function DayActions({
+  asOf,
+  display,
+  asking,
+  busy,
+  disabled,
+  onAsk,
+  onCancel,
+  onConfirm,
+}: {
+  asOf: string;
+  display: string;
+  asking: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onAsk: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (asking)
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="w-full text-xs text-muted-foreground sm:w-auto">
+          Remove all figures of {asOf}?
+        </span>
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={busy}
+          onClick={onConfirm}
+        >
+          {busy ? 'Removing…' : 'Confirm'}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    );
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        render={
+          <a href={`/assets/snapshots?date=${asOf}&display=${display}`} />
+        }
+      >
+        <Pencil />
+        Edit
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={disabled}
+        onClick={onAsk}
+        aria-label={`Remove the figures of ${asOf}`}
+      >
+        <Trash2 />
+        Remove
+      </Button>
+    </div>
+  );
+}
+
+/** One holding to write a figure for: what it is, where its figure came from,
+ * and a box that already holds it. */
 function EntryRow({
   row,
-  today,
+  day,
   value,
+  changed,
   disabled,
   onChange,
 }: {
   row: HoldingRow;
-  today: string;
+  day: string;
   value: string;
+  changed: boolean;
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
-  const previous =
-    row.quantity === null
-      ? null
-      : `${row.quantity} ${row.holding.denomination}`;
   const when =
     row.quantityAsOf === null
       ? 'never counted'
-      : row.quantityAsOf === today
-        ? 'counted today'
+      : row.quantityAsOf === day
+        ? 'counted this day'
         : `carried from ${row.quantityAsOf}`;
   return (
     <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
@@ -450,15 +657,17 @@ function EntryRow({
         )}
       </div>
       <div className="text-xs text-muted-foreground sm:w-52 sm:text-right">
-        <span className="tabular-nums">{previous ?? '—'}</span>
-        <span className="ml-2 sm:ml-0 sm:block">{when}</span>
+        <span className="tabular-nums">{row.quantity ?? '—'}</span>
+        <span className="ml-2 sm:ml-0 sm:block">
+          {changed ? `${when}, edited` : when}
+        </span>
       </div>
       <div className="flex items-center gap-2 sm:w-56">
         <Input
-          aria-label={`Amount of ${row.holding.name} today`}
+          aria-label={`Amount of ${row.holding.name} on ${day}`}
           inputMode="decimal"
           className="h-11 flex-1 tabular-nums sm:h-9"
-          placeholder={row.quantity ?? '0'}
+          placeholder="0"
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}

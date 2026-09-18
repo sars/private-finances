@@ -5,6 +5,7 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import { Repository } from '../src/repository.js';
 import { web, type WebConfig } from '../src/web.js';
 import { AccountBalances } from '../src/account-balances.js';
+import { FxRates } from '../src/fx-rates.js';
 import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('balances report the household, arrive in each person’s own order and refuse a stale arrangement', async () => {
@@ -55,6 +56,8 @@ test('balances report the household, arrive in each person’s own order and ref
       ['k', 'a', 'b'],
     );
     assert.equal(first.layout.revision, 0);
+    // Neither of these cards has an agreed overdraft, so own money and the
+    // stated figures are the same total.
     assert.equal(first.reporting.totalMinor, '175000');
     assert.deepEqual(first.reporting.coverage, { converted: 2, missing: 0 });
     // An account whose bank has not reported is still part of the answer.
@@ -122,6 +125,79 @@ test('balances report the household, arrive in each person’s own order and ref
       ).status,
       400,
     );
+  } finally {
+    await new Promise<void>((done) => server.close(() => done()));
+    await db.close();
+  }
+});
+
+test('the reported total is the household’s own money, with the agreed overdrafts taken out', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  const repo = new Repository(db);
+  await db.query(
+    `INSERT INTO own_accounts(source,account_id,owner,label,purpose) VALUES
+     ('monobank','a','rodion','Card','personal'),
+     ('monobank','d','rodion','Dollars','personal')`,
+  );
+  await new FxRates(db).insert({
+    source: 'test',
+    base: 'USD',
+    target: 'UAH',
+    rate: '41.5',
+    asOf: '2026-09-15',
+    retrievedAt: '2026-09-15T12:00:00.000Z',
+    version: 1,
+    provenance: 'synthetic test rate',
+  });
+  const observedAt = new Date('2026-09-15T09:00:00.000Z');
+  const service = new AccountBalances(db);
+  // The bank states the limit inside the balance it reports.
+  await service.record(
+    { source: 'monobank', accountId: 'a' },
+    [{ currency: 'UAH', amountMinor: '5300000', creditLimitMinor: '2000000' }],
+    observedAt,
+  );
+  await service.record(
+    { source: 'monobank', accountId: 'd' },
+    [{ currency: 'USD', amountMinor: '10000', creditLimitMinor: '4000' }],
+    observedAt,
+  );
+  const config: WebConfig = {
+    mode: 'postgres',
+    port: 0,
+    release: 'balances-test',
+    monobankJarsExcluded: true,
+  };
+  const server = web(repo, config, () => {});
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  config.port = (server.address() as AddressInfo).port;
+  const base = `http://127.0.0.1:${config.port}`;
+  try {
+    await seedTestOwners(db);
+    const cookie = await signInAs(base, 'rodion');
+    const report = await (
+      await fetch(base + '/api/balances?display=UAH', { headers: { cookie } })
+    ).json();
+    const row = (accountId: string) =>
+      report.reporting.rows.find(
+        (r: { accountId: string }) => r.accountId === accountId,
+      );
+    // 53,000 stated less the 20,000 limit, in the display currency itself.
+    assert.equal(row('a').convertedMinor, '3300000');
+    assert.equal(row('a').rateDate, null);
+    // 100.00 stated less a 40.00 limit, converted at that day's rate.
+    assert.equal(row('d').convertedMinor, '249000');
+    assert.equal(row('d').rateDate, '2026-09-15');
+    assert.equal(report.reporting.totalMinor, '3549000');
+    assert.deepEqual(report.reporting.coverage, { converted: 2, missing: 0 });
+    // The stated figure and the limit still travel with each account, so the
+    // screen can show what the bank said beside what the household owns.
+    const account = report.accounts.find(
+      (a: { accountId: string }) => a.accountId === 'a',
+    );
+    assert.equal(account.balances[0].amountMinor, '5300000');
+    assert.equal(account.balances[0].creditLimitMinor, '2000000');
   } finally {
     await new Promise<void>((done) => server.close(() => done()));
     await db.close();
