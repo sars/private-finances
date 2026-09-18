@@ -889,6 +889,42 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# The first real backup, and the bug only a real run could find — September 19, 2026
+
+The household's data now exists somewhere other than the server. The owner
+created the bucket, its lifecycle rule and a bucket-scoped IAM user; the restic
+repository was initialised, the daily timer enabled, and the first snapshot
+uploaded and verified present.
+
+Two things went wrong on the way, both worth recording. The IAM user's inline
+policy had not saved, so restic's first `init` failed with "Access Denied" — S3
+answers a `HEAD` on a missing object with `403` rather than `404` when the
+caller lacks `ListBucket`, which disguises "no permission" as "cannot tell".
+And the service could not read its own password file, which had been written
+root-only; it now belongs to `private-finances` at mode `400`, inside a
+directory only that group can traverse. The AWS keys stay root-only and reach
+the backup process alone through systemd, so the password on its own opens
+nothing.
+
+The third fault was ours, and the tests had passed over it. The status row was
+written with `psql --command`, and `psql -c` hands its argument straight to the
+server — `:'name'` is a client-side feature, so PostgreSQL saw a literal colon
+and refused to parse. The statement now goes in on stdin, where psql expands
+each placeholder into a properly quoted literal. Nothing was lost: the backup
+uploaded correctly and only its status row failed, the run still exited zero
+because the data was safe, and it announced itself as `backup_status_unrecorded`
+— the path built for exactly this, which is how it was noticed.
+
+The tests had asserted psql's **arguments**, which is why they were green
+against a command the real psql rejects. Three now cover it: the stub records
+stdin as well as argv, one test refuses `--command` outright, and another reads
+the INSERT out of `scripts/backup.sh`, substitutes the placeholders and runs it
+against a real PostgreSQL, so the script's own SQL has to parse and satisfy the
+table's constraints. All three fail against the shipped version.
+
+Restore proof and retention are still ahead. A backup nobody has restored is a
+belief.
+
 # System health says whether a backup exists — September 18, 2026
 
 Every copy of this household's data has lived on one machine, and the page that

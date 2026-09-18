@@ -18,7 +18,10 @@ type Run = {
   status: number;
   stdout: string;
   stderr: string;
+  /** psql's argv, one entry per invocation, NUL-separated within an entry. */
   recorded: string[];
+  /** What psql was given on stdin, one entry per invocation. */
+  sql: string[];
   uploaded: boolean;
 };
 
@@ -33,6 +36,7 @@ function runBackup(stubs: {
   const bin = join(home, 'bin');
   mkdirSync(bin);
   const log = join(home, 'psql.log');
+  const sqlLog = join(home, 'psql-stdin.log');
   const uploaded = join(home, 'uploaded');
   const stub = (name: string, body: string) => {
     const path = join(bin, name);
@@ -57,10 +61,16 @@ cat <<'JSON'
 ${stubs.resticOutput ?? '{"message_type":"status","percent_done":0.5}\n{"message_type":"summary","snapshot_id":"9f2c1ab4","total_bytes_processed":4096}'}
 JSON`,
   );
+  // Records argv *and* stdin. Only stdin proves the statement can actually run:
+  // psql expands its `:'name'` placeholders when it reads a script and not when
+  // the string arrives through --command, so a test that inspects the arguments
+  // alone passes against an invocation the real psql rejects.
   stub(
     'psql',
     `printf '%s\\0' "$@" >> ${JSON.stringify(log)}
 printf '\\n---\\n' >> ${JSON.stringify(log)}
+cat >> ${JSON.stringify(sqlLog)}
+printf '\\n---\\n' >> ${JSON.stringify(sqlLog)}
 exit ${stubs.psqlExits ?? 0}`,
   );
   const result = spawnSync('bash', ['scripts/backup.sh'], {
@@ -81,6 +91,14 @@ exit ${stubs.psqlExits ?? 0}`,
   } catch {
     recorded = [];
   }
+  let sql: string[] = [];
+  try {
+    sql = readFileSync(sqlLog, 'utf8')
+      .split('\n---\n')
+      .filter((entry) => entry.trim().length > 0);
+  } catch {
+    sql = [];
+  }
   let wasUploaded = true;
   try {
     readFileSync(uploaded);
@@ -92,6 +110,7 @@ exit ${stubs.psqlExits ?? 0}`,
     stdout: result.stdout,
     stderr: result.stderr,
     recorded,
+    sql,
     uploaded: wasUploaded,
   };
 }
@@ -108,9 +127,44 @@ test('a successful backup uploads once and records the snapshot it made', () => 
   assert.match(call, /snapshot=9f2c1ab4/);
   assert.match(call, /size=4096/);
   assert.match(call, /destination=amazon-s3/);
-  assert.match(call, /INSERT INTO backup_runs/);
+  // The statement itself arrives on stdin, which is the only way psql expands
+  // the placeholders; see the regression test below.
+  assert.equal(run.sql.length, 1);
+  assert.match(run.sql[0]!, /INSERT INTO backup_runs/);
   // The bucket URL is the one thing that must not reach the table.
   assert.doesNotMatch(call, /example\.invalid/);
+  assert.doesNotMatch(run.sql[0]!, /example\.invalid/);
+});
+
+test('the statement is fed to psql as a script, never through --command', () => {
+  // The first version of this script passed the SQL to `psql --command`, and
+  // every test passed. On the server it failed on the first real run:
+  // `psql -c` sends its argument straight to the server, and `:'name'` is a
+  // client-side feature, so PostgreSQL saw a literal colon and refused to parse
+  // it. The backup itself was fine and only the status row was lost, which is
+  // how it was noticed at all. Arguments alone cannot catch this; stdin can.
+  const run = runBackup({});
+  const call = run.recorded[0]!;
+  assert.doesNotMatch(call, /--command/);
+  assert.doesNotMatch(call, /\x00-c\x00/);
+  assert.doesNotMatch(call, /INSERT INTO/);
+  const sql = run.sql[0]!;
+  assert.match(sql, /INSERT INTO backup_runs/);
+  for (const placeholder of [
+    'destination',
+    'outcome',
+    'stage',
+    'started',
+    'snapshot',
+    'size',
+  ])
+    assert.match(
+      sql,
+      new RegExp(`:'${placeholder}'`),
+      `${placeholder} should be a psql placeholder, not interpolated by bash`,
+    );
+  // Without this a rejected statement would exit 0 and be reported as recorded.
+  assert.match(call, /--set=ON_ERROR_STOP=1/);
 });
 
 test('a dump that fails is recorded as a failure and never uploaded', () => {

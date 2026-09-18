@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { memoryDatabase, migrate } from '../src/database.js';
 import {
   BACKUP_EXPECTED_WITHIN_HOURS,
@@ -161,6 +162,68 @@ test('the stored row refuses a shape the operations page could not trust', async
            VALUES (gen_random_uuid(),'amazon-s3','succeeded',now(),'not-a-snapshot')`,
       ),
     );
+  } finally {
+    await db.close();
+  }
+});
+
+/**
+ * The statement the backup script actually sends, run against a real database.
+ *
+ * `recordBackupRun` proves the shape is right, but the script does not call it
+ * — it speaks to psql, and the two are separate copies of the same INSERT. This
+ * reads the script's copy, substitutes the placeholders psql would expand, and
+ * executes it. A statement that cannot parse, or that the table's constraints
+ * reject, fails here rather than at 03:30 on the server.
+ */
+function scriptStatement(values: Record<string, string>): string {
+  const script = readFileSync('scripts/backup.sh', 'utf8');
+  const body = /<<'SQL'\n([\s\S]*?)\nSQL\n/.exec(script);
+  assert.ok(body, 'scripts/backup.sh should feed psql a SQL heredoc');
+  return body[1]!.replace(/:'(\w+)'/g, (_, name: string) => {
+    assert.ok(name in values, `unexpected placeholder :'${name}'`);
+    return `'${values[name]!.replaceAll("'", "''")}'`;
+  });
+}
+
+test("the backup script's own INSERT parses and satisfies the constraints", async () => {
+  const db = await database();
+  try {
+    await db.query(
+      scriptStatement({
+        destination: 'amazon-s3',
+        outcome: 'succeeded',
+        stage: '',
+        started: '2026-09-19T00:35:00Z',
+        snapshot: '6d89e96a',
+        size: '4096',
+      }),
+    );
+    const healthy = await backupHealth(db, new Date('2026-09-19T01:00:00Z'));
+    assert.equal(healthy.state, 'healthy');
+    assert.equal(healthy.destination, 'amazon-s3');
+    assert.equal(healthy.snapshotId, '6d89e96a');
+    assert.equal(healthy.sizeBytes, 4096);
+    assert.equal(healthy.lastFailureStage, null);
+
+    // The failure path sends empty strings for the snapshot and the size; they
+    // have to become NULL, or the row breaks its own CHECK constraints.
+    await db.query(
+      scriptStatement({
+        destination: 'amazon-s3',
+        outcome: 'failed',
+        stage: 'upload',
+        started: '2026-09-19T02:35:00Z',
+        snapshot: '',
+        size: '',
+      }),
+    );
+    const failing = await backupHealth(db, new Date('2026-09-19T03:00:00Z'));
+    assert.equal(failing.state, 'failing');
+    assert.equal(failing.lastFailureStage, 'upload');
+    assert.equal(failing.consecutiveFailures, 1);
+    // The older success is still named, with its snapshot.
+    assert.equal(failing.snapshotId, '6d89e96a');
   } finally {
     await db.close();
   }

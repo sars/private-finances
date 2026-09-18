@@ -28,15 +28,23 @@ trap 'rm -rf -- "$backup_work"' EXIT
 recorded=false
 record() {
   local outcome="$1" stage="$2" snapshot="$3" size="$4"
+  # The statement goes in on stdin, never through --command. `psql -c` sends its
+  # argument straight to the server, so the `:'name'` placeholders below — a
+  # client-side feature — arrive at PostgreSQL verbatim and fail to parse. Read
+  # from stdin psql expands them itself, quoting each value as a literal, which
+  # is what keeps a value out of the SQL grammar. ON_ERROR_STOP is what makes a
+  # rejected statement an exit code rather than a silent success.
   if psql --no-psqlrc --quiet --tuples-only --no-align \
     --set=ON_ERROR_STOP=1 \
     --set=destination="$destination" --set=outcome="$outcome" \
     --set=stage="$stage" --set=started="$started_at" \
     --set=snapshot="$snapshot" --set=size="$size" \
-    --command "INSERT INTO backup_runs(id,destination,outcome,stage,started_at,finished_at,snapshot_id,size_bytes)
-      VALUES (gen_random_uuid(),:'destination',:'outcome',nullif(:'stage',''),:'started'::timestamptz,now(),
-              nullif(:'snapshot',''),nullif(:'size','')::bigint)" \
-    >/dev/null 2>"$backup_work/record_error"; then
+    >/dev/null 2>"$backup_work/record_error" <<'SQL'
+INSERT INTO backup_runs(id,destination,outcome,stage,started_at,finished_at,snapshot_id,size_bytes)
+VALUES (gen_random_uuid(),:'destination',:'outcome',nullif(:'stage',''),:'started'::timestamptz,now(),
+        nullif(:'snapshot',''),nullif(:'size','')::bigint);
+SQL
+  then
     recorded=true
   else
     recorded=false
