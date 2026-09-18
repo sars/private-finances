@@ -9,6 +9,22 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**e83193fd5acb0a7fd56abebeeecfa36d57200ed4**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 54 with 4,168 transactions unchanged, both services active. It
+carries PR #69: the phone shell drops two website habits. The header's
+hamburger opened the same sidebar the tab bar's own More button already
+opens, and a closing footer bar (workspace name, a link to system health) sat
+on top of the fixed tab bar — both are now `md:`-only, so the phone has one
+navigation surface and one screen-end instead of two. `viewport-fit=cover`
+and the `apple-mobile-web-app-capable`/`mobile-web-app-capable` meta tags let
+iOS honour standalone display once the home-screen icon is re-added, the
+header pads for `env(safe-area-inset-top)` to sit flush behind a notch
+(mirroring the tab bar's existing bottom-safe-area padding), and
+`overscroll-behavior-y: none` drops the browser's pull-to-refresh bounce.
+Desktop is unaffected, having no tab bar to duplicate against.
+
 **9d5d882a21c93ee8d2466d7ff32bc3bd74cf0ba4**, live since September 18, 2026 at
 schema version 54, deployed with `deploy/release.sh` in one run: 583
 application tests passed on the server, the rehearsal on a restored copy
