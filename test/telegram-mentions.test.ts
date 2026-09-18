@@ -136,12 +136,9 @@ test('a refused mention costs the tag, not the message', async () => {
   // goes again without it — once, and only because nothing was delivered.
   const refusing = telegramTransport(token, async (_input, init) => {
     bodies.push(JSON.parse(String(init?.body)));
-    return bodies.length === 1
-      ? new Response(
-          JSON.stringify({ ok: false, description: 'Bad Request' }),
-          { status: 400 },
-        )
-      : new Response(ok);
+    if (bodies.length > 1) return new Response(ok);
+    const refusal = JSON.stringify({ ok: false, description: 'Bad Request' });
+    return new Response(refusal, { status: 400 });
   });
   assert.deepEqual(
     await refusing.send('-123', 'Rodion, what was this?', {
@@ -154,11 +151,9 @@ test('a refused mention costs the tag, not the message', async () => {
   assert.equal('entities' in bodies[1]!, false);
   assert.equal(bodies[1]?.text, 'Rodion, what was this?');
   // A refusal of the untagged message is the end of it: no third attempt.
-  const stubborn = telegramTransport(
-    token,
-    async () =>
-      new Response(JSON.stringify({ ok: false }), { status: 400 }),
-  );
+  const stubborn = telegramTransport(token, async () => {
+    return new Response(JSON.stringify({ ok: false }), { status: 400 });
+  });
   await assert.rejects(
     stubborn.send('-123', 'Rodion, what was this?', {
       mentions: [{ offset: 0, length: 6, userId: '101' }],
