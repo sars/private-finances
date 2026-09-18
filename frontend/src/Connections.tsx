@@ -1,18 +1,16 @@
-import { observeSession } from './lib/query';
-import { useEffect, useState, type FormEvent } from 'react';
 import {
-  ArrowUpRight,
-  CircleAlert,
-  Landmark,
-  RefreshCw,
-  ShieldCheck,
-} from 'lucide-react';
+  invalidateFinancialData,
+  observeSession,
+  useRefreshSignal,
+} from './lib/query';
+import { useEffect, useState, type FormEvent } from 'react';
+import { ArrowUpRight, CircleAlert, Landmark, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Choice, Field, PageHeader } from '@/components/finance';
+import { Choice, Field, PageHeader, RefreshButton } from '@/components/finance';
 
 type Connection = {
   bank: string;
@@ -63,7 +61,7 @@ export default function Connections() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const refresh = useRefreshSignal();
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -162,17 +160,7 @@ export default function Connections() {
       <PageHeader
         title="Bank connections"
         description="Approval for your own accounts, and whether each one still has access."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading || starting}
-            onClick={() => setRefresh((n) => n + 1)}
-          >
-            <RefreshCw className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       {error && (
         <div
@@ -186,7 +174,7 @@ export default function Connections() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setRefresh((n) => n + 1)}
+                onClick={() => void invalidateFinancialData()}
               >
                 Try again
               </Button>

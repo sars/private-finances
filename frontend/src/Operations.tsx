@@ -6,10 +6,10 @@ import {
   CircleAlert,
   Database,
   KeyRound,
-  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/finance';
+import { invalidateFinancialData, useRefreshSignal } from './lib/query';
+import { PageHeader, RefreshButton } from '@/components/finance';
 import { DecisionCoverage } from '@/components/decision-coverage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -86,7 +86,7 @@ export default function Operations() {
   const [release, setRelease] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const refresh = useRefreshSignal();
   const [checkedAt, setCheckedAt] = useState('');
   useEffect(() => {
     const controller = new AbortController();
@@ -143,17 +143,7 @@ export default function Operations() {
       <PageHeader
         title="System health"
         description="Bank imports, access expiry and the status of your workspace."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading}
-            onClick={() => setRefresh((n) => n + 1)}
-          >
-            <RefreshCw className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       <LlmBudget refresh={refresh} />
       <DecisionCoverage />
@@ -177,7 +167,10 @@ export default function Operations() {
             <p role="alert" className="text-sm text-muted-foreground">
               {error}
             </p>
-            <Button variant="outline" onClick={() => setRefresh((n) => n + 1)}>
+            <Button
+              variant="outline"
+              onClick={() => void invalidateFinancialData()}
+            >
               Try again
             </Button>
           </CardContent>

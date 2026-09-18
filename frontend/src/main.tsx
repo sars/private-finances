@@ -32,6 +32,7 @@ import {
 import { AppSidebar } from '@/components/shell/app-sidebar';
 import { useReviewCount } from './lib/payments';
 import { TabBar } from '@/components/shell/tab-bar';
+import { PullToRefresh } from '@/components/shell/pull-to-refresh';
 import SignIn from './SignIn';
 import './index.css';
 
@@ -307,6 +308,7 @@ function App() {
         </div>
       </SidebarInset>
       <TabBar counts={counts} />
+      <PullToRefresh />
       <Toaster theme="system" position="top-center" closeButton />
     </SidebarProvider>
   );

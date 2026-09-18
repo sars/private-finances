@@ -40,7 +40,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { EmptyState, Money, PageHeader } from '@/components/finance';
+import {
+  EmptyState,
+  Money,
+  PageHeader,
+  RefreshButton,
+} from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 /**
@@ -261,16 +266,21 @@ export default function AssetsSnapshots() {
         title="Snapshots"
         description="Each date the household counted what it owns. Open a date to correct it, or count today."
         actions={
-          <Button
-            size="sm"
-            disabled={!report}
-            render={
-              <a href={`/assets/snapshots?date=${today}&display=${display}`} />
-            }
-          >
-            <Plus />
-            New snapshot for today
-          </Button>
+          <>
+            <RefreshButton />
+            <Button
+              size="sm"
+              disabled={!report}
+              render={
+                <a
+                  href={`/assets/snapshots?date=${today}&display=${display}`}
+                />
+              }
+            >
+              <Plus />
+              New snapshot for today
+            </Button>
+          </>
         }
       />
       {query.error && (

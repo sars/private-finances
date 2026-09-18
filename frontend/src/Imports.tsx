@@ -5,7 +5,8 @@
  * connection that has quietly stopped shows as a last run growing old.
  */
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, CircleAlert, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowUpRight, CircleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AccountBadge, EmptyState, PageHeader } from '@/components/finance';
+import {
+  AccountBadge,
+  EmptyState,
+  PageHeader,
+  RefreshButton,
+} from '@/components/finance';
 import { apiGet } from '@/lib/query';
 import type { Owner } from '@/lib/account-visuals';
 import type {
@@ -303,6 +309,33 @@ function RunsTable({ runs, now }: { runs: ImportRun[]; now: number }) {
   );
 }
 
+/**
+ * How long ago this page last asked the server, counting up while you watch.
+ *
+ * Refreshing this screen re-reads the importer's record; it does not go to the
+ * banks, which have their own schedule. So when nothing has changed since the
+ * last look, a refresh leaves every figure exactly as it was, and without this
+ * line there is nothing on the screen to show it happened at all.
+ */
+function LastChecked({ at }: { at: string }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 1000));
+  return (
+    <>
+      checked{' '}
+      {seconds < 10
+        ? 'just now'
+        : seconds < 60
+          ? `${seconds} s ago`
+          : (ago(at, Date.now()) ?? 'just now')}
+    </>
+  );
+}
+
 export default function Imports() {
   const status = useQuery({
     queryKey: ['imports'],
@@ -321,17 +354,7 @@ export default function Imports() {
         description="Every connection: what it last did, what it brought in, and how long its approval lasts."
         actions={
           <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void status.refetch()}
-              disabled={status.isFetching}
-            >
-              <RefreshCw
-                className={`mr-2 size-3.5 ${status.isFetching ? 'animate-spin' : ''}`}
-              />
-              Refresh
-            </Button>
+            <RefreshButton />
             <Button
               variant="outline"
               size="sm"
@@ -365,6 +388,8 @@ export default function Imports() {
             {' · '}
             {data.connections.reduce((n, c) => n + c.changed7d, 0)} payments
             changed in the last 7 days
+            {' · '}
+            <LastChecked at={data.generatedAt} />
           </p>
           <section className="grid gap-4 md:grid-cols-2">
             {data.connections.map((c) => (

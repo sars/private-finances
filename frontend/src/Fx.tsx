@@ -1,4 +1,5 @@
 import { useUrlField, useSearchPatch } from './lib/navigation';
+import { invalidateFinancialData, useRefreshSignal } from './lib/query';
 import { money } from './lib/format';
 import { useDisplayCurrency } from './lib/display-currency';
 import { useEffect, useMemo, useState } from 'react';
@@ -10,7 +11,6 @@ import {
   CircleAlert,
   Clock3,
   Coins,
-  RefreshCw,
   Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import {
   FilterBar,
   PageHeader,
   PeriodPicker,
+  RefreshButton,
 } from '@/components/finance';
 
 type ConversionRow = {
@@ -80,7 +81,7 @@ export default function Fx() {
   const [totals, setTotals] = useState<Totals>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const refresh = useRefreshSignal();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [monthLimit, setMonthLimit] = useState(12);
@@ -251,17 +252,7 @@ export default function Fx() {
       <PageHeader
         title="Currency conversion"
         description="The same transactions in another currency, with missing rates clearly marked."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading || dateError || currencyError}
-            onClick={() => setRefresh((n) => n + 1)}
-          >
-            <RefreshCw className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
-        }
+        actions={<RefreshButton />}
       />
       <FilterBar>
         <Field label="Account owner" htmlFor="fx-owner">
@@ -389,7 +380,10 @@ export default function Fx() {
             <p role="alert" className="text-sm text-muted-foreground">
               {error}
             </p>
-            <Button variant="outline" onClick={() => setRefresh((n) => n + 1)}>
+            <Button
+              variant="outline"
+              onClick={() => void invalidateFinancialData()}
+            >
               Try again
             </Button>
           </CardContent>

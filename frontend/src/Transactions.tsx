@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { CircleAlert, Inbox, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { CircleAlert, Inbox, SlidersHorizontal } from 'lucide-react';
 import { apiGet, useSession, invalidateFinancialData } from './lib/query';
 import { useSearchPatch, useUrlSearch } from './lib/navigation';
 import { useDisplayCurrency } from './lib/display-currency';
@@ -24,9 +24,10 @@ import {
   EmptyState,
   Field,
   FilterBar,
-  PagedList,
   PageHeader,
+  PagedList,
   PeriodPicker,
+  RefreshButton,
   presetPeriod,
 } from '@/components/finance';
 import { PaymentRow } from '@/components/transaction/payment-row';
@@ -238,15 +239,7 @@ export default function Transactions() {
             >
               Add cash expense
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pages.isFetching}
-              onClick={() => void invalidateFinancialData()}
-            >
-              <RefreshCw className={pages.isFetching ? 'animate-spin' : ''} />
-              Refresh
-            </Button>
+            <RefreshButton />
           </>
         }
       />
