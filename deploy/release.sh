@@ -6,7 +6,8 @@
 #   bash deploy/release.sh <40-character commit SHA> [ssh host, default radar]
 #
 # Safe to re-run: a half-finished attempt leaves the previous release serving,
-# and nothing is switched until the rehearsal has passed.
+# and nothing is switched until the rehearsal has passed. A step that fails
+# after the imports and the worker are paused restores them before it exits.
 set -euo pipefail
 
 sha=${1:-}
@@ -156,7 +157,41 @@ fi
 # switch so no process is left speaking the previous schema. The enabled set is
 # read from systemd's own wants directory, so a re-run after a stopped attempt
 # still knows which timers to bring back.
+#
+# Nothing below may leave the household without them. On 18 September 2026 this
+# very step refused — an import was still running after the five minutes it
+# waits, which correctly kept the previous release serving — but it had already
+# stopped the timers and the worker, and no failure path brought them back, so
+# both stayed down until the next run happened to resume them. Every exit from
+# here on goes through the resume instead.
+resume_services() {
+  ssh -o BatchMode=yes "$host" "set -e
+    sudo -n systemctl start private-finances-telegram.service
+    # Tolerate a missing list: a pause that died before writing it still leaves
+    # this the only thing between the household and a stopped worker, and
+    # starting a unit that is already running costs nothing.
+    timers=\$(cat /tmp/pf-paused-timers 2>/dev/null || true)
+    if [ -n \"\$timers\" ]; then sudo -n systemctl start \$timers; fi
+    rm -f /tmp/pf-paused-timers
+    echo resumed"
+}
+paused=
+restore_if_paused() {
+  local status=$?
+  trap - EXIT
+  if [ -n "$paused" ]; then
+    printf '\n=== restoring the imports and the worker a failed step had paused ===\n' >&2
+    resume_services >&2 ||
+      echo "WARNING: could not resume on $host; start private-finances-telegram.service and the private-finances-sync@ timers by hand" >&2
+  fi
+  exit $status
+}
+trap restore_if_paused EXIT
+
 step 'pausing imports and the worker'
+# Set before the command, not after: the remote script stops the timers and the
+# worker in its first lines and can fail in its last.
+paused=1
 ssh -o BatchMode=yes "$host" "set -e
   timers=\$(ls /etc/systemd/system/timers.target.wants/ | grep '^private-finances-sync@' || true)
   printf '%s\n' \"\$timers\" > /tmp/pf-paused-timers
@@ -184,12 +219,8 @@ ssh -o BatchMode=yes "$host" "set -e
   sudo -n python3 /opt/private-finances/releases/$sha/deploy/switch-release.py $sha --schema-compatible"
 
 step 'resuming imports and the worker'
-ssh -o BatchMode=yes "$host" "set -e
-  sudo -n systemctl start private-finances-telegram.service
-  timers=\$(cat /tmp/pf-paused-timers)
-  if [ -n \"\$timers\" ]; then sudo -n systemctl start \$timers; fi
-  rm -f /tmp/pf-paused-timers
-  echo resumed"
+resume_services
+paused=
 
 step 'verifying'
 ssh -o BatchMode=yes "$host" "set -e

@@ -44,12 +44,15 @@ change in `vite.config.ts` away from disappearing. The installed app needs one
 cold start — closed and reopened, not reinstalled — to reach this release; from
 there it keeps itself current.
 
-`deploy/release.sh` has a gap this release found. Its first attempt stopped at
-the pause step because a Monobank import was still running after the five
-minutes it waits, which correctly leaves the previous release serving — but the
-script has no trap, so the import timers and the Telegram worker it had just
-stopped stayed stopped until the next run resumed them. Restoring what a failed
-step had paused is worth adding.
+`deploy/release.sh` had a gap this release found, since closed. Its first
+attempt stopped at the pause step because a Monobank import was still running
+after the five minutes it waits, which correctly leaves the previous release
+serving — but the script had no trap, so the import timers and the Telegram
+worker it had just stopped stayed stopped until the next run resumed them. Any
+exit after the pause now restores them and keeps the failing step's status, and
+`deploy/test-resume.sh` holds that against a stubbed `ssh` for a clean run, a
+refused pause and a failed switch alike — it fails on the previous script for
+the two failure cases, which is how it was checked.
 
 The release before it, **bc5ad357b1684721c4dca9d0cd21f411fa46373f**, is
 described below.
