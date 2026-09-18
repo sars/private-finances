@@ -361,7 +361,10 @@ export function web(
           route.startsWith('/assets/') ||
           rootFile);
       const serveShell = async () => {
-        const asset = route.startsWith('/assets/') || rootFile;
+        // The bundle lives under /assets/ and so do the holding pages; a build
+        // file has an extension the bundler gave it, a page does not.
+        const asset =
+          (route.startsWith('/assets/') && extname(route) !== '') || rootFile;
         const path = asset ? decodeURIComponent(route.slice(1)) : 'index.html';
         const type = asset
           ? assetTypes[extname(path)]

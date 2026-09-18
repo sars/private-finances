@@ -232,6 +232,19 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     const script = await get('/assets/app.js');
     assert.equal(script.status, 200);
     assert.equal(script.headers.get('cache-control'), 'no-store');
+    // The holding pages share the /assets/ prefix with the bundle: a page is
+    // the shell, a hashed file with an extension is the file.
+    for (const page of [
+      '/assets/snapshots',
+      '/assets/new',
+      '/assets/12345678-1234-1234-1234-123456789012',
+    ]) {
+      const shell = await get(page);
+      assert.equal(shell.status, 200, page);
+      assert.match(shell.headers.get('content-type') ?? '', /text\/html/);
+      assert.match(await shell.text(), /Application shell/);
+    }
+    assert.equal((await get('/assets/missing-file.js')).status, 404);
     assert.equal(
       (await get('/assets/app-Abcd1234.js')).headers.get('cache-control'),
       'private, max-age=31536000, immutable',
