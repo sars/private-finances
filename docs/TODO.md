@@ -55,7 +55,13 @@ See [assets](assets.md) for the model and the plan.
       BTC and ETH wallets by address with the exchange's open prices. Deployed
       September 18, 2026; both credentials verified, positions, exchange total
       and wallets filled, the broker's cash from the base-currency summary
-      (b22a37a). Only LHV awaits its first stated balance.
+      (b22a37a), the exchange per coin and the wallet by extended key
+      (9d5d882). Only LHV awaits its first stated balance.
+- [ ] **PF-020 / AS-5: the company sheet feed.** A holding fed from a small
+      Google Sheet the company file copies a few labelled cells into on a timer,
+      read through the Sheets API as a service account the sheet is shared with;
+      first use: the FOP's personal USD share. Awaits the sheet's ID and the
+      service-account key on the server.
 
 ## 2. Finish smooth frontend behavior
 
