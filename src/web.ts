@@ -38,6 +38,7 @@ import { Reports, previousReportPeriod } from './reports.js';
 import { Accounts } from './accounts.js';
 import { Holdings } from './holdings.js';
 import { fillFromBalances } from './holding-fill.js';
+import { accountDisplayName } from './account-names.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
@@ -117,6 +118,8 @@ const frontendRoutes = new Set([
   '/settings',
   '/cash',
   '/assets',
+  '/assets/snapshots',
+  '/assets/new',
 ]);
 const assetTypes: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
@@ -354,6 +357,7 @@ export function web(
         Boolean(config.frontendDirectory) &&
         (frontendRoutes.has(route) ||
           /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(route) ||
+          /^\/assets\/[0-9a-f-]{36}$/.test(route) ||
           route.startsWith('/assets/') ||
           rootFile);
       const serveShell = async () => {
@@ -521,6 +525,16 @@ export function web(
             owner: account.owner,
             label: account.label,
             currencies: account.balances.map((b) => b.currency),
+            // One name for the account wherever it is listed.
+            displayName: accountDisplayName({
+              owner: account.owner,
+              source: account.source,
+              label: account.label,
+              currency:
+                account.balances.length === 1
+                  ? account.balances[0]!.currency
+                  : null,
+            }),
           })),
         });
         return;
@@ -548,7 +562,18 @@ export function web(
         const layout = await new UiLayouts(repo.db).get(actor, 'balances');
         json(200, {
           accounts: arrange(
-            accounts,
+            accounts.map((account) => ({
+              ...account,
+              displayName: accountDisplayName({
+                owner: account.owner,
+                source: account.source,
+                label: account.label,
+                currency:
+                  account.balances.length === 1
+                    ? account.balances[0]!.currency
+                    : null,
+              }),
+            })),
             layout.ordering,
             (account) => `${account.source}:${account.accountId}`,
           ),
