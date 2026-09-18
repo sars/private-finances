@@ -9,6 +9,23 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**7858fa2ef1d0ecf6d29c35b4a6b99af2b99e6072**, live since September 18, 2026 at
+schema version 57, deployed with `deploy/release.sh` in one run: 599
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 57 with 4,171 transactions unchanged, both services active
+afterwards. It carries PR #83: a snapshot made from the Snapshots page for
+today reads the automatic figures first — the stored bank balances, the
+broker, the exchange, the wallets, through the web process, one run at a
+time and for today only — and then saves what was typed, so a snapshot is one
+moment's picture; a second button reads the automatic figures alone. The web
+process reads the feed credentials from `CREDENTIALS_DIRECTORY`, added to the
+server configuration before the switch. A bank's rate-limit or transient
+error now pauses its import for twelve hours instead of twenty-four, at the
+owner's request. Bond maturity notices joined the to-do list.
+
+The release before it, **483c965b2473506282f2899e9d6f533407b548b9**, is
+described below.
+
 **483c965b2473506282f2899e9d6f533407b548b9**, live since September 18, 2026 at
 schema version 57, deployed with `deploy/release.sh` in one run: 599
 application tests passed on the server, the rehearsal on a restored copy of
