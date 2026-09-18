@@ -9,6 +9,28 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**9d5d882a21c93ee8d2466d7ff32bc3bd74cf0ba4**, live since September 18, 2026 at
+schema version 54, deployed with `deploy/release.sh` in one run: 583
+application tests passed on the server, the rehearsal on a restored copy
+reached schema 54 with the ledger unchanged, both services active. It carries
+PR #67: every Binance Spot coin worth a dollar or more is a holding of its own
+under the exchange's group, created by the feed and zeroed when gone, with a
+total holding skipped as superseded; a bitcoin wallet is read from its
+extended public key, the addresses derived on the server
+(`src/bitcoin-wallet.ts`, tested against the BIP44/49/84 vectors) and looked
+up on the public ledger with the twenty-address gap limit; and the Assets
+screen groups rows with a subtotal per group, hides zero and fed holdings on
+request, shows a fed figure read-only, and lost its Refresh button.
+
+After the switch the owner's wallet key was linked to the Cold BTC holding —
+it derives the funded address at receive index 0 and the empty one the wallet
+had shown at index 1 — and the retired Binance total handed over to 21
+per-coin holdings, which the snapshot run created and filled and which now
+belong to the owner. The September 18 snapshot holds 14 bank balances, the
+broker's 10 positions and cash, 21 exchange coins and both wallets; LHV alone
+still waits for its bank's first stated balance. 114 holdings exist, 42 of
+them retired.
+
 **b22a37a080ad523b08b24847af3ca3a914e0a2ec**, live since September 18, 2026 at
 schema version 54, the fifth release of the assets feeds that night, each
 deployed with `deploy/release.sh` in one run with 579 application tests
