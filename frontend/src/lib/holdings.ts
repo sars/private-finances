@@ -127,6 +127,10 @@ export const rigaToday = () =>
 export const decimalPattern = /^-?\d+(\.\d+)?$/;
 export const isDecimal = (value: string) => decimalPattern.test(value.trim());
 
+/** A calendar day as the API writes it; a URL can carry anything. */
+export const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+export const isDay = (value: string) => dayPattern.test(value);
+
 /**
  * One form-encoded POST, with the messages a person can act on. The server
  * answers 409 when the record moved under us and 400 when the figure is wrong;
@@ -150,10 +154,22 @@ export async function postForm<T>(
           ? 'This changed since you opened it. Refresh and try again.'
           : response.status === 400
             ? 'The server refused this. Check the fields and try again.'
-            : 'Not saved. Try again.',
+            : response.status === 404
+              ? 'This server does not have that yet. Update it and try again.'
+              : 'Not saved. Try again.',
     );
   return (await response.json()) as T;
 }
+
+/**
+ * Every figure recorded on one day, taken out together. A day counted wrongly
+ * is removed whole and counted again; there is no half-corrected snapshot.
+ */
+export const deleteSnapshotDay = (csrf: string, asOf: string) =>
+  postForm<{ removed: number }>('/api/holding-snapshots/delete', {
+    csrf,
+    asOf,
+  });
 
 /** Every holdings view is stale once a figure is written. */
 export const refreshHoldings = () =>
