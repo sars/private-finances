@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { queryClient, useSession } from './lib/query';
+import { queryClient, useSession, invalidateFinancialData } from './lib/query';
 import { isAppPath, stringSearch } from './lib/navigation-state';
 import {
   DisplayCurrencyProvider,
@@ -156,6 +156,24 @@ function App() {
     } catch {}
     return () => media.removeEventListener('change', update);
   }, [theme]);
+  // Every query rests at staleTime Infinity and nothing refetches on focus, so
+  // an installed app — which iOS suspends the moment it leaves the foreground —
+  // came back showing whatever it held hours ago, with no browser reload button
+  // to escape it. A minute away is the line: shorter than that is switching to
+  // the bank's app and back, which should not cost a round trip.
+  useEffect(() => {
+    let leftAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        leftAt = Date.now();
+        return;
+      }
+      if (leftAt && Date.now() - leftAt > 60_000) void invalidateFinancialData();
+      leftAt = 0;
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   const isAdmin = !!identity?.isAdmin;
   // What waits for the signed-in member, shown beside Review everywhere the
@@ -197,7 +215,14 @@ function App() {
       {/* min-w-0: a flex item's minimum width is its content's, so a wide
           table (the analytics heat grid over a month of days) would widen the
           page instead of scrolling inside its own wrapper. */}
-      <SidebarInset id="main" className="min-w-0 pb-20 md:pb-0">
+      {/* The tab bar is 3.5rem plus whatever the home indicator claims, and
+          that inset only became real when the viewport went viewport-fit=cover
+          — so a flat pb-20 left the last few millimetres of every screen under
+          the bar. The reservation carries the same inset the bar does. */}
+      <SidebarInset
+        id="main"
+        className="min-w-0 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0"
+      >
         <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b bg-background/95 px-4 pt-[env(safe-area-inset-top)] backdrop-blur">
           {/* The phone already opens this sidebar from the tab bar's More
               button; a second trigger here would be a website's duplicate
