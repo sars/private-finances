@@ -27,6 +27,7 @@ import { initializeTransactionTriage } from './transaction-triage.js';
 import { initializeLlmBudget } from './llm-budget.js';
 import { initializeReplyWorkflow } from './reply-workflow.js';
 import { initializeCredentialHealth } from './credential-health.js';
+import { initializeBackupHealth } from './backup-health.js';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
 import { createHash } from 'node:crypto';
@@ -923,6 +924,20 @@ async function applyMigrations(db: Database): Promise<void> {
         code text, ran_at timestamptz NOT NULL DEFAULT now()
       )`);
       await tx.query('INSERT INTO schema_versions(version) VALUES (58)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=59'))
+        .rows.length
+    ) {
+      // Every copy of this household's data has lived on one machine. The
+      // off-server backup that changes it is worth nothing unread: a timer can
+      // be left disabled and a bucket credential can expire without either
+      // making a sound. One row per attempt, written by the backup script
+      // itself, lets the operations page state plainly whether a copy exists
+      // elsewhere and how old it is — and an empty table is the honest answer
+      // that none ever has. See docs/backups.md.
+      await initializeBackupHealth(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (59)');
     }
   });
 }

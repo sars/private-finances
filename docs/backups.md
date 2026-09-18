@@ -1,30 +1,168 @@
-# Encrypted backups
+# Encrypted off-server backups
 
-Prepared, not enabled. Owner-selected destination: private Amazon S3 bucket in the existing AWS account.
-Use restic with the bucket region’s S3 endpoint. Official setup reference:
-https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html
+Every copy of this household's data lives on one machine. A daily `pg_dump`
+encrypted by [restic](https://restic.readthedocs.io/) and uploaded to a private
+Amazon S3 bucket is what changes that. The owner chose S3, in the AWS account
+they already hold; the cost at this data size is a few cents a month.
 
-The restricted /etc/private-finances/backup.env supplies PGHOST, PGPORT, PGUSER,
-PGDATABASE, PGPASSFILE, RESTIC_REPOSITORY, RESTIC_PASSWORD_FILE,
-AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. Store the restic recovery password
-in the owner's password manager as well as its server secret file. The server
-credential should be limited to this backup bucket. Never commit these values.
+The code, the systemd units and the operations-page status are in place. What
+is not in place is the bucket, the credential and the proof of restore — those
+need the steps below, and until they are done the System health page says
+**Off-server backup · Never**, which is the truth.
 
-Initialize the restic repository once with the verified private bucket URL.
-The daily timer runs pg_dump followed by an encrypted restic upload. Dump files
-exist only in a temporary owner-only directory, removed on exit. An unsuccessful
-dump cannot upload an empty successful backup. Credentials and raw diagnostics
-are excluded from service logs. PostgreSQL client version must support the server.
+## What the owner does in AWS
 
-Before live imports, prove recovery: upload a synthetic database snapshot, run
-restic check --read-data, restore the snapshot to a restricted temporary folder,
-create a separate disposable PostgreSQL database, restore with pg_restore
---exit-on-error --no-owner --no-acl, and compare transaction/audit counts and exact
-per-currency totals with the source. Never restore into the active database.
-Record snapshot ID, tested Git SHA, timestamp and comparison result without
-financial content. Repeat after migration changes and periodically thereafter.
+Five steps in the AWS console, roughly fifteen minutes. Nothing here is
+reversible in a way that matters, and none of it touches the server.
 
-Retention proposal: 14 daily, 8 weekly, 12 monthly snapshots. Deletion/pruning
-is not automated yet; confirm retention and prove restore first. Backup failure
-and age still need wiring into dashboard/alerts. The prepared timer alone is
-not proof of a successful backup or restore.
+**1. Choose a region.** Anything in the EU is a sensible default for a
+household in Riga; `eu-north-1` (Stockholm) is the cheapest EU region. Whatever
+is chosen has to be used consistently in steps 2 and 5.
+
+**2. Create the bucket.** S3 → Create bucket. A name nobody else has taken, in
+the chosen region. Leave **Block all public access** on — all four boxes. Turn
+**Bucket Versioning** on. Leave default encryption at its default (SSE-S3);
+restic encrypts everything before it leaves the server, so this is only a second
+layer. Do not enable Object Lock: it prevents restic from managing its own
+locks.
+
+**3. Add one lifecycle rule.** Bucket → Management → Create lifecycle rule,
+applied to the whole bucket, doing three things:
+
+- expire **noncurrent** versions after 30 days,
+- delete expired object delete markers,
+- abort incomplete multipart uploads after 7 days.
+
+This rule is the reason versioning is on. If the server is ever compromised and
+its key used to erase the backups, the deletions become delete markers and the
+real objects stay recoverable for thirty days.
+
+**4. Create a user for the server.** IAM → Users → Create user, no console
+access. Attach an **inline** policy — not a managed one — scoped to this bucket
+alone, with `BUCKET` replaced by the name from step 2:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListTheBucket",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::BUCKET"
+    },
+    {
+      "Sid": "ReadWriteObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": "arn:aws:s3:::BUCKET/*"
+    }
+  ]
+}
+```
+
+`DeleteObject` is there because restic removes its own lock file at the end of
+every run and cannot work without it. Versioning is what makes granting it safe.
+The user can reach this one bucket and nothing else in the account.
+
+**5. Create an access key.** The user → Security credentials → Create access key
+→ "Application running outside AWS". Copy both halves; the secret is shown once.
+
+Then hand over four values — region, bucket name, access key ID, secret access
+key — through the private channel, never through the repository, an issue or a
+pull request.
+
+## What the owner does outside AWS
+
+**Invent a restic repository password and keep it.** It is not a login; it is
+the encryption key for every snapshot. Losing it means losing every backup, and
+no part of AWS can recover it. Generate a long random one, store it in the
+password manager, and hand it over with the other four values. It ends up in a
+root-only file on the server as well, but the password manager is the copy that
+survives the server.
+
+## What happens on the server
+
+Nothing below needs the owner once the five values exist.
+
+1. `apt-get install restic` (Ubuntu 24.04 ships 0.16.4, which is sufficient).
+2. Write `/etc/private-finances/backup.env`, root-owned, mode 600, holding
+   `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGPASSFILE`,
+   `RESTIC_REPOSITORY` (`s3:s3.<region>.amazonaws.com/<bucket>`),
+   `RESTIC_PASSWORD_FILE`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+   The repository password goes in its own root-only file that
+   `RESTIC_PASSWORD_FILE` points at.
+3. `restic init` once, against that repository.
+4. Install `private-finances-backup.service` and `.timer`, then
+   `systemctl enable --now private-finances-backup.timer`.
+
+The timer runs daily at 03:30 UTC with up to fifteen minutes of randomised
+delay, and `Persistent=true` catches up a run the server slept through.
+
+## What a run does
+
+`scripts/backup.sh`, as the `private-finances` user:
+
+- dumps the database with `pg_dump --format=custom --no-owner --no-acl` into a
+  temporary owner-only directory that is removed on exit, success or not;
+- refuses to upload a dump under 1 KiB, because an empty dump that `pg_dump`
+  did not complain about is a failure, not a very small backup;
+- pipes the dump into `restic backup --stdin`, tagged `private-finances`;
+- records the attempt in the application's `backup_runs` table.
+
+Diagnostics from `pg_dump` and `restic` never reach the service log: they can
+carry connection details. The log carries the event and the stage it failed at,
+and nothing else.
+
+## What the operations page shows
+
+The System health page reads `backup_runs` and states one of four things:
+
+| Shown                          | Meaning                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| **Never**                      | No off-server copy has ever been made. The opening state.     |
+| **_n_ h ago**                  | The last copy succeeded that long ago.                        |
+| **_n_ h ago · expected daily** | A day and the timer's delay have passed without a new one.    |
+| **Failed**                     | The newest attempt failed, at the export or the upload stage. |
+
+A newer failure outranks an older success: when the last run failed, the age of
+the last good copy is no longer the thing to report, though the page still names
+it. A successful upload whose status row could not be written shows as a backup
+that is ageing — erring towards alarm rather than towards false comfort — and
+logs `backup_status_unrecorded`.
+
+The stored row holds a destination _label_ (`amazon-s3`), never the bucket URL:
+that row travels inside the very dump that gets uploaded, and the bucket address
+is private configuration. No financial content and no credentials reach the
+table.
+
+## Proving recovery, before this counts as protection
+
+A backup nobody has restored is a belief. Before live data depends on it:
+upload a synthetic snapshot, run `restic check --read-data`, restore it to a
+restricted temporary folder, create a separate disposable PostgreSQL database
+and restore with `pg_restore --exit-on-error --no-owner --no-acl`, then compare
+transaction and audit counts and exact per-currency totals against the source.
+Never restore into the active database.
+
+Record the snapshot ID, the tested Git SHA, the timestamp and the comparison
+result — without financial content. Proof is marked by
+`/etc/private-finances/off-server-restore-verified`, containing exactly
+`off-server-restore-verified`; the local-only marker never substitutes for it.
+Repeat after migration changes and periodically thereafter.
+
+## Retention, still deferred
+
+The proposal remains 14 daily, 8 weekly and 12 monthly snapshots. `restic
+forget --prune` is deliberately not automated and not scheduled: pruning
+deletes, and nothing should delete a backup before a restore has been proven.
+Until then the repository only grows, which at this data size costs very little.
+
+The prepared timer is not proof of a successful backup, and a successful backup
+is not proof of a restore.

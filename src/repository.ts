@@ -9,6 +9,7 @@ import {
   type SpendingPatternAnnotation,
 } from './spending-pattern.js';
 import { Conflict } from './errors.js';
+import { backupHealth } from './backup-health.js';
 import { rememberCounterparty } from './counterparty-identity.js';
 import { attachRefunds, type RefundAnnotation } from './refunds.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -537,6 +538,7 @@ export class Repository {
       freshness: state,
       lastSuccessAt,
       jobs: jobs.rows,
+      backup: await backupHealth(this.db),
       workflows: await workflowHealth(this.db),
       bankConnections: (
         await this.db.query(

@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   CircleAlert,
   Database,
+  DatabaseBackup,
   KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CredentialHealth } from '../../src/credential-health';
+import { backupSummary, type BackupHealth } from '../../src/backup-health';
 
 type Workflow = {
   availability: 'available' | 'unavailable';
@@ -41,6 +43,7 @@ type Health = {
   freshness: string;
   lastSuccessAt: string | null;
   jobs: Array<{ state: string; count: number }>;
+  backup?: BackupHealth;
   bankConnections: Array<{
     connection: string;
     state: string;
@@ -80,6 +83,48 @@ function date(value: string) {
         timeZone: 'Europe/Riga',
       }).format(parsed) + ' (Riga)'
     : 'Date unavailable';
+}
+/**
+ * Whether a copy of the database exists anywhere but this server.
+ *
+ * The one card on this page that has to speak when there is nothing to report:
+ * no backup at all reads as "Never", because an empty state drawn as silence
+ * would look identical to a healthy one. The wording itself is shared with the
+ * plain page so the two cannot drift.
+ */
+function Backup({ backup }: { backup?: BackupHealth }) {
+  const { headline, detail } = backupSummary(backup, date);
+  const tone =
+    backup?.state === 'failing'
+      ? 'text-negative'
+      : backup?.state === 'late' || backup?.state === 'never_run'
+        ? 'text-warning'
+        : 'text-muted-foreground';
+  return (
+    <Card className="gap-3 shadow-xs">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <DatabaseBackup className="size-4 text-primary" />
+          Off-server backup
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p
+          className={`text-xl font-semibold ${backup && backup.state !== 'healthy' ? tone : ''}`}
+        >
+          {headline}
+        </p>
+        {detail && (
+          <p
+            role={backup && backup.state !== 'healthy' ? 'status' : undefined}
+            className={`mt-1 text-xs ${tone}`}
+          >
+            {detail}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 export default function Operations() {
   const [health, setHealth] = useState<Health>();
@@ -153,7 +198,8 @@ export default function Operations() {
           aria-label="Loading system health"
           className="space-y-4"
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-32 rounded-lg" />
             <Skeleton className="h-32 rounded-lg" />
             <Skeleton className="h-32 rounded-lg" />
           </div>
@@ -181,7 +227,7 @@ export default function Operations() {
             <p className="text-xs text-muted-foreground">
               Checked {date(checkedAt)}. Refresh to check for changes.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Card className="gap-3 shadow-xs">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-sm">
@@ -219,6 +265,7 @@ export default function Operations() {
                   </p>
                 </CardContent>
               </Card>
+              <Backup backup={health.backup} />
             </div>
             <section className="space-y-3" aria-label="Workflow activity">
               <h2 className="text-base font-semibold">Workflow activity</h2>

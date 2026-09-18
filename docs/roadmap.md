@@ -21,8 +21,10 @@ AI spending has a shared $10 monthly cap, conservative reservations and dashboar
 usage visibility; model pricing and usage anomalies pause further calls.
 
 Local backup and a restore comparison of all 36 tables verified the current release.
-This is not off-server protection. Existing AWS S3 remains the preferred deferred
-backup destination; its setup reminder is scheduled separately.
+This is not off-server protection. The daily encrypted backup to Amazon S3 is built
+and tested, and System health now states plainly whether a copy exists off this
+server and how old it is; until the owner creates the bucket and its credential the
+page reads "Never". See [the backup runbook](backups.md).
 
 Clear transactions now receive category suggestions before Telegram question selection;
 first-run owner catalogs are initialized. The owner authorized automatic classification of clear expenses on September 12;

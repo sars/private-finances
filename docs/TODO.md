@@ -317,9 +317,16 @@ change was cancelled; do not silently turn it into a generic tag or income featu
 
 ## 7. Operations and release reliability
 
-- [ ] **PF-012 / OPS-1: encrypted AWS S3 backups — explicitly deferred.** Configure
-      destination and recovery key with the owner, then restore off-server and verify
-      records plus receipt evidence. Local restore is working; this is not S3 protection.
+- [ ] **PF-012 / OPS-1: encrypted AWS S3 backups — waiting on the bucket.** The
+      script, the daily timer, the `backup_runs` table and the System health card are
+      built and tested; the page reads "Never" until a real backup lands, which is the
+      truth. What remains is owner-side: create the private bucket, its lifecycle rule
+      and a bucket-scoped IAM user, invent the restic recovery password, and hand over
+      region, bucket, key ID, secret and password — the five values in
+      [the backup runbook](backups.md). Then install restic, write
+      `/etc/private-finances/backup.env`, `restic init`, enable the timer, and only
+      afterwards restore off-server and verify records plus receipt evidence. Local
+      restore is working; that is not S3 protection.
 - [ ] **PF-012 / OPS-2: automate more of release delivery.** Build on existing CI
       and guarded deployment: reproducible artifacts, migration/backup gates, wait for
       active imports, health checks and a demonstrated failure rollback. Preserve other

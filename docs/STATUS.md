@@ -885,6 +885,46 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# System health says whether a backup exists — September 18, 2026
+
+Every copy of this household's data has lived on one machine, and the page that
+reports on the system had no opinion about it. The daily encrypted backup to
+Amazon S3 had been prepared since the first install — a script, a service and a
+timer, none of them installed — and nothing anywhere would have said so. A
+backup nobody watches is a belief: the timer can be left disabled, the bucket
+credential can expire, and the only symptom is silence.
+
+So every run now writes one row, failures included, into a `backup_runs` table
+(schema 59), and System health carries a third card beside the database and the
+release. It reads **Never** today, because no off-server copy has ever been
+made, and that is the point: an empty state drawn as silence would have looked
+identical to a healthy one. Once backups run it reads the age of the last copy,
+turns to _expected daily_ when a day and the timer's randomised delay have
+passed, and to **Failed** — naming the export or the upload stage — when the
+newest attempt failed. A newer failure outranks an older success. The same
+wording is shared with the no-JavaScript page so the two cannot drift.
+
+The script itself gained the parts that were missing. It refuses to upload a
+dump under 1 KiB, because an empty dump `pg_dump` did not complain about is a
+failure rather than a very small backup; it reads restic's JSON summary for the
+snapshot it created; and it records the failed attempts, which is the half that
+matters, through the same libpq variables the dump already uses, so no second
+credential exists. A successful upload whose status row cannot be written stays
+a success — the page shows it ageing, which errs towards alarm rather than
+towards false comfort.
+
+Twelve tests: six over the health states and the table's constraints, and six
+that run `scripts/backup.sh` itself against stubbed `pg_dump`, `restic` and
+`psql`, proving a failed dump is never uploaded, a truncated one is never called
+a backup, and each outcome reaches the table. That script had never been under
+test, having existed only on the server.
+
+What remains is not code. The bucket, its lifecycle rule, a bucket-scoped IAM
+user and the restic recovery password are the owner's to create, and
+[the runbook](backups.md) now states the five values needed and the four server
+steps that follow. Nothing was deployed and no paid resource was created. The
+restore proof, and retention, remain ahead of this.
+
 # Home says what is broken — September 18, 2026
 
 Schema version 58. Built and checked; **not deployed**.
