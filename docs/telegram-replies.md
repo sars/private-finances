@@ -87,6 +87,29 @@ from the bank was "Iнше" (other): the person had nothing to go on, while the
 code said utilities all along. The receipt that reports what was saved names
 the account too.
 
+### The name is a tag, not a word
+
+The name a message opens with is a Telegram mention: it links to that person
+and notifies them, so a question addressed to one member does not sit in a
+shared chat waiting to be noticed. It travels as a `text_mention` entity
+carrying the numeric user id from the chat binding, not as an `@username` —
+neither member needs to have one, and a username someone later changes would
+quietly stop tagging. The message itself stays plain text with no parse mode,
+so a bank description full of `<` and `&` needs no escaping and cannot smuggle
+markup into what the household reads.
+
+Only a name the bot itself wrote is tagged. A question quotes the bank's own
+description, and a description may read `TRANSFER-4 Sent money to Rodion
+Salnik` — the bank naming a payee, not the bot addressing anyone — so the
+search is anchored to the address at the head of the message and never sweeps
+the quoted text. Tagged this way: the clarification question, the refund
+question, the receipt reporting what was saved (both names, when the other
+member answered), the notes that say a reply reached nothing, and the bank
+approval reminder, which names the member whose approval it is. An entity that
+would not fit the text is dropped rather than sent, because Telegram rejects
+the whole message over one — untagged is better than unsent. A report is a
+bulletin rather than a message to a person, and stays untagged.
+
 ## Either member may answer, and the answer records who did
 
 That was the most likely cause of the two lost answers: the question is

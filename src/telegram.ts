@@ -18,11 +18,26 @@ export interface TelegramConfig {
  * of emoji from a bot and answers REACTION_INVALID to anything else; 🙌 was
  * in this list until 18 September 2026 and never once landed. */
 export type TelegramReaction = '👍' | '👀' | null;
+/**
+ * Where a household member's name sits in a message, so Telegram renders that
+ * name as a mention: tappable, and a notification for the person named rather
+ * than a word they have to notice. Offsets and lengths are UTF-16 code units,
+ * which is exactly what `String.prototype.length` counts.
+ */
+export interface TelegramMention {
+  offset: number;
+  length: number;
+  userId: string;
+}
+export interface TelegramSendOptions {
+  forceReply?: boolean;
+  mentions?: TelegramMention[];
+}
 export interface TelegramTransport {
   send(
     chatId: string,
     text: string,
-    options?: { forceReply?: boolean },
+    options?: TelegramSendOptions,
   ): Promise<{ messageId: number }>;
   /** Replaces any previous bot reaction on that message; null clears it. */
   react(
@@ -34,7 +49,65 @@ export interface TelegramTransport {
     chatId: string,
     messageId: number,
     text: string,
+    options?: { mentions?: TelegramMention[] },
   ): Promise<{ messageId: number }>;
+}
+/** How the bot writes each member's name when it speaks to them. */
+export const ownerNames: Record<Owner, string> = {
+  rodion: 'Rodion',
+  katya: 'Katya',
+};
+/**
+ * The mentions for a message that addresses members by name. Each name is
+ * looked for once, in the order given, starting after the previous one: the
+ * quoted bank description sits at the end of these messages and may itself
+ * read `Sent money to Rodion Salnik`, which is the bank naming a payee and not
+ * the bot addressing anyone. A name the message does not contain is left
+ * untagged rather than guessed at.
+ */
+export function addressMentions(
+  text: string,
+  addressees: Owner[],
+  userIds: Record<Owner, string>,
+): TelegramMention[] {
+  const mentions: TelegramMention[] = [];
+  const haystack = text.toLowerCase();
+  let from = 0;
+  for (const addressee of addressees) {
+    if (!Object.prototype.hasOwnProperty.call(ownerNames, addressee)) continue;
+    const name = ownerNames[addressee];
+    const userId = userIds?.[addressee];
+    // Some messages lead with the display name and some with the stored key
+    // (`rodion:`); both spell the same person, so either one is the address.
+    const offset = haystack.indexOf(name.toLowerCase(), from);
+    if (offset < 0 || !userId) continue;
+    mentions.push({ offset, length: name.length, userId });
+    from = offset + name.length;
+  }
+  return mentions;
+}
+/**
+ * Every member named by a sentence of the bot's own, in the order it names
+ * them. Only the fixed notes the bot writes go through here — they quote no
+ * bank description — so a name in one is always a person being spoken about.
+ */
+export function namedMentions(
+  text: string,
+  userIds: Record<Owner, string>,
+): TelegramMention[] {
+  const lowered = text.toLowerCase();
+  const named = (['rodion', 'katya'] as const)
+    .map((key) => ({
+      key,
+      offset: lowered.indexOf(ownerNames[key].toLowerCase()),
+    }))
+    .filter((item) => item.offset >= 0)
+    .sort((a, b) => a.offset - b.offset);
+  return addressMentions(
+    text,
+    named.map((item) => item.key),
+    userIds,
+  );
 }
 export class TelegramError extends Error {
   constructor(readonly code: 'configuration' | 'uncertain') {
@@ -130,6 +203,46 @@ export function telegramTransport(
     }
     return record(JSON.parse(Buffer.concat(chunks).toString('utf8')));
   };
+  // A mention Telegram will accept from a bot: `text_mention` carries the
+  // numeric user id, so it tags a member who has no @username and never breaks
+  // when someone changes theirs. Sent as entities rather than HTML so the
+  // message stays plain text — a bank description full of `<` and `&` needs no
+  // escaping and cannot smuggle markup into what the household reads. An
+  // entity reaching past the end of the text makes Telegram reject the whole
+  // message, so a range that does not fit is dropped and the message still goes.
+  const mentionEntities = (
+    text: string,
+    mentions: TelegramMention[] | undefined,
+  ): Array<Record<string, unknown>> => {
+    const entities: Array<Record<string, unknown>> = [];
+    for (const mention of mentions ?? []) {
+      const id = Number(mention?.userId);
+      if (
+        !Number.isSafeInteger(mention?.offset) ||
+        mention.offset < 0 ||
+        !Number.isSafeInteger(mention?.length) ||
+        mention.length < 1 ||
+        mention.offset + mention.length > text.length ||
+        !Number.isSafeInteger(id) ||
+        id <= 0
+      )
+        continue;
+      entities.push({
+        type: 'text_mention',
+        offset: mention.offset,
+        length: mention.length,
+        user: {
+          id,
+          is_bot: false,
+          first_name: text.slice(
+            mention.offset,
+            mention.offset + mention.length,
+          ),
+        },
+      });
+    }
+    return entities;
+  };
   const sentMessage = (
     body: Record<string, unknown> | null,
     chatId: string,
@@ -147,10 +260,12 @@ export function telegramTransport(
   return {
     async send(chatId, text, options) {
       try {
+        const entities = mentionEntities(text, options?.mentions);
         return sentMessage(
           await call('sendMessage', {
             chat_id: chatId,
             text,
+            ...(entities.length ? { entities } : {}),
             ...(options?.forceReply === false
               ? {}
               : { reply_markup: { force_reply: true, selective: false } }),
@@ -174,13 +289,15 @@ export function telegramTransport(
         throw new TelegramError('uncertain');
       }
     },
-    async reply(chatId, messageId, text) {
+    async reply(chatId, messageId, text, options) {
       try {
+        const entities = mentionEntities(text, options?.mentions);
         // A plain reply: no force_reply keyboard, so it never opens an input prompt.
         return sentMessage(
           await call('sendMessage', {
             chat_id: chatId,
             text,
+            ...(entities.length ? { entities } : {}),
             reply_parameters: {
               message_id: messageId,
               allow_sending_without_reply: true,
@@ -584,10 +701,16 @@ export class TelegramClarifications {
     });
     if (!item) return 'idle';
     try {
-      const result = await this.transport.send(
-        String(item.chat_id),
-        String(item.prompt),
-      );
+      // The prompt opens with the owner's name because the question is for
+      // them; sent as a mention it also reaches them as a notification.
+      const prompt = String(item.prompt);
+      const result = await this.transport.send(String(item.chat_id), prompt, {
+        mentions: addressMentions(
+          prompt,
+          [owner(item.owner)],
+          this.settings.userIds,
+        ),
+      });
       if (!positiveId(result.messageId)) throw new TelegramError('uncertain');
       const saved = await this.db.query(
         "UPDATE telegram_outbox SET state='sent',message_id=$2,lease_until=NULL WHERE id=$1 AND state='sending' AND lease_until>=now() RETURNING id",
@@ -791,7 +914,7 @@ export class TelegramClarifications {
       return settle(
         'ignored',
         `the message replied to is a refund question addressed to ${String(refund.owner)}`,
-        `This refund question is addressed to ${String(refund.owner) === 'rodion' ? 'Rodion' : 'Katya'}, and only they can answer it.`,
+        `This refund question is addressed to ${ownerNames[refund.owner as Owner]}, and only they can answer it.`,
       );
     if (refund)
       return settle(
@@ -831,10 +954,14 @@ export class TelegramClarifications {
       .react(this.settings.chatId, Number(item.message_id), '👀')
       .catch(() => undefined);
     try {
+      // A note that says whose question it is tags them, so the member who has
+      // to answer hears about it rather than only the one who read the note.
+      const text = String(item.text);
       const sent = await this.transport.reply(
         this.settings.chatId,
         Number(item.message_id),
-        String(item.text),
+        text,
+        { mentions: namedMentions(text, this.settings.userIds) },
       );
       // The note's own message is remembered so that a reply to it is
       // recognised as such rather than answered with another note.

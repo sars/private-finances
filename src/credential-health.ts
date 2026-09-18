@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Database, Executor } from './database.js';
-import type { TelegramTransport } from './telegram.js';
+import type { Owner } from './domain.js';
+import { namedMentions, type TelegramTransport } from './telegram.js';
 
 const DAY = 86400000;
 export type CredentialHealth = {
@@ -223,6 +224,12 @@ export class CredentialReminders {
     readonly db: Database,
     readonly chatId: string,
     readonly transport: TelegramTransport,
+    /**
+     * Who to tag when a notice names a member. A bank approval is renewed by
+     * the member whose approval it is, so the notice reaches them rather than
+     * waiting to be noticed. Absent, the notice still goes out, untagged.
+     */
+    readonly userIds?: Record<Owner, string>,
   ) {
     if (
       !/^-?[1-9]\d{0,15}$/.test(chatId) ||
@@ -340,7 +347,9 @@ export class CredentialReminders {
     if (!item) return 'idle';
     const text = String(item.message);
     try {
-      const sent = await this.transport.send(this.chatId, text);
+      const sent = await this.transport.send(this.chatId, text, {
+        mentions: this.userIds ? namedMentions(text, this.userIds) : [],
+      });
       const saved = await this.db.query(
         "UPDATE credential_reminders SET state='sent',message_id=$2,lease_until=NULL WHERE id=$1 AND state='sending' AND lease_until>=now() RETURNING id",
         [item.id, sent.messageId],

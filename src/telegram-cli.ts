@@ -283,6 +283,7 @@ async function main(): Promise<void> {
       db,
       settings.chatId,
       transport,
+      settings.userIds,
     );
     const poll = telegramPoller(token);
     const receipts = new Receipts(db);
