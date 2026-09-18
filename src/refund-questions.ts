@@ -6,6 +6,8 @@ import { currencyExponent } from './fx.js';
 import { Refunds } from './refunds.js';
 import {
   TelegramError,
+  addressMentions,
+  ownerNames,
   validateTelegramConfig,
   type TelegramConfig,
   type TelegramTransport,
@@ -65,8 +67,6 @@ function clean(value: unknown, limit = 120): string {
     .trim()
     .slice(0, limit);
 }
-const names: Record<Owner, string> = { rodion: 'Rodion', katya: 'Katya' };
-
 export function refundQuestionPrompt(
   owner: Owner,
   credit: {
@@ -84,14 +84,14 @@ export function refundQuestionPrompt(
   )} · ${clean(credit.description)}`;
   if (!options.length)
     return [
-      `${names[owner]}, money arrived that I cannot explain.`,
+      `${ownerNames[owner]}, money arrived that I cannot explain.`,
       received,
       reason === 'from_person'
         ? 'Only you know whether it repays something you paid for. Open Private Finances to attach it to a purchase, or reply “none” if it repays nothing.'
         : 'Open Private Finances to attach it to a purchase, or reply “none” if it returns nothing.',
     ].join('\n');
   return [
-    `${names[owner]}, money came back and I will not guess which purchase it returns.`,
+    `${ownerNames[owner]}, money came back and I will not guess which purchase it returns.`,
     received,
     ...options.map((option) => `${option.index} — ${option.label}`),
     'Reply with the number of the purchase it returns, or “none”.',
@@ -271,11 +271,16 @@ export class RefundQuestions {
     });
     if (!item) return 'idle';
     try {
-      const result = await this.transport.send(
-        String(item.chat_id),
-        String(item.prompt),
-        { forceReply: true },
-      );
+      // The question opens with the owner's name; a mention makes it reach them.
+      const prompt = String(item.prompt);
+      const result = await this.transport.send(String(item.chat_id), prompt, {
+        forceReply: true,
+        mentions: addressMentions(
+          prompt,
+          [item.owner as Owner],
+          this.settings.userIds,
+        ),
+      });
       if (!positiveId(result.messageId)) throw new TelegramError('uncertain');
       const saved = await this.db.query(
         "UPDATE refund_questions SET state='sent',message_id=$2,lease_until=NULL WHERE id=$1 AND state='sending' AND lease_until>=now() RETURNING id",

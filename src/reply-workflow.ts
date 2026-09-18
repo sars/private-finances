@@ -14,6 +14,7 @@ import { Repository } from './repository.js';
 import type { Owner } from './domain.js';
 import {
   accountLine,
+  addressMentions,
   queueTelegramNote,
   reviewLink,
   validateTelegramConfig,
@@ -394,12 +395,18 @@ export class TelegramReplyWorkflow {
     if (!item) return 'idle';
     // The payment's owner leads the line, and when the other member answered it
     // says so, so the thread shows whose money it was and who explained it.
-    const answeredBy = String(item.answered_by ?? item.owner);
-    const who =
-      answeredBy === String(item.owner)
-        ? String(item.owner)
-        : `${String(item.owner)} (answered by ${answeredBy})`;
+    const payer = item.owner as Owner;
+    const answeredBy = (item.answered_by ?? item.owner) as Owner;
+    const both = answeredBy !== payer;
+    const who = both ? `${payer} (answered by ${answeredBy})` : `${payer}`;
     const message = `${who}: ${await this.receiptText(item)}`;
+    // Both names are tagged: the receipt belongs to whoever's money it was, and
+    // to whoever explained it, so neither has to be watching the chat to see it.
+    const mentions = addressMentions(
+      message,
+      both ? [payer, answeredBy] : [payer],
+      this.settings.userIds,
+    );
     try {
       // Answering the owner's own message keeps the thread readable; without a
       // recorded message to answer, it still has to be said, so it is sent.
@@ -408,8 +415,10 @@ export class TelegramReplyWorkflow {
           this.settings.chatId,
           Number(item.input_message_id),
           message,
+          { mentions },
         );
-      else await this.transport.send(this.settings.chatId, message);
+      else
+        await this.transport.send(this.settings.chatId, message, { mentions });
       const saved = await this.db.query(
         "UPDATE telegram_reply_workflows SET receipt_state='sent',receipt_lease_until=NULL WHERE id=$1 AND receipt_state='sending' AND receipt_lease_until>=now() RETURNING id",
         [item.id],
