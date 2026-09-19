@@ -9,15 +9,45 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**5e69cba61bd20400fa2ec1ea03ae5c8bafae2606**, live since September 19, 2026 at
+**cf6fa3d160ebdf8abdd2a9ffaab0d8f5fab7efa4**, live since September 19, 2026 at
 schema version 62, deployed with `deploy/release.sh`: both services active,
-schema 62, 4,189 transactions, the import timers and the Telegram worker
-resumed afterwards. It carries PR #109 and adds migration 62,
-`daily_fx_absences`. Both retention rules reported on the switch:
-`predeploy_pruned` removed one dump and `releases_pruned` one release tree.
+schema 62, 4,194 transactions, the import timers and the Telegram worker
+resumed afterwards. It carries PR #109, #111 and #112, and adds migration 62,
+`daily_fx_absences`. Both retention rules reported on each switch.
 
-**The 26 October 2025 gap is closed on real data.** The FX sync was run after
-the switch and reported
+The secondary FX source no longer parses HTML. Minfin's advertised API needs a
+paid key, so the first version scraped the rendered page; the endpoint that page
+itself calls is free, unauthenticated, dated back to 2006, and carries the
+per-bank breakdown the scrape could not reach. The stored rate is now the mean
+of the card midpoints published by the four banks the household actually uses —
+monobank, privatbank, sensebank, a-bank — rather than an average across all 29
+banks Minfin tracks, and the provenance names each contributor with its figures.
+26 October 2025 was restated under that rule and holds EUR 48.855017 from three
+of the four (Sens Bank quoted no euro card rate) and USD 42.03425 from all four.
+The source string changed with the meaning, so `Minfin bank average midpoint` is
+retired and outranked rather than reused; quotes are immutable, so the rows
+written under it stay.
+
+Sterling is withdrawn as a **display** currency: totals report in hryvnia, euro
+or dollars. None of the four banks quote GBP at all, so it gets no secondary
+source and a sterling payment on a day the primary source left empty stays
+missing, which is the standing rule. Payments *made* in sterling are unaffected
+and still convert.
+
+Two fixes to the conversion status page came with it. The strip counted every
+calendar day against the sync, which only ever asks about days carrying a
+payment — so two days with no payments at all sat permanently amber with nothing
+able to clear them, the exact warning-that-is-always-on the page exists to
+avoid. A day needing no rate is now drawn as needing nothing and left out of the
+count. The Rates section also never showed a rate; it now lists the newest quote
+per pair with its source and date, chosen by the same precedence a conversion
+applies. The strip is a year rather than the whole ledger, its cells are 14px
+rather than 10px, and each is a button: a phone has no hover, so an amber square
+could not explain itself, and tapping one now names the day, its state and the
+source behind it.
+
+**The 26 October 2025 gap was closed on real data.** The FX sync was first run
+under release 5e69cba and reported
 `{"dates":372,"fetched":1,"stored":3,"skipped":371,"unavailable":0}` — 371 days
 already held a rate and were not asked about again, one day was fetched, and it
 was filled by the secondary source: `fx_day_stored_secondary` for 2025-10-26,
