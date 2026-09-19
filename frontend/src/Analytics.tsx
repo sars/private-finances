@@ -649,15 +649,18 @@ export default function Analytics() {
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-3">
                 {view.drivers.map((d) => (
-                  <div key={d.key} className="space-y-3 rounded-lg border p-4">
+                  <div
+                    key={d.key}
+                    className="min-w-0 space-y-3 rounded-lg border p-4"
+                  >
                     <div className="flex items-baseline justify-between gap-2">
                       <a
                         href={drill(undefined, d.range)}
-                        className="text-sm font-medium hover:underline"
+                        className="min-w-0 break-words text-sm font-medium hover:underline"
                       >
                         {d.long ?? d.label}
                       </a>
-                      <span className="text-sm font-semibold tabular-nums">
+                      <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums">
                         {money(d.minor, currency)}
                         {d.delta !== null && (
                           <span
@@ -681,12 +684,12 @@ export default function Analytics() {
                           >
                             <a
                               href={drill(a.branch, d.range)}
-                              className="min-w-0 flex-1 hover:underline"
-                              title={`${money(a.here.toString(), currency)} this ${noun}`}
+                              className="min-w-0 flex-1 truncate hover:underline"
+                              title={`${a.branch} · ${money(a.here.toString(), currency)} this ${noun}`}
                             >
                               {a.branch}
                             </a>
-                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                            <span className="shrink-0 whitespace-nowrap tabular-nums text-muted-foreground">
                               +{money(a.delta.toString(), currency)} over usual
                             </span>
                           </li>
@@ -702,11 +705,12 @@ export default function Analytics() {
                           >
                             <a
                               href={`/transactions/${encodeURIComponent(t.id)}?display=${display}`}
-                              className="truncate hover:underline"
+                              className="min-w-0 truncate hover:underline"
+                              title={t.description || 'Payment'}
                             >
                               {t.description || 'Payment'}
                             </a>
-                            <span className="shrink-0 font-medium tabular-nums">
+                            <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">
                               {money(t.netMinor, currency)}
                             </span>
                           </li>
