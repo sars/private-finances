@@ -63,11 +63,16 @@ DB і внутрішні endpoints не мають публічного listener
 
 ## Backups та інциденти
 
-До live import потрібен encrypted backup поза цим VPS, retention policy й restore
-у чисту БД з перевіркою кількості записів та контрольних сум звітів.
-Запропоновані цілі для погодження: RPO 24h, RTO 4h; не обіцяні SLA.
-Backup age і результат restore test видно в monitoring; retention і ключ відновлення
-погодити перед накопиченням реальних даних.
+Encrypted off-server backup is live since 19 September 2026 — restic to a private
+Amazon S3 bucket, daily at 03:30 UTC, details in [backups](backups.md). Restore
+was proved into a separate disposable database, not assumed, and recorded with
+`/etc/private-finances/off-server-restore-verified`. Backup age and failure are
+visible on System health and on the Home problem list; the recovery password is
+the owner's and is held outside this server.
+
+Retention is the one part still outstanding: `restic forget --prune` is not
+scheduled, because pruning deletes. Запропоновані цілі для погодження: RPO 24h,
+RTO 4h; не обіцяні SLA.
 
 Інцидент: припинити шкідливі повтори → зберегти redacted evidence → відновити сервіс
 → regression test → короткий postmortem за шаблоном. Не «лікувати» баг нескінченним restart.

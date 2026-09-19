@@ -31,11 +31,18 @@ Installed archive SHA-256:
 The install script records the executed first-install procedure; it deliberately
 refuses to overwrite an existing installation. Subsequent rollout needs a separate
 release-switch procedure. Server application tests: 22 passed, PostgreSQL-only
-test skipped there but passed in CI. Local empty-database restore passed; off-server
-backup and rollback remain unverified.
+test skipped there but passed in CI. Local empty-database restore passed; rollback
+remains unverified.
 
-The owner deferred S3 setup and authorized imports and recurring polling after a
-verified local restore. Before enabling a schedule, restore a current backup into
+Off-server backup is live since 19 September 2026: `restic` uploads an encrypted
+`pg_dump` to a private Amazon S3 bucket daily, and the restore was proved into a
+separate disposable database rather than assumed. It requires the `restic`
+package, `/etc/private-finances/backup.env`, a repository-password file readable
+by the service user, and the `private-finances-backup` service and timer — all
+recorded in [the server requirements](../docs/server-requirements.md) and
+[the backup runbook](../docs/backups.md).
+
+Before enabling a schedule, restore a current backup into
 a separate disposable database and verify the imported data. Record local proof
 with `/etc/private-finances/local-restore-verified`, containing exactly
 `local-restore-verified`. A verified encrypted off-server recovery may instead use
