@@ -105,6 +105,35 @@ function hours(from: string, now: Date): number {
   return Math.floor((now.getTime() - Date.parse(from)) / 3600000);
 }
 
+const RIGA_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Riga',
+  dateStyle: 'short',
+});
+const RIGA_CLOCK = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Riga',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const RIGA_DATE = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Riga',
+  day: 'numeric',
+  month: 'short',
+});
+/**
+ * A moment in the household's own day: "today at 14:24", "tomorrow at 02:10",
+ * "on 21 Sept at 09:00". The wall clock is what the owner checks against, and
+ * an ISO instant or "in 3 h" is not — 14:24 is a time they can wait for.
+ */
+function at(instant: string, now: Date): string {
+  const clock = RIGA_CLOCK.format(Date.parse(instant));
+  const today = RIGA_DAY.format(now);
+  const then = RIGA_DAY.format(Date.parse(instant));
+  if (then === today) return `today at ${clock}`;
+  const tomorrow = RIGA_DAY.format(now.getTime() + 86400000);
+  if (then === tomorrow) return `tomorrow at ${clock}`;
+  return `on ${RIGA_DATE.format(Date.parse(instant))} at ${clock}`;
+}
+
 /**
  * One row per connection, whatever is wrong with it.
  *
@@ -116,7 +145,7 @@ function hours(from: string, now: Date): number {
  */
 async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
   const runs = await db.query(
-    'SELECT connection,state,last_success_at,error_code FROM bank_sync_runs ORDER BY connection',
+    'SELECT connection,state,last_success_at,error_code,retry_after,retry_reason FROM bank_sync_runs ORDER BY connection',
   );
   const consents = await db.query(
     "SELECT owner,bank,expires_at FROM bank_consents WHERE status='authorized'",
@@ -140,6 +169,17 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
     const lastSuccess = iso(row.last_success_at);
     const consentAt = slug ? expiry.get(`${owner}:${slug}`) : undefined;
     const base = { id: `bank:${connection}`, href: '/connections' };
+    // A connection that has stopped is usually not stuck but waiting, and the
+    // wait can be most of a day: a bank that answers "slow down" puts its
+    // connection on a cooldown, and every timer in between exits without
+    // asking the bank anything. Saying only that a bank has been silent for
+    // twenty-seven hours invites the owner to go looking for a fault that is
+    // not there, so when the next attempt is known it is stated here.
+    const retryAt = iso(row.retry_after);
+    const waiting =
+      retryAt && Date.parse(retryAt) > now.getTime()
+        ? ` The next attempt is ${at(retryAt, now)}; nothing is asked of the bank until then.`
+        : '';
     // Most specific first: an approval that has lapsed explains everything
     // else, and a credential the bank rejected explains a stalled run.
     if (consentAt && Date.parse(consentAt) <= now.getTime())
@@ -193,10 +233,20 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
     else if (now.getTime() - Date.parse(lastSuccess) > SILENT_MS)
       problems.push({
         ...base,
-        severity: 'critical',
-        title: `${label} has not imported for ${hours(lastSuccess, now)} hours`,
+        // A bank that is waiting out a cooldown it was told to keep is not
+        // broken and nothing the owner does will speed it up, so it is a
+        // warning with the hour it resumes rather than a critical asking them
+        // to act. It stays on the list either way: the totals are short a bank
+        // until it catches up, which is the thing worth knowing.
+        severity:
+          waiting && row.error_code === 'rate_limit' ? 'warning' : 'critical',
+        title:
+          row.error_code === 'rate_limit'
+            ? `${label} was asked to slow down and has not imported for ${hours(lastSuccess, now)} hours`
+            : `${label} has not imported for ${hours(lastSuccess, now)} hours`,
         detail:
-          'Payments and balances from this bank are missing from every total until it catches up.',
+          'Payments and balances from this bank are missing from every total until it catches up.' +
+          waiting,
         since: lastSuccess,
       });
   }

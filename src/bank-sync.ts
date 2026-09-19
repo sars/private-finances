@@ -6,6 +6,7 @@ import { ConnectorError, type BankConnector } from './connectors/types.js';
 import { reidentifyTransfers } from './counterparty-identity.js';
 import { isBankSlug } from './connectors/banks.js';
 import { isMultiCurrency } from './connectors/enablebanking.js';
+import { AttemptRecorder } from './import-runs.js';
 
 /** Fetch outside transactions; commit a complete account window and its checkpoint together. */
 export async function syncBank(
@@ -13,6 +14,13 @@ export async function syncBank(
   connector: BankConnector,
   from: Date,
   to: Date,
+  /**
+   * Records what this attempt did, for the screen that reads it back. The
+   * caller creates it because it also owns the requester whose every call
+   * lands in the same record. Absent in tests that do not care, and never
+   * allowed to affect what this function returns or throws.
+   */
+  recorder?: AttemptRecorder,
 ) {
   if (
     !Number.isFinite(from.getTime()) ||
@@ -32,7 +40,16 @@ export async function syncBank(
     WHERE bank_sync_runs.lease_until IS NULL OR bank_sync_runs.lease_until < now() RETURNING connection`,
     [key, token],
   );
-  if (!claim.rows.length) throw new Conflict('sync_already_running');
+  if (!claim.rows.length) {
+    recorder?.step('claim', { code: 'sync_already_running' });
+    await recorder?.finish('failed', {
+      accounts: 0,
+      changed: 0,
+      errorCode: 'sync_already_running',
+    });
+    throw new Conflict('sync_already_running');
+  }
+  recorder?.step('claim');
   let leaseLost = false;
   let heartbeat: Promise<unknown> = Promise.resolve();
   const timer = setInterval(() => {
@@ -49,8 +66,16 @@ export async function syncBank(
       });
   }, 60000);
   let changed = 0;
+  // Times a stage into the attempt record when one is being kept, and is the
+  // bare call when it is not, so the import reads the same either way.
+  const timed = <T>(
+    stage: Parameters<AttemptRecorder['timed']>[0],
+    detail: Parameters<AttemptRecorder['timed']>[1],
+    run: () => Promise<T>,
+  ): Promise<T> => (recorder ? recorder.timed(stage, detail, run) : run());
   try {
-    const accounts = await connector.accounts();
+    const accounts = await timed('accounts', {}, () => connector.accounts());
+    recorder?.step('accounts', { count: accounts.length, note: 'listed' });
     const seen = new Set<string>();
     const registry = new Accounts(repo.db);
     const balances = new AccountBalances(repo.db);
@@ -77,12 +102,28 @@ export async function syncBank(
       try {
         const stated = account.balance
           ? [account.balance]
-          : ((await connector.balances?.(account)) ?? []);
+          : ((await timed('balance', { account: account.accountId }, () =>
+              connector.balances
+                ? connector.balances(account)
+                : Promise.resolve([]),
+            )) ?? []);
         if (stated.length) await balances.record(account, stated);
       } catch {
         // Left for the next run; the page shows how old the last figure is.
+        // `timed` has already noted why, which is the whole point of keeping a
+        // stage that is allowed to fail: a balance quietly going stale for a
+        // week used to leave nothing behind at all.
       }
-      const batch = await connector.transactions(account, from, to);
+      const batch = await timed(
+        'transactions',
+        { account: account.accountId },
+        () => connector.transactions(account, from, to),
+      );
+      recorder?.step('transactions', {
+        account: account.accountId,
+        count: batch.length,
+        note: 'fetched',
+      });
       // An account holding several currencies reports none of its own, so only
       // a single-currency account can have its payments checked against it.
       const fixedCurrency = !isMultiCurrency(account.currency);
@@ -96,36 +137,47 @@ export async function syncBank(
         )
       )
         throw new ConnectorError('schema');
-      changed += await repo.db.transaction(async (tx) => {
-        const lease = await tx.query(
-          'SELECT connection FROM bank_sync_runs WHERE connection=$1 AND lease_token=$2 AND lease_until>now() FOR UPDATE',
-          [key, token],
-        );
-        if (leaseLost || !lease.rows.length)
-          throw new Conflict('sync_lease_lost');
-        const imported = await repo.importBatch(batch, tx);
-        // Store coverage intervals explicitly: a later disjoint import must not imply a gap was imported.
-        await tx.query(
-          `INSERT INTO bank_import_windows(id,connection,account_id,owner,currency,from_at,to_at,changed)
+      const imported = await timed(
+        'commit',
+        { account: account.accountId },
+        () =>
+          repo.db.transaction(async (tx) => {
+            const lease = await tx.query(
+              'SELECT connection FROM bank_sync_runs WHERE connection=$1 AND lease_token=$2 AND lease_until>now() FOR UPDATE',
+              [key, token],
+            );
+            if (leaseLost || !lease.rows.length)
+              throw new Conflict('sync_lease_lost');
+            const written = await repo.importBatch(batch, tx);
+            // Store coverage intervals explicitly: a later disjoint import must not imply a gap was imported.
+            await tx.query(
+              `INSERT INTO bank_import_windows(id,connection,account_id,owner,currency,from_at,to_at,changed)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [
-            randomUUID(),
-            key,
-            account.accountId,
-            account.owner,
-            account.currency,
-            from.toISOString(),
-            to.toISOString(),
-            imported,
-          ],
-        );
-        // The import holds this row lock, so its heartbeat may have been blocked.
-        // PostgreSQL now() is the transaction start; use wall time after the batch.
-        await tx.query(
-          "UPDATE bank_sync_runs SET lease_until=clock_timestamp()+interval '5 minutes' WHERE connection=$1 AND lease_token=$2",
-          [key, token],
-        );
-        return imported;
+              [
+                randomUUID(),
+                key,
+                account.accountId,
+                account.owner,
+                account.currency,
+                from.toISOString(),
+                to.toISOString(),
+                written,
+              ],
+            );
+            // The import holds this row lock, so its heartbeat may have been blocked.
+            // PostgreSQL now() is the transaction start; use wall time after the batch.
+            await tx.query(
+              "UPDATE bank_sync_runs SET lease_until=clock_timestamp()+interval '5 minutes' WHERE connection=$1 AND lease_token=$2",
+              [key, token],
+            );
+            return written;
+          }),
+      );
+      changed += imported;
+      recorder?.step('commit', {
+        account: account.accountId,
+        count: imported,
+        note: 'written',
       });
     }
     // Recognising household money has to happen after the import, not only in
@@ -146,16 +198,34 @@ export async function syncBank(
       [key, token],
     );
     if (!finished.rows.length) throw new Conflict('sync_lease_lost');
+    recorder?.step('finish', { count: changed });
+    // A run that succeeded is a run that is no longer waiting for anything.
+    await repo.db.query(
+      'UPDATE bank_sync_runs SET retry_after=NULL,retry_reason=NULL WHERE connection=$1',
+      [key],
+    );
+    await recorder?.finish('succeeded', {
+      accounts: accounts.length,
+      changed,
+    });
     return { accounts: accounts.length, changed };
   } catch (error) {
+    const code = error instanceof ConnectorError ? error.code : 'sync_failed';
     await repo.db.query(
       "UPDATE bank_sync_runs SET state='failed',error_code=$3,lease_token=NULL,lease_until=NULL WHERE connection=$1 AND lease_token=$2",
-      [
-        key,
-        token,
-        error instanceof ConnectorError ? error.code : 'sync_failed',
-      ],
+      [key, token, code],
     );
+    recorder?.step('error', {
+      code,
+      ...(error instanceof ConnectorError && error.retryAfterMs !== undefined
+        ? { retryAfterMs: error.retryAfterMs }
+        : {}),
+    });
+    await recorder?.finish('failed', {
+      accounts: 0,
+      changed,
+      errorCode: code,
+    });
     throw error;
   } finally {
     clearInterval(timer);

@@ -5,8 +5,9 @@ import { Repository } from './repository.js';
 import { syncBank } from './bank-sync.js';
 import { MonobankConnector } from './connectors/monobank.js';
 import { EnableBankingConnector } from './connectors/enablebanking.js';
-import { requester } from './connectors/http.js';
+import { requester, type RequestObserver } from './connectors/http.js';
 import { ConnectorError } from './connectors/types.js';
+import { AttemptRecorder, sanitizePath } from './import-runs.js';
 import { loadEnableBankingCredentials } from './enablebanking-credentials.js';
 import { BANK_SLUGS, isBankSlug, type BankSlug } from './connectors/banks.js';
 
@@ -66,6 +67,13 @@ async function main() {
       : undefined;
   if (provider === 'enablebanking' && !credentials)
     throw new Error('enablebanking_credentials');
+  // The connector is built before the database is open, and the attempt that
+  // collects its requests only exists afterwards, so requests are forwarded
+  // through a variable rather than handed to a recorder that does not yet
+  // exist. Until it is set, a request is simply not recorded.
+  let observe: RequestObserver | undefined;
+  const forward: RequestObserver = (event) => observe?.(event);
+  const connectionKey = `${provider}:${owner}${provider === 'enablebanking' ? `:${bank}` : ''}`;
   const connector =
     provider === 'monobank'
       ? new MonobankConnector(
@@ -78,7 +86,7 @@ async function main() {
                 : 'monobank-kate-token',
             ),
           ),
-          requester('https://api.monobank.ua', 61000),
+          requester('https://api.monobank.ua', 61000, fetch, forward),
           process.env.MONOBANK_INCLUDE_JARS !== 'false',
         )
       : new EnableBankingConnector(
@@ -94,12 +102,34 @@ async function main() {
               ),
             ),
           },
-          requester('https://api.enablebanking.com'),
+          requester('https://api.enablebanking.com', 0, fetch, forward),
         );
   const db = postgresDatabase(process.env.DATABASE_URL);
   try {
     await migrate(db);
-    const result = await syncBank(new Repository(db), connector, from, to);
+    const recorder = new AttemptRecorder(db, connectionKey, from, to);
+    // The requester is built before the database is open, so it was given a
+    // forwarder rather than the recorder itself. Every request the connector
+    // makes from here lands in this attempt's step log — as a path shape, a
+    // status and a duration, never a payload.
+    observe = (event) =>
+      recorder.step('request', {
+        path: sanitizePath(event.path),
+        ms: event.ms,
+        ...(event.status === undefined ? {} : { status: event.status }),
+        ...(event.code === undefined ? {} : { code: event.code }),
+        ...(event.retryAfterMs === undefined
+          ? {}
+          : { retryAfterMs: event.retryAfterMs }),
+      });
+    await recorder.open();
+    const result = await syncBank(
+      new Repository(db),
+      connector,
+      from,
+      to,
+      recorder,
+    );
     process.stdout.write(
       JSON.stringify({
         event: 'bank_sync_completed',

@@ -889,6 +889,55 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# A failed import used to leave nothing behind — September 19, 2026
+
+Asked what was wrong with Swedbank, and why it could not be found on the list of
+recent runs, the answer turned out to be that it could not be found *because* it
+had failed. "Recent runs" read `bank_import_windows`, which records coverage and
+is written only when a window commits, so a connection in trouble wrote no row
+and vanished from the very screen meant to show it. Its only other trace was a
+single `error_code` on its connection, overwritten by the next attempt. And a
+connection sitting out a cooldown left nothing at all: Swedbank answered one
+request with a rate limit on September 18 and then deferred 132 scheduled
+firings without touching the bank or the database, while the screen showed a
+day-old failure that read like a fault needing attention.
+
+Every attempt is now a row. `bank_sync_attempts` (schema 60) is opened before
+the connection is claimed and completed however the attempt ends, carrying the
+window asked for, the outcome, and a step log: which stage, which account, the
+shape of each request path, the HTTP status, the counts and the timings. The
+steps hold no payload, amount, description, token, session id or provider
+account id — `sanitizePath` reduces `/accounts/{uid}/transactions` to
+`/accounts/…/transactions`, and is the only way a path enters a step. Recording
+is subordinate to importing throughout: every write is wrapped and a recorder
+pointed at a database that refuses everything still lets the import succeed,
+which a test holds.
+
+`/imports/runs` lists them, paged with a keyset like the payments list and
+filtered by bank, outcome and period, with the filters in the URL; a run opens
+on its own screen showing what it asked for, what came back and where it
+stopped. The old forty-row list stays on `/imports` as the windows that
+completed, now with a link to the whole record.
+
+The scheduler also announces the next attempt. `bank_sync_runs.retry_after` and
+`retry_reason` are written when a cooldown is set **and** on every deferral, so
+a wait begun by an older release still reaches the screen, and both `/imports`
+and the problems list on `/ops` can now say the hour a resting bank resumes
+rather than only that it has been silent. A bank resting on a rate limit is a
+warning there rather than a critical, since nothing the owner does speeds it up.
+The advice text that promised "the next scheduled attempt retries" is gone: for
+a rate limit it does not.
+
+One thing this found and did not change: a cooldown already on disk is an
+absolute time, so halving the constant to twelve hours on September 18 did not
+shorten the twenty-four-hour mark its predecessor had already written for
+Swedbank. That is now written down in `docs/scheduling.md`.
+
+Checked: 11 new tests in `test/import-runs.test.ts` and the 40 in the bank-sync,
+schedule and problems suites pass; both type checks, `scripts/check_frontend.py`
+and `scripts/check_repository.py` are clean; both screens were rendered at 390
+and 1280 px and looked at. Not deployed at the time of writing.
+
 # The first real backup, and the bug only a real run could find — September 19, 2026
 
 The household's data now exists somewhere other than the server. The owner

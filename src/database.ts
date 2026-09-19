@@ -939,6 +939,47 @@ async function applyMigrations(db: Database): Promise<void> {
       await initializeBackupHealth(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (59)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=60'))
+        .rows.length
+    ) {
+      // An import that failed left one word behind — the `error_code` on its
+      // connection, overwritten by the next attempt — and an import that never
+      // started left nothing at all. `bank_import_windows` is the coverage
+      // record and is written only when a window commits, so the screen built
+      // over it listed successes and quietly omitted every bank that was in
+      // trouble: exactly the banks worth looking at. One row per attempt, with
+      // the requests it made and where it stopped, is what makes a failure
+      // readable afterwards. The steps hold request shapes, statuses and
+      // counts — never a payload, an amount, a description, or an identifier
+      // the bank authenticates with. See docs/import-runs.md.
+      await tx.query(`CREATE TABLE bank_sync_attempts (
+        id uuid PRIMARY KEY, connection text NOT NULL,
+        started_at timestamptz NOT NULL DEFAULT now(), finished_at timestamptz,
+        from_at timestamptz NOT NULL, to_at timestamptz NOT NULL,
+        outcome text NOT NULL CHECK(outcome IN ('running','succeeded','failed')),
+        error_code text, accounts integer NOT NULL DEFAULT 0,
+        changed integer NOT NULL DEFAULT 0,
+        steps jsonb NOT NULL DEFAULT '[]'::jsonb, CHECK(from_at<to_at)
+      )`);
+      await tx.query(
+        'CREATE INDEX bank_sync_attempts_recent ON bank_sync_attempts (started_at DESC, id DESC)',
+      );
+      await tx.query(
+        'CREATE INDEX bank_sync_attempts_connection ON bank_sync_attempts (connection, started_at DESC, id DESC)',
+      );
+      // Why nothing is happening right now is a different question from what
+      // happened last time, and the scheduler alone could answer it: it keeps
+      // the next-attempt time in a file the web process deliberately does not
+      // read. A connection could sit a full day between attempts with the
+      // screen saying only that the last one failed. One attempt in twelve
+      // hours is worth a row; the hundred and thirty deferrals in between,
+      // which never touched a bank, are not — they are this one fact.
+      await tx.query(
+        'ALTER TABLE bank_sync_runs ADD COLUMN retry_after timestamptz, ADD COLUMN retry_reason text',
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (60)');
+    }
   });
 }
 

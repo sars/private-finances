@@ -28,6 +28,19 @@ September 18, 2026, halved at the owner's request so a limited bank is asked
 again the same day); auth/uncertain failures stay latched for investigation. The
 app retains connection leases and never overlaps the same scheduled instance.
 
+**A cooldown written by an earlier release is not re-read against the new
+value.** The mark on disk is an absolute time, so halving the constant changes
+only the waits set after the change; Swedbank sat out a full 24 hours on
+September 19, 2026 under a mark its predecessor had written. Shortening a wait
+that is already running means editing `<instance>.retry-after` by hand, which is
+warranted only when the bank is known to have recovered.
+
+**Every wait is announced to the database** as `bank_sync_runs.retry_after` and
+`retry_reason`, on the deferral as well as when it is set, so the screens can
+say when a resting bank resumes instead of showing a stale failure and letting
+it read as a fault. See [import-runs.md](import-runs.md); a failure to announce
+never changes what the scheduler does.
+
 **A transient failure backs off in steps: an hour, then three, then a day**, and
 a success forgets the streak (`<instance>.transient-streak` beside the cooldown
 file; an unreadable count is treated as the longest wait, never the shortest).

@@ -59,6 +59,8 @@ const Accounts = lazy(() => import('./Accounts'));
 const Reports = lazy(() => import('./Reports'));
 const Connections = lazy(() => import('./Connections'));
 const Imports = lazy(() => import('./Imports'));
+const ImportRuns = lazy(() => import('./ImportRuns'));
+const ImportRun = lazy(() => import('./ImportRun'));
 const Balances = lazy(() => import('./Balances'));
 const Assets = lazy(() => import('./Assets'));
 const AssetsSnapshots = lazy(() => import('./AssetsSnapshots'));
@@ -81,6 +83,7 @@ const screens: Record<
   '/reports': Reports,
   '/connections': Connections,
   '/imports': Imports,
+  '/imports/runs': ImportRuns,
   '/settings': Settings,
   '/assets': Assets,
   '/assets/snapshots': AssetsSnapshots,
@@ -460,6 +463,11 @@ routes.push(
     getParentRoute: () => rootRoute,
     path: '/assets/$id',
     component: () => <AssetEdit />,
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/imports/runs/$id',
+    component: () => <ImportRun />,
   }),
 );
 const router = createRouter({

@@ -64,6 +64,12 @@ import {
   type ActiveSession,
 } from './auth.js';
 import { importStatus } from './import-status.js';
+import {
+  importRun,
+  importRuns,
+  MAX_RUN_PAGE,
+  type RunQuery,
+} from './import-runs.js';
 import { expenseSummary, type Owner } from './domain.js';
 import {
   BANKS,
@@ -71,6 +77,43 @@ import {
   isBankName,
   type BankName,
 } from './connectors/banks.js';
+
+const UUID_ROUTE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The import-runs list's filters, validated at the boundary.
+ *
+ * Every value that reaches SQL is either a bound parameter or checked here:
+ * the connection against the shape the importer writes, the outcome against
+ * the three the column allows, the dates against being dates at all. An
+ * unreadable value is dropped rather than refused — a filter is a narrowing,
+ * and a list that answers nothing because one query parameter was mistyped is
+ * worse than one that answers more broadly.
+ */
+const RUN_OUTCOMES = new Set(['succeeded', 'failed', 'running']);
+const RUN_CONNECTION =
+  /^(monobank|enablebanking):(rodion|katya)(:[a-z0-9-]{1,40})?$/;
+export function parseRunQuery(params: URLSearchParams): RunQuery {
+  const query: RunQuery = {};
+  const connection = params.get('connection');
+  if (connection && RUN_CONNECTION.test(connection))
+    query.connection = connection;
+  const outcome = params.get('outcome');
+  if (outcome && RUN_OUTCOMES.has(outcome))
+    query.outcome = outcome as RunQuery['outcome'];
+  for (const bound of ['from', 'to'] as const) {
+    const value = params.get(bound);
+    if (value && Number.isFinite(Date.parse(value)))
+      query[bound] = new Date(value).toISOString();
+  }
+  const cursor = params.get('cursor');
+  if (cursor && cursor.length <= 80) query.cursor = cursor;
+  const limit = Number(params.get('limit'));
+  if (Number.isSafeInteger(limit) && limit > 0)
+    query.limit = Math.min(limit, MAX_RUN_PAGE);
+  return query;
+}
 
 export type WebConfig = {
   frontendDirectory?: string;
@@ -132,6 +175,7 @@ const frontendRoutes = new Set([
   '/receipts',
   '/connections',
   '/imports',
+  '/imports/runs',
   '/review',
   '/transactions',
   '/categories',
@@ -382,6 +426,7 @@ export function web(
         Boolean(config.frontendDirectory) &&
         (frontendRoutes.has(route) ||
           /^\/transactions\/[0-9a-f-]{36}(?:\/history)?$/.test(route) ||
+          /^\/imports\/runs\/[0-9a-f-]{36}$/.test(route) ||
           /^\/assets\/[0-9a-f-]{36}$/.test(route) ||
           route.startsWith('/assets/') ||
           rootFile);
@@ -1007,6 +1052,24 @@ export function web(
       }
       if (req.method === 'GET' && route === '/api/imports') {
         json(200, await importStatus(repo.db));
+        return;
+      }
+      // Every attempt, not only the ones that committed a window. The list is
+      // cut with a keyset for the same reason the payments list is, and the
+      // filters are the three questions actually asked of it: which bank, how
+      // it ended, and when.
+      if (req.method === 'GET' && route === '/api/import-runs') {
+        json(200, await importRuns(repo.db, parseRunQuery(url.searchParams)));
+        return;
+      }
+      if (req.method === 'GET' && route?.startsWith('/api/import-runs/')) {
+        const id = route.slice('/api/import-runs/'.length);
+        const run = UUID_ROUTE.test(id) ? await importRun(repo.db, id) : null;
+        if (!run) {
+          json(404, { error: 'not_found', requestId });
+          return;
+        }
+        json(200, run);
         return;
       }
       if (req.method === 'GET' && route === '/api/problems') {
