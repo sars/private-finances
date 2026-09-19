@@ -21,11 +21,27 @@ for (const [connection] of connections)
      VALUES($1,'succeeded',now()) ON CONFLICT(connection) DO NOTHING`,
     [connection],
   );
+// A bank the provider has told to slow down, with the reason recorded.
 await db.query(
   `UPDATE bank_sync_runs SET state='failed', error_code='rate_limit',
      retry_after=$1::timestamptz, retry_reason='rate_limit'
    WHERE connection='enablebanking:rodion:swedbank'`,
   [new Date(now + 3 * 3600000).toISOString()],
+);
+// A wait with no reason beside it, as a release older than that record leaves
+// behind, on a connection that is otherwise healthy: it must read as the
+// ordinary next attempt and not as trouble nobody has found.
+await db.query(
+  `UPDATE bank_sync_runs SET retry_after=$1::timestamptz, retry_reason=NULL
+   WHERE connection='enablebanking:rodion:wise'`,
+  [new Date(now + 2 * 3600000).toISOString()],
+);
+// And the ordinary polling interval, which is the common case.
+await db.query(
+  `UPDATE bank_sync_runs SET retry_after=$1::timestamptz,
+     retry_reason='polling_interval'
+   WHERE connection='enablebanking:katya:revolut'`,
+  [new Date(now + 1800000).toISOString()],
 );
 
 let made = 0;
@@ -46,7 +62,12 @@ for (let i = 0; i < 38; i++) {
       code: 'rate_limit',
       retryAfterMs: 43200000,
     });
-    steps.push({ stage: 'error', at: 880, code: 'rate_limit', retryAfterMs: 43200000 });
+    steps.push({
+      stage: 'error',
+      at: 880,
+      code: 'rate_limit',
+      retryAfterMs: 43200000,
+    });
   } else {
     steps.push({
       stage: 'request',
@@ -55,7 +76,13 @@ for (let i = 0; i < 38; i++) {
       path: '/sessions/…',
       status: 200,
     });
-    steps.push({ stage: 'accounts', at: 360, ms: 320, count: 2, note: 'listed' });
+    steps.push({
+      stage: 'accounts',
+      at: 360,
+      ms: 320,
+      count: 2,
+      note: 'listed',
+    });
     steps.push({
       stage: 'request',
       at: 700,

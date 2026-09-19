@@ -166,6 +166,18 @@ function ConnectionCard({
     ? Math.ceil((Date.parse(c.consent.expiresAt) - now) / DAY)
     : null;
   const waiting = upcoming(c.nextAttemptAt, now);
+  /**
+   * A wait the bank imposed, as opposed to the ordinary polling interval.
+   *
+   * The scheduler's reason is the better evidence, but it is absent for a wait
+   * begun by a release older than that record — which is exactly the case of
+   * the rate limit that prompted all this. So the connection's own last error
+   * counts too: it is why the wait was set, even when the wait cannot say so.
+   */
+  const backedOff = new Set(['rate_limit', 'transient']);
+  const backingOff =
+    backedOff.has(c.retryReason ?? '') ||
+    (c.retryReason === null && backedOff.has(c.errorCode ?? ''));
   return (
     <Card className="gap-4 shadow-xs">
       <CardHeader>
@@ -206,16 +218,21 @@ function ConnectionCard({
           </p>
         )}
         {waiting && (
+          // Only a wait the bank itself caused is worth colouring. An ordinary
+          // polling interval is not, and neither is a wait whose reason we do
+          // not have — one set by a release older than this record, or cleared
+          // by hand on the server. Saying "resting" in warning ink about a
+          // connection we cannot explain claims trouble we have not found.
           <p
             className={
-              c.retryReason === 'polling_interval'
-                ? 'text-xs text-muted-foreground'
-                : 'text-xs text-warning'
+              backingOff
+                ? 'text-xs text-warning'
+                : 'text-xs text-muted-foreground'
             }
           >
-            {c.retryReason === 'polling_interval'
-              ? `Next attempt ${waiting}`
-              : `Resting until ${waiting}; nothing is asked of the bank before then`}
+            {backingOff
+              ? `Resting until ${waiting}; nothing is asked of the bank before then`
+              : `Next attempt ${waiting}`}
           </p>
         )}
         {c.consent && consentDays !== null && (
