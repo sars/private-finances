@@ -9,7 +9,37 @@ import subprocess
 import sys
 import time
 import urllib.request
+from runpy import run_path
 from frontend_assets import retain_frontend_assets
+
+
+def prune_predeploy(directory):
+    """Drop the pre-deployment dumps the retention rule no longer keeps.
+
+    One dump is taken before every switch and this project releases several
+    times a day, so without this the directory only grows: 134 files and 442 MB
+    by 19 September 2026, on a root filesystem that was 90% full and shared with
+    other applications.
+
+    The rule is the one `local-backup.py` already defines and `backup-retention`
+    already tests — the newest fourteen, plus one per day for the last fourteen
+    days — rather than a second rule written here. It keeps enough recent depth
+    to roll back a release and enough daily history to answer what the data
+    looked like a week ago, and it caps the directory at twenty-eight files.
+
+    Its glob is `[0-9]*.dump`, so the named reference dumps from the first
+    install — `initial-empty.dump`, `schema-v3-empty.dump` — are never candidates.
+
+    This runs only after a switch has succeeded. A failed release keeps every
+    dump it might need, and a failure to prune is reported rather than allowed
+    to fail a deployment that has already worked.
+    """
+    expired = run_path(str(Path(__file__).with_name('local-backup.py')))['expired_backups']
+    removed = 0
+    for old in expired(Path(directory)):
+        old.unlink()
+        removed += 1
+    return removed
 
 
 def command(*args):
@@ -79,6 +109,11 @@ def main():
             ready(previous_sha)
             raise RuntimeError('deployment_failed_previous_release_restored') from None
         print(json.dumps({'event': 'deployment_succeeded', 'release': sha, 'previousRelease': previous_sha}))
+        try:
+            removed = prune_predeploy('/var/lib/private-finances/predeploy')
+            print(json.dumps({'event': 'predeploy_pruned', 'removed': removed}))
+        except Exception:
+            print('{"event":"predeploy_prune_failed"}', file=sys.stderr)
 
 
 if __name__ == '__main__':
