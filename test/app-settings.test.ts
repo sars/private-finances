@@ -190,7 +190,9 @@ test('admin settings routes enforce ownership and CSRF; shared defaults and dire
       detail.transactions.map((t: { id: string }) => t.id),
       [business.id],
     );
-    for (const display of ['UAH', 'EUR', 'USD', 'GBP']) {
+    // Sterling is no longer a reporting currency; a payment made in it still
+    // converts into each of these.
+    for (const display of ['UAH', 'EUR', 'USD']) {
       const result = await (
         await request(
           '/api/review?detailOnly=1&id=' + business.id + '&display=' + display,

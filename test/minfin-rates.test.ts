@@ -2,72 +2,160 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MinfinRateError,
+  averageMidpoint,
   minfinRateUrl,
-  parseMinfinRate,
+  parseMinfinRates,
 } from '../src/minfin-rates.js';
 import { MINFIN_SOURCE } from '../src/fx-sources.js';
 
 /**
- * The shape Minfin's rates page actually has, reduced to the parts the parser
- * reads: the date picker that proves which day was served, and the average row
- * whose two commercial cells carry `type="average"`. The National Bank column
- * beside them deliberately does not, which is why the parser can never pick it
- * up by accident.
+ * The shape Minfin's own JSON has, reduced to what the parser reads. This is
+ * the endpoint the site itself calls: free, unauthenticated, and carrying the
+ * per-bank breakdown that the rendered page never showed.
+ *
+ * Values arrive as quoted strings, which is why no number here ever passes
+ * through a float.
  */
-const page = (
-  date: string,
-  currency = 'eur',
-  buy = '48,5462',
-  sell = '49,17463',
-  nbu = '48,5502',
-) => `<!DOCTYPE html><html><body>
-<input type="date" name="currency-datepicker" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" value="${date}" min="2006-01-04" max="2026-09-19" class="tjc6dx-7">
-<div class="bvp3d3-2">Середній курс в банках</div>
-<table><thead><tr><th type="average">Валюта</th><th type="average">Купівля</th><th type="average">Продаж</th><th type="average">Курс НБУ</th></tr></thead>
-<tbody><tr>
-<td type="average"><a href="/ua/currency/banks/${currency}/${date}/" class="sc-1x32wa2-8">${currency.toUpperCase()}</a></td>
-<td class="sc-1x32wa2-9"><div type="average" class="sc-1x32wa2-10">${buy}<div data-tip-target="true"><p class="sc-1x32wa2-13">0.01</p></div></div></td>
-<td class="sc-1x32wa2-9"><div type="average" class="sc-1x32wa2-10">${sell}<div data-tip-target="true"><p class="sc-1x32wa2-13">-0.01</p></div></div></td>
-<td class="sc-1x32wa2-9"><div class="sc-1x32wa2-10">${nbu}<div><p class="sc-1x32wa2-13">0.00</p></div></div></td>
-</tr></tbody></table></body></html>`;
+const bank = (
+  slug: string,
+  bid: string | null,
+  ask: string | null,
+  date = '2025-10-26T22:41:28+02:00',
+) => ({
+  slug,
+  name_uk: slug,
+  cash: { date, bid: '1', ask: '2' },
+  card: bid === null ? { date, bid: null, ask: null } : { date, bid, ask },
+});
+const body = (banks: unknown[]) =>
+  JSON.stringify({ data: banks, meta: { page: 1, cpp: 100, total: 5 } });
 
-test('the average of the banks becomes one midpoint quote for the day', () => {
-  const rate = parseMinfinRate(
-    page('2025-10-26'),
+/** The four banks' real card quotes for the Sunday PrivatBank published nothing. */
+const sunday = body([
+  bank('sensebank', '47.3', '0'), // ask of zero is not a quote
+  bank('privatbank', '48.52', '49.2611'),
+  bank('oschadbank', '48.5', '49.45'), // not one of the four
+  bank('a-bank', '48.4', '49.15'),
+  bank('monobank', '48.55', '49.249'),
+]);
+
+test('the four banks that published become one averaged midpoint', () => {
+  const rates = parseMinfinRates(
+    sunday,
     'EUR',
     '2025-10-26',
     '2026-09-19T12:00:00Z',
   );
-  assert.equal(rate.source, MINFIN_SOURCE);
-  assert.equal(rate.base, 'EUR');
-  assert.equal(rate.target, 'UAH');
-  // (48.5462 + 49.17463) / 2, exactly, without touching a binary float.
-  assert.equal(rate.rate, '48.860415');
-  assert.equal(rate.asOf, '2025-10-26');
-  // Decimal text, exactly as published, only with Minfin's comma written as a
-  // point: the provenance has to be readable back as a number.
-  assert.match(rate.provenance, /buy=48\.5462/);
-  assert.match(rate.provenance, /sell=49\.17463/);
-  assert.match(rate.provenance, /not the National Bank reference/);
-  // The National Bank's own number is in the page and never reaches the quote.
-  assert.ok(!rate.provenance.includes('48,5502'));
-  assert.ok(!rate.provenance.includes('48.5502'));
+  assert.equal(rates.length, 1);
+  const [rate] = rates;
+  assert.equal(rate!.source, MINFIN_SOURCE);
+  assert.equal(rate!.base, 'EUR');
+  assert.equal(rate!.target, 'UAH');
+  // (48.52+49.2611 + 48.4+49.15 + 48.55+49.249) / 6, exactly.
+  assert.equal(rate!.rate, '48.855017');
+  assert.equal(rate!.asOf, '2025-10-26');
+  // Provenance names who contributed, so a day carried by one bank is visible
+  // as exactly that rather than hiding behind the word "average".
+  assert.match(rate!.provenance, /3 of 4 household banks/);
+  assert.match(rate!.provenance, /a-bank 48\.4\/49\.15/);
+  assert.match(rate!.provenance, /monobank 48\.55\/49\.249/);
+  assert.match(rate!.provenance, /privatbank 48\.52\/49\.2611/);
+  // A bank outside the four never contributes, however good its quote.
+  assert.ok(!rate!.provenance.includes('oschadbank'));
+  // Nor does a bank whose card quote is not a quote.
+  assert.ok(!rate!.provenance.includes('sensebank'));
   assert.equal(
     minfinRateUrl('EUR', '2025-10-26'),
-    'https://minfin.com.ua/ua/currency/banks/eur/2025-10-26/',
+    'https://minfin.com.ua/api/currency/rates/banks/eur/?page=1&cpp=100&date=2025-10-26&commercial_sort=true',
   );
 });
 
 /**
- * Minfin serves the current day's rates for a URL it does not recognise. Storing
- * those against a date in October would be a fabricated rate wearing a real
- * one's clothes, so the page has to prove which day it is before it is read.
+ * Some banks' entries are stamped the following day. That is the next day's
+ * rate, and filing it under this one would be a real number against a date it
+ * does not belong to.
  */
-test('a page for a different day than the one asked for is refused', () => {
+test('a quote stamped another day belongs to that day, not this one', () => {
+  const rates = parseMinfinRates(
+    body([
+      bank('monobank', '48.55', '49.249', '2025-10-27T09:00:00+02:00'),
+      bank('privatbank', '48.52', '49.2611'),
+    ]),
+    'EUR',
+    '2025-10-26',
+    '2026-09-19T12:00:00Z',
+  );
+  assert.equal(rates.length, 1);
+  assert.match(rates[0]!.provenance, /1 of 4 household banks/);
+  assert.ok(!rates[0]!.provenance.includes('monobank'));
+  // One bank's midpoint, unaveraged, and stated as one bank's.
+  assert.equal(rates[0]!.rate, '48.89055');
+});
+
+test('a day none of the four published is answered with nothing at all', () => {
+  assert.deepEqual(
+    parseMinfinRates(
+      body([bank('oschadbank', '48.5', '49.45'), bank('pumb', '48.5', '49.2')]),
+      'EUR',
+      '2025-10-26',
+      '2026-09-19T12:00:00Z',
+    ),
+    [],
+  );
+  assert.deepEqual(
+    parseMinfinRates(body([]), 'EUR', '2025-10-26', '2026-09-19T12:00:00Z'),
+    [],
+  );
+});
+
+test('the average is the mean of the midpoints, in exact integer arithmetic', () => {
+  // Mean of midpoints and midpoint of means are the same number; neither is a
+  // choice this has to make.
+  assert.equal(averageMidpoint([{ buy: '10', sell: '20' }]), '15');
+  assert.equal(
+    averageMidpoint([
+      { buy: '10', sell: '20' },
+      { buy: '20', sell: '30' },
+    ]),
+    '20',
+  );
+  // A mean of three that does not terminate is rounded, not truncated.
+  assert.equal(
+    averageMidpoint([
+      { buy: '1', sell: '1' },
+      { buy: '1', sell: '1' },
+      { buy: '2', sell: '2' },
+    ]),
+    '1.333333',
+  );
+  assert.throws(() => averageMidpoint([]), MinfinRateError);
+  // A sell below the buy is a misread response, not a rate.
+  assert.throws(
+    () => averageMidpoint([{ buy: '20', sell: '10' }]),
+    MinfinRateError,
+  );
+  // Floats never get near it: an unquoted number is refused outright.
+  assert.throws(
+    () => averageMidpoint([{ buy: 10 as unknown as string, sell: '20' }]),
+    MinfinRateError,
+  );
+});
+
+test('a response that is not the expected envelope is refused', () => {
+  for (const raw of ['not json', '[]', '{}', '{"data":{}}', '{"data":null}'])
+    assert.throws(
+      () => parseMinfinRates(raw, 'EUR', '2025-10-26', '2026-09-19T12:00:00Z'),
+      (error: unknown) =>
+        error instanceof MinfinRateError && error.code === 'invalid_response',
+    );
+  // The same bank twice would silently weight it double in the average.
   assert.throws(
     () =>
-      parseMinfinRate(
-        page('2026-09-19'),
+      parseMinfinRates(
+        body([
+          bank('monobank', '48.5', '49.2'),
+          bank('monobank', '48.6', '49.3'),
+        ]),
         'EUR',
         '2025-10-26',
         '2026-09-19T12:00:00Z',
@@ -77,74 +165,21 @@ test('a page for a different day than the one asked for is refused', () => {
   );
 });
 
-test('a page for a different currency than the one asked for is refused', () => {
+test('a pair the four banks do not quote, or a date outside the archive, is never asked for', () => {
+  // Not one of the four quotes sterling, in cash or on a card, so there is
+  // nothing of theirs to average and the pair is not requested at all.
   assert.throws(
-    () =>
-      parseMinfinRate(
-        page('2025-10-26', 'usd'),
-        'EUR',
-        '2025-10-26',
-        '2026-09-19T12:00:00Z',
-      ),
-    (error: unknown) =>
-      error instanceof MinfinRateError && error.code === 'invalid_response',
-  );
-});
-
-test('a layout that no longer matches makes the day unavailable, not a guess', () => {
-  const moved = page('2025-10-26').replace(/type="average"/g, 'type="rate"');
-  assert.throws(
-    () => parseMinfinRate(moved, 'EUR', '2025-10-26', '2026-09-19T12:00:00Z'),
-    (error: unknown) =>
-      error instanceof MinfinRateError && error.code === 'invalid_response',
-  );
-  assert.throws(
-    () =>
-      parseMinfinRate(
-        page('2025-10-26').replace('Середній курс в банках', 'Курс у банках'),
-        'EUR',
-        '2025-10-26',
-        '2026-09-19T12:00:00Z',
-      ),
-    (error: unknown) =>
-      error instanceof MinfinRateError && error.code === 'invalid_response',
-  );
-});
-
-test('a sell below the buy is a misread page, not a rate', () => {
-  assert.throws(
-    () =>
-      parseMinfinRate(
-        page('2025-10-26', 'eur', '49,17463', '48,5462'),
-        'EUR',
-        '2025-10-26',
-        '2026-09-19T12:00:00Z',
-      ),
-    (error: unknown) =>
-      error instanceof MinfinRateError && error.code === 'invalid_response',
-  );
-});
-
-test('a date before the published archive, or in the future, is not asked for', () => {
-  assert.throws(
-    () =>
-      parseMinfinRate(
-        page('2005-01-01'),
-        'EUR',
-        '2005-01-01',
-        '2026-09-19T12:00:00Z',
-      ),
+    () => minfinRateUrl('GBP', '2025-10-26'),
     (error: unknown) =>
       error instanceof MinfinRateError && error.code === 'invalid_date',
   );
   assert.throws(
-    () =>
-      parseMinfinRate(
-        page('2026-09-20'),
-        'EUR',
-        '2026-09-20',
-        '2026-09-19T12:00:00Z',
-      ),
+    () => parseMinfinRates(sunday, 'EUR', '2005-01-01', '2026-09-19T12:00:00Z'),
+    (error: unknown) =>
+      error instanceof MinfinRateError && error.code === 'invalid_date',
+  );
+  assert.throws(
+    () => parseMinfinRates(sunday, 'EUR', '2026-09-20', '2026-09-19T12:00:00Z'),
     (error: unknown) =>
       error instanceof MinfinRateError && error.code === 'invalid_date',
   );

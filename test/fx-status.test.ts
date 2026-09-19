@@ -120,7 +120,7 @@ test('a day nothing published leaves its payments visible, listed and uncounted'
     assert.match(row!.account.name, /^Rodion · Monobank/);
     assert.equal(status.unconvertedCapped, false);
     assert.deepEqual(status.rates.days, [
-      { date: '2025-10-25', state: 'covered' },
+      { date: '2025-10-25', state: 'covered', source: PRIVATBANK_SOURCE },
       { date: '2025-10-26', state: 'empty_at_source' },
     ]);
     assert.equal(status.rates.covered, 1);

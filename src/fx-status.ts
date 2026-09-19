@@ -67,6 +67,17 @@ export interface FxConversionStatus {
 export const UNCONVERTED_LIMIT = 200;
 
 /**
+ * How far back the coverage strip looks.
+ *
+ * A year is the window worth watching: it is what the owner asked for, it keeps
+ * the strip a size a thumb can hit on a phone, and a day older than that has
+ * long since settled one way or the other. The conversion counts above the
+ * strip still cover the whole ledger, so nothing is hidden by this — only the
+ * calendar is.
+ */
+export const COVERAGE_DAYS = 365;
+
+/**
  * Why a row has no converted amount, in the owner's words.
  *
  * The internal code names a branch in the conversion; it is not an explanation.
@@ -128,7 +139,13 @@ export async function fxConversionStatus(
   // it stopped.
   const earliest = dates[0] ?? today;
   const latest = dates.at(-1) ?? today;
-  const from = earliest < today ? earliest : today;
+  const window = new Date(
+    Date.parse(`${today}T00:00:00Z`) - (COVERAGE_DAYS - 1) * 86400000,
+  )
+    .toISOString()
+    .slice(0, 10);
+  const span = earliest < today ? earliest : today;
+  const from = span > window ? span : window;
   const to = latest > today ? latest : today;
   // The days a rate is actually wanted for: the ones carrying a payment, plus
   // today, which is exactly the set the nightly sync asks about. Keeping the two

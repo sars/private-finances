@@ -754,7 +754,7 @@ export function web(
       }
       if (req.method === 'GET' && route === '/api/review') {
         const display = url.searchParams.get('display') ?? 'UAH';
-        if (!['UAH', 'EUR', 'USD', 'GBP'].includes(display))
+        if (!['UAH', 'EUR', 'USD'].includes(display))
           throw new Error('invalid_display_currency');
         const preferences = reviewPreferences(
           await readAppSettings(repo.db),

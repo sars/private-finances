@@ -57,11 +57,13 @@ test('a day proven empty is not the same as a day nobody has asked about', async
       '2025-10-29T00:00:00Z',
       'nothing published',
     );
+    // A covered day names the source a conversion on it would actually use, so
+    // tapping the cell can say where the rate came from.
     assert.deepEqual(await fxCoverage(db, '2025-10-25', '2025-10-29'), [
-      { date: '2025-10-25', state: 'covered' },
+      { date: '2025-10-25', state: 'covered', source: PRIVATBANK_SOURCE },
       { date: '2025-10-26', state: 'empty_at_source' },
       // The secondary source alone is enough to make the day covered.
-      { date: '2025-10-27', state: 'covered' },
+      { date: '2025-10-27', state: 'covered', source: MINFIN_SOURCE },
       { date: '2025-10-28', state: 'not_fetched' },
       { date: '2025-10-29', state: 'not_fetched' },
     ]);

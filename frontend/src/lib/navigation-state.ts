@@ -39,7 +39,11 @@ export function stringSearch(
       .map(([k, v]) => [k, String(v)]),
   );
 }
-export const displayCurrencies = ['UAH', 'EUR', 'USD', 'GBP'];
+// What a total can be reported *in*. Not what a payment can be made in: the
+// ledger holds sterling purchases and always will, and they still convert into
+// whichever of these is selected. The owner does not report in sterling, so
+// offering it was a fourth column nobody read.
+export const displayCurrencies = ['UAH', 'EUR', 'USD'];
 export function validDisplay(value: unknown) {
   return typeof value === 'string' && displayCurrencies.includes(value)
     ? value

@@ -34,35 +34,62 @@ const monthFormat = new Intl.DateTimeFormat('en-GB', {
 });
 const day = (date: string) => dayFormat.format(new Date(`${date}T00:00:00Z`));
 
-/** The four things a calendar day can be, and what each one means. */
-const states: Record<FxDayState, { name: string; tone: string }> = {
+/** The four things a calendar day can be, what each means, and what to do. */
+const states: Record<
+  FxDayState,
+  { name: string; tone: string; meaning: string }
+> = {
   // Only one of these is a fault. A day nobody published is a closed fact and a
   // day with no payment on it needs nothing, so both stay quiet; a day the sync
   // has not reached is amber, because it is the one the owner can act on.
-  covered: { name: 'Covered', tone: 'bg-primary' },
+  covered: {
+    name: 'Covered',
+    tone: 'bg-primary',
+    meaning: 'a rate is stored for this day',
+  },
   empty_at_source: {
     name: 'Empty at source',
     tone: 'bg-muted-foreground/35',
+    meaning: 'no bank published a rate that day, and none ever will',
   },
-  not_fetched: { name: 'Not fetched', tone: 'bg-warning' },
-  not_needed: { name: 'No payments', tone: 'bg-muted-foreground/15' },
+  not_fetched: {
+    name: 'Not fetched',
+    tone: 'bg-warning',
+    meaning: 'the nightly sync has not stored a rate for this day yet',
+  },
+  not_needed: {
+    name: 'No payments',
+    tone: 'bg-muted-foreground/15',
+    meaning: 'nothing was paid that day, so no rate is needed',
+  },
 };
 
 /**
  * One cell per day, wrapping, with a light marker where a month starts.
  *
  * Deliberately not a chart: there is no magnitude here, only four states, and
- * the thing worth seeing is where a gap falls in the calendar. A cell carries
- * its date and state as its accessible name, so the strip reads as a list of
- * days rather than as decoration a screen reader has to skip.
+ * the thing worth seeing is where a gap falls in the calendar.
+ *
+ * Every cell is a button rather than a coloured box, because a phone has no
+ * hover: a `title` tooltip left an amber square on a phone screen with no way
+ * at all to find out what it meant. Tapping one names the day underneath.
  */
-function CoverageStrip({ days }: { days: FxDay[] }) {
+function CoverageStrip({
+  days,
+  selected,
+  onSelect,
+}: {
+  days: FxDay[];
+  selected: string | null;
+  onSelect: (date: string) => void;
+}) {
   return (
-    <ul className="flex flex-wrap gap-0.5" aria-label="Daily rate coverage">
+    <ul className="flex flex-wrap gap-1" aria-label="Daily rate coverage">
       {days.map((entry) => {
         const first = entry.date.endsWith('-01');
+        const label = `${day(entry.date)}: ${states[entry.state].name}`;
         return (
-          <li key={entry.date} className="flex items-end gap-0.5">
+          <li key={entry.date} className="flex items-end gap-1">
             {first && (
               <span
                 aria-hidden="true"
@@ -71,18 +98,41 @@ function CoverageStrip({ days }: { days: FxDay[] }) {
                 {monthFormat.format(new Date(`${entry.date}T00:00:00Z`))}
               </span>
             )}
-            <span
-              title={`${day(entry.date)} — ${states[entry.state].name}`}
-              className={`block size-2.5 rounded-xs ${states[entry.state].tone}`}
+            <button
+              type="button"
+              title={label}
+              aria-pressed={selected === entry.date}
+              onClick={() => onSelect(entry.date)}
+              className={`block size-3.5 rounded-xs ${states[entry.state].tone} ${
+                selected === entry.date
+                  ? 'ring-foreground ring-2 ring-offset-1'
+                  : ''
+              }`}
             >
-              <span className="sr-only">
-                {day(entry.date)}: {states[entry.state].name}
-              </span>
-            </span>
+              <span className="sr-only">{label}</span>
+            </button>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** What the tapped square means, in a sentence. */
+function DayDetail({ entry }: { entry: FxDay }) {
+  return (
+    <div role="status" className="bg-muted/50 rounded-md px-3 py-2">
+      <p className="text-sm">
+        <span className="font-medium">{day(entry.date)}</span> ·{' '}
+        {states[entry.state].name}
+        {entry.source ? ` · ${sourceLabel(entry.source)}` : ''}
+      </p>
+      <p className="text-muted-foreground text-xs">
+        {states[entry.state].meaning}
+        {entry.state === 'not_fetched' &&
+          '. It fills on the next nightly run — if it stays, that run is failing.'}
+      </p>
+    </div>
   );
 }
 
@@ -161,6 +211,11 @@ export default function Fx() {
     return () => controller.abort();
   }, [target, refresh]);
 
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedDay = useMemo(
+    () => status?.rates.days.find((entry) => entry.date === selected) ?? null,
+    [status, selected],
+  );
   const present = useMemo(() => {
     const seen = new Set(status?.rates.days.map((entry) => entry.state));
     return (Object.keys(states) as FxDayState[]).filter((state) =>
@@ -323,7 +378,14 @@ export default function Fx() {
                   ))}
                 </p>
               )}
-              <CoverageStrip days={status.rates.days} />
+              <CoverageStrip
+                days={status.rates.days}
+                selected={selected}
+                onSelect={(date) =>
+                  setSelected((held) => (held === date ? null : date))
+                }
+              />
+              {selectedDay && <DayDetail entry={selectedDay} />}
               <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 {present.map((state) => (
                   <li key={state} className="flex items-center gap-1.5">
