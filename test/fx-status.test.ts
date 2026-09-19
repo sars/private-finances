@@ -311,3 +311,64 @@ test('a currency with no rates is caught while another currency looks fine', asy
     await db.close();
   }
 });
+
+/**
+ * The strip and the card must never disagree about the same ledger.
+ *
+ * A sterling payment on a day the secondary source filled is the case that
+ * caught this: euro and dollar rates were stored, so the day drew as covered,
+ * while the card above it reported the payment as unconverted. A square that
+ * says fine about a day something failed on is worse than no square.
+ */
+test('a day whose payment could not be priced is not drawn as covered', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  const repo = new Repository(db);
+  await repo.importBatch([
+    {
+      source: 'enablebanking',
+      sourceId: 'g',
+      accountId: 'gbp',
+      owner: 'rodion',
+      bookedAt: '2025-10-26T12:00:00Z',
+      currency: 'GBP',
+      amountMinor: '-5000',
+      description: 'Sterling on a day only EUR and USD were filled',
+    },
+  ]);
+  try {
+    const rates = new FxRates(db);
+    // Everything except the pair this payment needs.
+    for (const [base, rate] of [
+      ['EUR', '48.86'],
+      ['USD', '42.03'],
+    ] as const)
+      await rates.insert({
+        source: MINFIN_SOURCE,
+        base,
+        target: 'UAH',
+        rate,
+        asOf: '2025-10-26',
+        retrievedAt: '2025-10-27T00:00:00Z',
+        version: 1,
+        provenance: 'test',
+      });
+    const status = await fxConversionStatus(
+      repo,
+      await repo.list(),
+      '2025-10-26',
+    );
+    // Sterling reaches none of the three; every route out of it needs a rate.
+    assert.equal(status.conversions.missing, 1);
+    assert.deepEqual(status.unconverted[0]!.missingFor, ['UAH', 'EUR', 'USD']);
+    const day = status.rates.days.find((d) => d.date === '2025-10-26')!;
+    assert.equal(day.state, 'incomplete');
+    // The figures it does hold are still listed, because they are real.
+    assert.deepEqual(day.rates, { 'EUR/UAH': '48.86', 'USD/UAH': '42.03' });
+    // And the headline count agrees: the day did not price what was paid on it.
+    assert.equal(status.rates.covered, 0);
+    assert.equal(status.rates.needed, 1);
+  } finally {
+    await db.close();
+  }
+});

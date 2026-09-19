@@ -16,7 +16,7 @@ export const FX_ARCHIVE_SOURCES: readonly string[] = [
 ];
 
 export type FxDayState =
-  'covered' | 'empty_at_source' | 'not_fetched' | 'not_needed';
+  'covered' | 'incomplete' | 'empty_at_source' | 'not_fetched' | 'not_needed';
 export interface FxDay {
   date: string;
   state: FxDayState;
@@ -115,12 +115,20 @@ export function eachDate(from: string, to: string): string[] {
  * itself asks about. Every calendar day still gets a cell, because the shape of
  * the calendar is what makes a gap legible, but a day outside that set is drawn
  * as needing nothing and is left out of the count.
+ *
+ * `unpriced` is the set of days holding a payment that nothing could convert. A
+ * day can have rates stored and still be one of them: a sterling purchase on a
+ * day where only the euro and dollar rates were filled has a rate, just not its
+ * own. Without this the strip drew that day exactly like a perfect one, so it
+ * could sit blue while the card above it reported the failure — and a strip
+ * that contradicts the number beside it is worse than no strip at all.
  */
 export async function fxCoverage(
   db: Database,
   from: string,
   to: string,
   needed?: ReadonlySet<string>,
+  unpriced?: ReadonlySet<string>,
 ): Promise<FxDay[]> {
   const dates = eachDate(from, to);
   // The source that would win each day, and that source's figures — not merely
@@ -172,17 +180,17 @@ export async function fxCoverage(
   }
   return dates.map((date): FxDay => {
     const source = covered.get(date);
-    if (source)
-      return {
-        date,
-        state: 'covered',
-        source,
-        rates: Object.fromEntries(
-          [...(figures.get(date) ?? new Map())]
-            .sort(([a], [b]) => (a < b ? -1 : 1))
-            .map(([pair, held]) => [pair, held.rate]),
-        ),
-      };
+    const figuresFor = () =>
+      Object.fromEntries(
+        [...(figures.get(date) ?? new Map())]
+          .sort(([a], [b]) => (a < b ? -1 : 1))
+          .map(([pair, held]) => [pair, held.rate]),
+      );
+    // Asked before `covered`, because a day can hold both a stored rate and a
+    // payment that rate cannot price.
+    if (source && unpriced?.has(date))
+      return { date, state: 'incomplete', source, rates: figuresFor() };
+    if (source) return { date, state: 'covered', source, rates: figuresFor() };
     // A day with no payment on it needs no rate, so a missing one is not a gap
     // and must not read as a fault. The sync only ever asks about days that
     // carry a transaction; counting the days it deliberately skips against it
