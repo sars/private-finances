@@ -237,6 +237,9 @@ afterwards.
 difference in any of them. What it does not restore is bank access: consents
 expire every few days and are re-approved through the dashboard regardless.
 
+What a restore is _for_ — standing a whole machine back up around it — is
+[Bringing it up](running.md).
+
 Repeat after migration changes and periodically thereafter. One caution learned
 here: write the comparison so that it is capable of failing. The first attempt
 reported all fifty tables identical while in fact returning empty rows on both
