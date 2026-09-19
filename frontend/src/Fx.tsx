@@ -56,11 +56,11 @@ const states: Record<FxDayState, { name: string; tone: string }> = {
  */
 function CoverageStrip({ days }: { days: FxDay[] }) {
   return (
-    <ul className="flex flex-wrap gap-[3px]" aria-label="Daily rate coverage">
+    <ul className="flex flex-wrap gap-0.5" aria-label="Daily rate coverage">
       {days.map((entry) => {
         const first = entry.date.endsWith('-01');
         return (
-          <li key={entry.date} className="flex items-end gap-[3px]">
+          <li key={entry.date} className="flex items-end gap-0.5">
             {first && (
               <span
                 aria-hidden="true"
@@ -71,7 +71,7 @@ function CoverageStrip({ days }: { days: FxDay[] }) {
             )}
             <span
               title={`${day(entry.date)} — ${states[entry.state].name}`}
-              className={`block size-2.5 rounded-[2px] ${states[entry.state].tone}`}
+              className={`block size-2.5 rounded-xs ${states[entry.state].tone}`}
             >
               <span className="sr-only">
                 {day(entry.date)}: {states[entry.state].name}
@@ -281,7 +281,7 @@ export default function Fx() {
                   <li key={state} className="flex items-center gap-1.5">
                     <span
                       aria-hidden="true"
-                      className={`size-2.5 rounded-[2px] ${states[state].tone}`}
+                      className={`size-2.5 rounded-xs ${states[state].tone}`}
                     />
                     {states[state].name}
                   </li>
