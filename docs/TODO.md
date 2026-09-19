@@ -326,13 +326,15 @@ change was cancelled; do not silently turn it into a generic tag or income featu
       differences being rows created after the dump was taken.
       `/etc/private-finances/off-server-restore-verified` records it. See
       [the backup runbook](backups.md).
-- [ ] **PF-012 / OPS-4: pre-deployment dumps accumulate without a limit.** On
-      19 September 2026 `/var/lib/private-finances/predeploy/` held 134 dumps and
-      442 MB, and the root filesystem was 90% full with 10 GB free on a disk shared
-      with other applications. `deploy/release.sh` writes one before every switch and
-      nothing removes any. They are the rollback safety net for a release, so the
-      answer is a retention rule rather than deletion — the newest few, or the last
-      few days. Decide the rule before the disk decides it.
+- [x] **PF-012 / OPS-4: releases and pre-deployment dumps grew without a limit —
+      fixed 19 September 2026.** The dumps were the small half: 138 files and 442 MB.
+      The releases were the real one — 136 trees and 45 GB, about 518 MB each and
+      seventeen a day, on a root filesystem 92% full and shared with other
+      applications, which left under a day of headroom. Both are now pruned by
+      `deploy/switch-release.py` after a successful switch: the newest ten releases
+      plus whatever `current` points at, and the existing backup rule for the dumps.
+      The accumulated backlog was cleared by the owner; the disk went from 92% to
+      50%, 7.9 GB free to 49 GB.
 - [ ] **PF-012 / OPS-3: backup retention.** `restic forget --prune` is still
       unscheduled, because pruning deletes and nothing should delete a backup casually.
       The proposal remains 14 daily, 8 weekly and 12 monthly snapshots. At roughly 5 MB
