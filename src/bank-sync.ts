@@ -189,9 +189,14 @@ export async function syncBank(
     // failure here must not fail an import that has already committed — the next
     // sync runs it again.
     try {
-      await repo.db.transaction((tx) => reidentifyTransfers(tx));
+      await timed('identify', {}, () =>
+        repo.db.transaction((tx) => reidentifyTransfers(tx)),
+      );
     } catch {
       // Left for the next sync; the imported money is already safely stored.
+      // `timed` has recorded that it was attempted and why it did not finish —
+      // a stage allowed to fail silently is exactly the kind that should not
+      // also fail invisibly.
     }
     const finished = await repo.db.query(
       "UPDATE bank_sync_runs SET state='succeeded',last_success_at=now(),lease_token=NULL,lease_until=NULL WHERE connection=$1 AND lease_token=$2 AND lease_until>now() RETURNING connection",

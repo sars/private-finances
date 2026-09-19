@@ -37,19 +37,9 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
-const clock = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Europe/Riga',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
 export function when(value: string | null | undefined) {
   const parsed = value ? Date.parse(value) : NaN;
   return Number.isFinite(parsed) ? dateTime.format(parsed) : '—';
-}
-export function at(value: string | null | undefined) {
-  const parsed = value ? Date.parse(value) : NaN;
-  return Number.isFinite(parsed) ? clock.format(parsed) : '—';
 }
 /** "1.2 s", "340 ms", "2 min": how long a run or a request took. */
 export function took(ms: number | null | undefined) {
