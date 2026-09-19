@@ -5,12 +5,14 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
 import urllib.request
 from runpy import run_path
 from frontend_assets import retain_frontend_assets
+from release_retention import expired_releases
 
 
 def prune_predeploy(directory):
@@ -114,6 +116,20 @@ def main():
             print(json.dumps({'event': 'predeploy_pruned', 'removed': removed}))
         except Exception:
             print('{"event":"predeploy_prune_failed"}', file=sys.stderr)
+        # Both the release now serving and the one it replaced are among the
+        # newest by modification time and survive on that alone, but a rollback
+        # and the retained frontend assets both depend on the previous release
+        # still existing, so it is skipped by name rather than by arithmetic.
+        try:
+            gone = 0
+            for old_release in expired_releases(release.parent, release):
+                if old_release == current:
+                    continue
+                shutil.rmtree(old_release)
+                gone += 1
+            print(json.dumps({'event': 'releases_pruned', 'removed': gone}))
+        except Exception:
+            print('{"event":"release_prune_failed"}', file=sys.stderr)
 
 
 if __name__ == '__main__':
