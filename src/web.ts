@@ -18,6 +18,8 @@ import { llmBudgetSummary } from './llm-budget.js';
 import { systemProblems } from './problems.js';
 import type { CredentialHealth } from './credential-health.js';
 import { backupSummary, type BackupHealth } from './backup-health.js';
+import { storageDetail } from './storage-health.js';
+import { readStorage } from './storage.js';
 import { convertedSpending } from './analytics.js';
 import { AccountBalances, convertedBalances } from './account-balances.js';
 import { UiLayouts, arrange } from './ui-layout.js';
@@ -1086,6 +1088,7 @@ export function web(
         json(200, {
           ...(await repo.health()),
           credentials: config.credentialHealth ? config.credentialHealth() : [],
+          storage: await readStorage(),
         });
         return;
       }
@@ -1110,8 +1113,12 @@ export function web(
             'Import needs review. Previously completed account windows remain saved.',
         };
         const backup = backupSummary(health.backup as BackupHealth | undefined);
+        const storage = await readStorage();
+        const storageTile = storage
+          ? `<section class="total"><span class="muted">Disk</span><div class="number">${Math.round(storage.usedRatio * 100)}%</div><p>${escape(storageDetail(storage))}</p></section>`
+          : '';
         html(
-          `<h1>System health</h1>${(config.credentialHealth?.() ?? []).map((credential) => `<section class="total"><h2>${escape(credential.label)}</h2><p>${escape(credential.state.replaceAll('_', ' '))} · Expires ${escape(credential.expiresOn ?? credential.expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>`).join('')}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section><section class="total"><span class="muted">Off-server backup</span><div class="number">${escape(backup.headline)}</div><p>${escape(backup.detail)}</p></section></div><h2>Bank imports</h2>${
+          `<h1>System health</h1>${(config.credentialHealth?.() ?? []).map((credential) => `<section class="total"><h2>${escape(credential.label)}</h2><p>${escape(credential.state.replaceAll('_', ' '))} · Expires ${escape(credential.expiresOn ?? credential.expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>`).join('')}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section><section class="total"><span class="muted">Off-server backup</span><div class="number">${escape(backup.headline)}</div><p>${escape(backup.detail)}</p></section>${storageTile}</div><h2>Bank imports</h2>${
             connections.length
               ? connections
                   .map((c) => {

@@ -54,6 +54,47 @@ build=/tmp/pf-build-$short
 archive=/tmp/pf-$short.tar.gz
 step() { printf '\n=== %s ===\n' "$1"; }
 
+# Everything below this line can fail, and until 19 September 2026 every failure
+# left the transferred archive and the unpacked build tree behind on the server,
+# because their removal was the script's final step and only a release that
+# reached the end ever ran it. Twenty-one abandoned build trees had accumulated
+# in /tmp that way, 5.8 GB of a disk that was 92% full.
+#
+# So the trap is installed here, before the first remote command creates
+# anything, and it is the single exit path for every outcome: it resumes
+# whatever a failed step had paused, then removes the build tree and the
+# archive. Neither half may change the exit status — a release that worked is
+# not retroactively a failure because a temporary file survived — so each
+# reports its own trouble and leaves $status alone.
+paused=
+rehearsing=
+cleanup_on_exit() {
+  local status=$?
+  trap - EXIT
+  if [ -n "$paused" ]; then
+    printf '\n=== restoring the imports and the worker a failed step had paused ===\n' >&2
+    resume_services >&2 ||
+      echo "WARNING: could not resume on $host; start private-finances-telegram.service and the private-finances-sync@ timers by hand" >&2
+  fi
+  rm -f /tmp/pf-release-local.tar.gz
+  # The rehearsal dump is a full copy of the household's database, and the
+  # restored copy it feeds is a whole second database. Both were removed inside
+  # the rehearsal's own `set -e` block, so a rehearsal that failed partway left
+  # them behind. They are cleaned here for the copies' sake first and the disk
+  # second. The database is dropped only when the rehearsal was actually
+  # reached, so an early failure cannot pull it out from under a release running
+  # concurrently in another session.
+  local remote="rm -rf $build $archive /tmp/pf-rehearsal.dump /tmp/pf-migrate-check.mjs"
+  if [ -n "$rehearsing" ]; then
+    remote="$remote
+      sudo -n -u postgres dropdb --if-exists private_finances_migration_check"
+  fi
+  ssh -o BatchMode=yes "$host" "$remote" ||
+    echo "WARNING: could not clean up $build and $archive on $host; they are stale build files, safe to delete by hand" >&2
+  exit $status
+}
+trap cleanup_on_exit EXIT
+
 step "transferring $short"
 digest=$(git archive --format=tar "$sha" | gzip -9 | tee /tmp/pf-release-local.tar.gz |
   shasum -a 256 | cut -d' ' -f1)
@@ -89,6 +130,7 @@ ssh -o BatchMode=yes "$host" "cd $build
 # deployed schema version. A release was rolled back on 13 September 2026
 # because its migration had only ever run on an empty one.
 step 'migration rehearsal on a restored copy'
+rehearsing=1
 ssh -o BatchMode=yes "$host" "set -e
   cat > /tmp/pf-migrate-check.mjs <<'CHECK'
 const { postgresDatabase, migrate } = await import(
@@ -127,6 +169,7 @@ CHECK
     node /tmp/pf-migrate-check.mjs
   sudo -n -u postgres dropdb private_finances_migration_check
   rm -f /tmp/pf-rehearsal.dump /tmp/pf-migrate-check.mjs"
+rehearsing=
 
 # The build and the rehearsal take minutes, long enough for another agent to
 # release in the meantime. On September 17, 2026 exactly that happened: the
@@ -175,18 +218,6 @@ resume_services() {
     rm -f /tmp/pf-paused-timers
     echo resumed"
 }
-paused=
-restore_if_paused() {
-  local status=$?
-  trap - EXIT
-  if [ -n "$paused" ]; then
-    printf '\n=== restoring the imports and the worker a failed step had paused ===\n' >&2
-    resume_services >&2 ||
-      echo "WARNING: could not resume on $host; start private-finances-telegram.service and the private-finances-sync@ timers by hand" >&2
-  fi
-  exit $status
-}
-trap restore_if_paused EXIT
 
 step 'pausing imports and the worker'
 # Set before the command, not after: the remote script stops the timers and the
@@ -232,6 +263,4 @@ ssh -o BatchMode=yes "$host" "set -e
     \"\$active\" \"\$released\" \"\$schema\" \"\$rows\"
   [ \"\$released\" = '$sha' ] || exit 76"
 
-step 'cleaning up the build directory'
-ssh -o BatchMode=yes "$host" "rm -rf $build $archive"
 echo "deployed $sha"

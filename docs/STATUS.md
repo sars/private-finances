@@ -905,6 +905,44 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# The rest of what a release left on the disk — September 19, 2026
+
+The owner asked where the server's disk had gone. It was 92% full: 88 GB of 96,
+with 7.9 GB left and, at eight to twenty-three deployments a day, well under a
+day of headroom. Forty-five gigabytes were unpruned release trees, which is the
+subject of the entry below and was already fixed in `release_retention.py` by
+the time this looked. What follows is everything else the same investigation
+turned up, all of it the same mistake in a different place: a cleanup written as
+the last step of a happy path, so only a run that reached the end performed it.
+
+`/tmp` held 5.8 GB in twenty-one abandoned build trees. `release.sh` did remove
+its build directory — as its final line. The trap that restores paused imports
+is now installed before the first remote command instead of halfway down, and is
+the single exit path for every outcome: it removes the build tree, the archive,
+the migration rehearsal's dump and the rehearsal's restored database. That dump
+and that database are full copies of the household's data, which is the first
+reason to remove them and the disk second. The database is dropped only when the
+rehearsal was actually reached, so an early failure cannot pull it out from
+under a release running concurrently in another session.
+
+Two test files created temporary directories and never removed them — 91
+directories, about 2 MB. Trivial in bytes, but those tests run on the server
+during every deployment, so the count only grows. `backup-script` removes its
+sandbox once it has read everything out of it, and the three scheduler tests in
+`import-runs` use `t.after`, which also runs when an assertion fails, which is
+precisely the run that leaves litter behind.
+
+None of this was visible anywhere but an SSH session. The operations page has a
+fourth card now beside the database, the release and the backup: the percentage
+of the disk in use, and how many gigabytes are free of how many. It is judged by
+absolute free space rather than by the percentage, because the question being
+asked is whether the next stretch of releases and dumps will fit, and that is an
+absolute quantity — under 15 GB is tight, under 5 GB is critical. The row goes
+to four columns so the fourth card does not sit alone under the other three.
+
+The owner cleared the backlog by hand while this was being written, taking the
+disk from 92% to 50%. The rules are what stop it returning.
+
 # Amounts stopped falling off the phone — September 19, 2026
 
 The owner opened Spending analytics on a phone, chose **This month**, and found

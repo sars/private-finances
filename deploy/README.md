@@ -15,6 +15,43 @@ Layout:
 - /etc/private-finances/credentials: server-only bank credentials, mode 700.
 - Dedicated private-finances service user and private_finances database/role.
 
+## What a release leaves behind, and what removes it
+
+The server is shared with other applications and has one 96 GB root filesystem.
+A release writes three things that outlive it, and each has a rule now because
+none of them had one on 19 September 2026, when the disk reached 92% full with
+roughly a day of headroom left:
+
+| What | Where | Rule | Applied by |
+| --- | --- | --- | --- |
+| Release tree, ~520 MB | `/opt/private-finances/releases/<sha>` | newest ten by modification time, plus the live one whatever its age | `switch-release.py`, using `release_retention.py`'s rule |
+| Pre-deployment dump | `/var/lib/private-finances/predeploy` | newest fourteen plus one a day for fourteen days | `switch-release.py`, using `local-backup.py`'s rule |
+| Build tree and archive | `/tmp/pf-build-<short>`, `/tmp/pf-<short>.tar.gz` | removed on every exit, success or failure | `release.sh`'s `cleanup_on_exit` trap |
+| Rehearsal dump and its restored database | `/tmp/pf-rehearsal.dump`, `private_finances_migration_check` | removed on every exit once the rehearsal has been reached | `release.sh`'s `cleanup_on_exit` trap |
+
+A release tree is a build artefact and not a record: any commit can be rebuilt
+from Git, so an old tree only buys a rollback that skips a build, and a rollback
+goes back one release. The fingerprinted frontend assets an already-open browser
+tab may still request do not depend on the old tree surviving — they are copied
+forward into the live one by `retain_frontend_assets`, which is the mechanism
+described under "Open browser tabs across releases" below.
+
+Both prunes run only after a switch has succeeded, and a prune that fails is
+reported as `release_prune_failed` or `predeploy_prune_failed` rather than
+failing a deployment that has already worked.
+
+The two `/tmp` rules exist because their cleanup used to be written as the last
+step of a happy path, so only a run that reached the end performed it: 21
+abandoned build trees at 5.8 GB had collected that way. The rehearsal's dump and
+its restored database matter beyond the disk — both are full copies of the
+household's data, and a rehearsal that failed partway left them in place. The
+database is dropped only once the rehearsal has actually been reached, so an
+early failure cannot pull it out from under a release running concurrently in
+another session.
+
+The operations page shows how much room is left, so the next time this matters
+nobody has to open an SSH session to find out.
+
 The dashboard binds loopback. Initially use an SSH tunnel over Tailscale:
 `ssh -L 3300:127.0.0.1:3300 radar`, then open
 http://localhost:3300 and sign in using the owner's separate password. This
