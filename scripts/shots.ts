@@ -57,7 +57,9 @@ try {
         await page.goto(base + route, { waitUntil: 'networkidle' });
         await page.waitForTimeout(300);
         const name =
-          route === '/' ? 'home' : route.replace(/^\//, '').replace(/[^a-z0-9]+/gi, '-');
+          route === '/'
+            ? 'home'
+            : route.replace(/^\//, '').replace(/[^a-z0-9]+/gi, '-');
         const file = `${out}/${name}-${viewport.name}-${colorScheme}.png`;
         await page.screenshot({ path: file, fullPage: true });
         console.log(file);

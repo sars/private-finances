@@ -67,14 +67,22 @@ const runs = [
     owner: 'rodion',
     accounts: [
       { id: 'iron', currency: 'UAH', label: 'iron', balance: '3435539' },
-      { id: 'white', currency: 'UAH', label: 'white', balance: '-128400', creditLimit: '2000000' },
+      {
+        id: 'white',
+        currency: 'UAH',
+        label: 'white',
+        balance: '-128400',
+        creditLimit: '2000000',
+      },
       { id: 'fop', currency: 'UAH', label: 'fop', balance: '881205' },
     ],
   }),
   connector({
     source: 'monobank',
     owner: 'katya',
-    accounts: [{ id: 'black', currency: 'UAH', label: 'black', balance: '1704322' }],
+    accounts: [
+      { id: 'black', currency: 'UAH', label: 'black', balance: '1704322' },
+    ],
     fail: 'schema',
   }),
   connector({
@@ -90,20 +98,26 @@ const runs = [
     source: 'enablebanking',
     owner: 'rodion',
     bank: 'revolut',
-    accounts: [{ id: 'r1', currency: 'USD', label: 'Revolut USD', balance: '12905' }],
+    accounts: [
+      { id: 'r1', currency: 'USD', label: 'Revolut USD', balance: '12905' },
+    ],
     payments: 1,
   }),
   connector({
     source: 'enablebanking',
     owner: 'rodion',
     bank: 'swedbank',
-    accounts: [{ id: 's1', currency: 'XXX', label: 'Swedbank', balance: '1590744' }],
+    accounts: [
+      { id: 's1', currency: 'XXX', label: 'Swedbank', balance: '1590744' },
+    ],
   }),
   connector({
     source: 'enablebanking',
     owner: 'katya',
     bank: 'wise',
-    accounts: [{ id: 'kw', currency: 'EUR', label: 'Wise EUR', balance: '78650' }],
+    accounts: [
+      { id: 'kw', currency: 'EUR', label: 'Wise EUR', balance: '78650' },
+    ],
     fail: 'rate_limit',
   }),
 ];
@@ -126,7 +140,9 @@ const rates = new FxRates(db);
 const EMPTY_AT_SOURCE = 9;
 const NOT_FETCHED = 2;
 for (let back = NOT_FETCHED; back < 40; back++) {
-  const asOf = new Date(Date.now() - back * 86400000).toISOString().slice(0, 10);
+  const asOf = new Date(Date.now() - back * 86400000)
+    .toISOString()
+    .slice(0, 10);
   if (back === EMPTY_AT_SOURCE) {
     for (const source of FX_ARCHIVE_SOURCES)
       await recordFxAbsence(
@@ -138,10 +154,14 @@ for (let back = NOT_FETCHED; back < 40; back++) {
       );
     continue;
   }
+  // A little drift per day, so the history table reads like a history rather
+  // than the same number forty times.
+  const drift = (base, step) =>
+    (base + Math.sin(step / 3) * 0.35 + step * 0.01).toFixed(2);
   for (const [base, rate] of [
-    ['USD', '41.50'],
-    ['EUR', '48.20'],
-    ['GBP', '55.10'],
+    ['USD', drift(41.5, back)],
+    ['EUR', drift(48.2, back)],
+    ['GBP', drift(55.1, back)],
   ]) {
     try {
       await rates.insert({

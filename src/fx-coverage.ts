@@ -23,6 +23,10 @@ export interface FxDay {
   /** Which source stored the day's rate; only ever set on a covered day. The
    * page shows it when a cell is tapped, so a square can explain itself. */
   source?: string;
+  /** The day's rates, `"EUR/UAH"` to the figure, from the winning source.
+   * Only on a covered day, and the reason the page can list a history rather
+   * than only assert that one exists. */
+  rates?: Record<string, string>;
 }
 
 const dateValid = (value: string) =>
@@ -119,19 +123,41 @@ export async function fxCoverage(
   needed?: ReadonlySet<string>,
 ): Promise<FxDay[]> {
   const dates = eachDate(from, to);
-  // The source that would win the day, not merely one that stored something:
-  // the cell names the rate a conversion on that date would actually use.
+  // The source that would win each day, and that source's figures — not merely
+  // whatever stored something. The cell names, and the history lists, the rate
+  // a conversion on that date would actually use.
   const covered = new Map<string, string>();
-  for (const row of (
+  const quotes = (
     await db.query(
-      "SELECT DISTINCT source,to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_rates WHERE as_of>=$1 AND as_of<=$2",
+      "SELECT source,base,target,rate,version,to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_rates WHERE as_of>=$1 AND as_of<=$2",
       [from, to],
     )
-  ).rows) {
-    const day = String(row.day),
-      source = String(row.source);
-    const held = covered.get(day);
-    if (!held || compareFxSources(source, held) < 0) covered.set(day, source);
+  ).rows.map((row) => ({
+    day: String(row.day),
+    source: String(row.source),
+    base: String(row.base),
+    target: String(row.target),
+    rate: String(row.rate),
+    version: Number(row.version),
+  }));
+  for (const quote of quotes) {
+    const held = covered.get(quote.day);
+    if (!held || compareFxSources(quote.source, held) < 0)
+      covered.set(quote.day, quote.source);
+  }
+  const figures = new Map<
+    string,
+    Map<string, { rate: string; version: number }>
+  >();
+  for (const quote of quotes) {
+    if (quote.source !== covered.get(quote.day)) continue;
+    const pair = `${quote.base}/${quote.target}`;
+    const day = figures.get(quote.day) ?? new Map();
+    const held = day.get(pair);
+    // Corrections append versions; the newest is the one in force.
+    if (!held || held.version < quote.version)
+      day.set(pair, { rate: quote.rate, version: quote.version });
+    figures.set(quote.day, day);
   }
   const asked = new Map<string, Set<string>>();
   for (const row of (
@@ -146,7 +172,17 @@ export async function fxCoverage(
   }
   return dates.map((date): FxDay => {
     const source = covered.get(date);
-    if (source) return { date, state: 'covered', source };
+    if (source)
+      return {
+        date,
+        state: 'covered',
+        source,
+        rates: Object.fromEntries(
+          [...(figures.get(date) ?? new Map())]
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([pair, held]) => [pair, held.rate]),
+        ),
+      };
     // A day with no payment on it needs no rate, so a missing one is not a gap
     // and must not read as a fault. The sync only ever asks about days that
     // carry a transaction; counting the days it deliberately skips against it
