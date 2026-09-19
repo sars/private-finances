@@ -109,11 +109,61 @@ surrounding days 24–28 October carry no cross-currency Monobank payment either
 So for that specific date: PrivatBank published nothing, Monobank has no archive
 to ask, and our own data holds no rate to derive. Every real source is empty.
 
-### First, check a multi-bank commercial aggregator — not yet verified
+### The aggregator check — done, 19 September 2026
 
-The owner's direction is to look at an aggregator of real Ukrainian bank rates
-before settling for anything derived. **This has not been checked; checking it
-is the first step of this task.**
+Checked before anything was built. **Minfin has 26 October 2025.** The answers,
+in the order the questions were asked:
+
+1. **Historical daily rates without a paid key — partly.** `api.minfin.com.ua`
+   needs a paid key. The public rates page
+   `minfin.com.ua/ua/currency/banks/<cur>/<YYYY-MM-DD>/` is free,
+   unauthenticated, and not disallowed by `robots.txt`. It is HTML, so reading
+   it is a scrape, not an API call. Finance.ua was checked too and gave nothing
+   usable: `api.finance.ua` does not resolve, `resources.finance.ua` answers 403,
+   and the dated archive URLs answer 404.
+2. **Yes — the date is there, for all three pairs.** The deciding question, and
+   it came back positive despite the Sunday:
+
+   | Date | EUR buy / sell | USD buy / sell | GBP buy / sell |
+   | --- | --- | --- | --- |
+   | Fri 24 Oct | 48.48245 / 49.14913 | | |
+   | Sat 25 Oct | 48.53361 / 49.18834 | 41.71093 / 42.24537 | 54.74176 / 56.27129 |
+   | **Sun 26 Oct** | **48.5462 / 49.17463** | **41.71685 / 42.25674** | **54.94112 / 56.5037** |
+   | Mon 27 Oct | 48.61809 / 49.32168 | | |
+
+   Every value moves day to day, including across the weekend, so this is a
+   genuine per-day series and not a Friday figure held over. The NBU column
+   beside it is flat at 48.5502 across 24–26 October, which is what a source
+   that *does* stop at the weekend looks like — a useful control, and it is
+   never read.
+
+   The EUR midpoint for 26 October is **48.860415 UAH**. The rate PrivatBank had
+   published on the 25th was 48.90, and the 27th's was 48.85, so the aggregator's
+   number sits inside the band the carry-forward fallback was reasoning about —
+   but it is a real published figure for the day itself, not an inference.
+3. **Not answerable for free, and stated as such.** The per-bank breakdown for a
+   past date is behind the paid API: `/ua/company/<bank>/currency/<date>/` ignores
+   the date and serves today's rates. The live panel does include all four banks
+   the owner named — PrivatBank, monobank, абанк and Sens Bank (Alfa-Bank) — but
+   for 26 October 2025 what is published is the average across Minfin's whole
+   panel, and how many banks stood behind it that Sunday cannot be shown without
+   a key. The figure is honest about being a broad multi-bank average rather than
+   those four.
+4. **Fine for a gap filler, not for a nightly primary.** No documented rate limit,
+   no terms forbidding it, but it is a rendered React page with hashed class
+   names. So it is asked only about days the primary source left empty — a
+   handful a year — and every assumption is asserted before a number is taken.
+
+**Because the check came back positive, the carry-forward fallback below was
+never built.** The owner's instruction on seeing this result was one primary and
+one secondary source and nothing else, so `PrivatBank commercial midpoint` and
+`Minfin bank average midpoint` are the two, with no third source and no carried
+rate. The section below is kept for the record of what was considered.
+
+### The original plan, before the check came back
+
+The owner's direction was to look at an aggregator of real Ukrainian bank rates
+before settling for anything derived.
 
 Two candidates, both publishing what banks actually quoted rather than a central
 bank's reference number, and both carrying history:
@@ -169,36 +219,33 @@ already supports.
 
 ### Rules
 
-0. Run the aggregator check above first. The carry-forward rules exist only for
-   dates that survive it with nothing published anywhere.
-1. Carry forward only when **every** source is empty for that date, and only
-   from the most recent earlier date that has a usable commercial rate. Never
-   interpolate, never average, never reach backward from a later day.
-2. Store the carried quote with provenance naming both dates — the date it
-   applies to and the date it was published — so the record never claims
-   PrivatBank published something on a day it did not.
-3. Never carry forward across an unbounded gap. Cap it at a small number of days
-   (three is ample for a weekend or holiday); beyond that the date stays missing
-   rather than inheriting a stale rate.
-4. Add Monobank's live endpoint as a second daily commercial source, stored
-   under its own source string with full provenance, so future empty days have
-   somewhere real to fall back to.
+0. Run the aggregator check above first. **Done, and it came back positive**, so
+   rules 1–4 below never applied and the carry-forward was not built.
+1. ~~Carry forward only when **every** source is empty for that date~~ — not built.
+2. ~~Store the carried quote with provenance naming both dates~~ — not built.
+3. ~~Never carry forward across an unbounded gap~~ — not built.
+4. ~~Add Monobank's live endpoint as a second daily commercial source~~ — dropped
+   on the owner's instruction to keep exactly one primary and one secondary
+   source. Minfin covers every date back to 2006, including future weekends, so a
+   third source earned nothing the second one did not already give.
 5. **Make source precedence explicit.** Today `FxRates.list` orders by
    `as_of, source, base, target` and `latest()` re-sorts by source string, so
    selection is alphabetical by accident. Any second source name that sorts
    before `PrivatBank commercial midpoint` would silently displace it. Declare
-   the order — PrivatBank commercial midpoint, then Monobank, then a carried
-   rate last — and select on that list rather than on the alphabet. Prove it
-   with a test that stores two sources for one date and asserts the winner.
+   the order — PrivatBank commercial midpoint, then Minfin bank average midpoint
+   — and select on that list rather than on the alphabet. Prove it with a test
+   that stores two sources for one date and asserts the winner. **Done**:
+   `src/fx-sources.ts` and `test/fx-source-precedence.test.ts`.
 6. Keep every other refusal intact: no fabricated rate, no interpolation, no
-   silent substitution. A date with nothing to carry from stays missing.
+   silent substitution, no NBU. A date neither source publishes stays missing.
 7. `docs/fx-policy.md` must be rewritten where it forbids any fallback, not
    appended to.
 8. `docs/server-requirements.md` must record the outbound dependency on
-   `api.monobank.ua` alongside the existing `api.privatbank.ua`.
+   `minfin.com.ua` alongside the existing `api.privatbank.ua`.
 
-Applying this converts the six payments of 26 October 2025 and takes the ledger
-to full coverage.
+Applying this converts the six payments of 26 October 2025 — at Minfin's
+published average bank midpoint for that day, 48.860415 UAH per EUR — and takes
+the ledger to full coverage.
 
 ## Part 2 — the page
 

@@ -95,7 +95,7 @@ spins while the data is re-read and answers with a tick — and the Refresh
 buttons hide there; on a desktop the single `RefreshButton` stays, first among
 a page's actions. Twelve bespoke buttons became that one component, and the
 nine screens that fetch in an effect rather than through the query cache
-(Home, Bank connections, Currency conversion, System health, Accounts,
+(Home, Bank connections, Conversion status, System health, Accounts,
 Categories & rules, Reports, a payment's history, the AI budget) now follow a
 shared signal `invalidateFinancialData()` advances, so one refresh reaches
 every screen instead of half of them; their private refresh counters are gone.
@@ -831,6 +831,39 @@ whose purchase is on no account we sync, and a 6.00 EUR Riga parking reversal
 with no charge at all. What the matcher still will not decide is recorded in
 [refunds](refunds.md) rather than tracked here, so this section stays current
 rather than growing.
+
+The currency page is now **Conversion status** (route unchanged, `/fx`). It no
+longer reports spending in another currency — every screen does that, because
+the display currency is a global setting — and instead answers the one question
+none of them can: is every payment counted in that currency, and are the rates
+behind it still arriving? Three things, in that order: whether all transactions
+have an amount in the display currency, with one line saying how each one got it
+(from the bank, by daily rate, already in that currency); the payments that have
+none, listed with a plain sentence for why; and a strip of one cell per calendar
+day showing where rates are stored. The totals, the whole filter bar, the
+search, the 50-row table of converted rows and the monthly per-person table are
+gone. Every count on the page covers the same rows — all of them, personal or
+not, pending included — which the old page's own two numbers did not.
+
+The strip distinguishes a day nobody published from a day the sync has not
+reached, because only the second is a fault. That needs a record of a provider
+answering "nothing", which is what `daily_fx_absences` (schema 62) holds. It
+matters more than it sounds: almost all recent spending carries Monobank's own
+converted figure and needs no daily rate, so a nightly FX sync that died tonight
+would break nothing visible for weeks. The "rates current through <date>" line
+is the only thing in the application that would notice the next morning.
+
+The gap behind it is closed. 26 October 2025 was a Sunday, PrivatBank published
+no commercial rates for it, and eleven months of nightly retries had already
+failed against an empty archive. Minfin publishes an average of the commercial
+rates across Ukrainian banks for that date — 48.860415 UAH per EUR, a figure
+that moves day to day across the weekend rather than being Friday's held over —
+so it is now the **secondary** source, asked only about days the primary one
+leaves empty. Precedence is declared in `src/fx-sources.ts` rather than left to
+the alphabet, which would otherwise have put `Minfin…` ahead of `PrivatBank…`
+and silently demoted the approved primary. Still no NBU rate, no interpolation,
+no carried-forward rate, and no third source: a date neither publishes stays
+missing, with its rows listed and out of every total.
 
 ## Live capabilities
 

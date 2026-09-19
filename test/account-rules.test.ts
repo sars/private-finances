@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { memoryDatabase, migrate } from '../src/database.js';
 import { Accounts } from '../src/accounts.js';
 import { Repository } from '../src/repository.js';
+import { convertedSpending } from '../src/analytics.js';
 import { seedTestOwners, signInAs } from './sign-in.js';
 
 test('account rules expose exact impact and reject stale edits with audited reasons', async () => {
@@ -182,12 +183,12 @@ test('account HTTP edits change effective totals reversibly and preserve revisio
     assert.equal(account.revision, 1);
     assert.equal(account.history[0].reason, input.reason);
     assert.equal(account.impact.personalExpenseCount, 1);
-    const excluded = await (await get('/api/fx?display=UAH')).json();
+    const excluded = await convertedSpending(repo, await repo.list(), 'UAH');
     // The owner classified this payment as personal spending, so marking the
     // card a business card leaves it alone. Not everything on a business
     // account is business spending, and only a person can say which is which.
     assert.equal(excluded.confirmedMinor, '12345');
-    assert.equal(excluded.rows[0].spendingPolicy.reason, 'business_account');
+    assert.equal(excluded.rows[0]!.spendingPolicy!.reason, 'business_account');
     assert.equal((await repo.list())[0]!.kind, 'personal_expense');
     // A payment nobody has decided on does follow the account.
     await repo.importBatch([
@@ -219,7 +220,7 @@ test('account HTTP edits change effective totals reversibly and preserve revisio
       ).status,
       303,
     );
-    const restored = await (await get('/api/fx?display=UAH')).json();
+    const restored = await convertedSpending(repo, await repo.list(), 'UAH');
     assert.equal(restored.confirmedMinor, '12345');
     const human = (await repo.list()).find((r) => r.sourceId === 'one')!;
     assert.equal(human.category, 'Food / Groceries');

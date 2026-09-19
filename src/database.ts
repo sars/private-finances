@@ -21,6 +21,7 @@ import {
 } from './refund-automation.js';
 import { initializeRefundQuestions } from './refund-questions.js';
 import { initializeFxRates } from './fx-rates.js';
+import { initializeFxCoverage } from './fx-coverage.js';
 import { addHoldingFeeds, initializeHoldings } from './holdings.js';
 import { initializeSpendingPatterns } from './spending-pattern.js';
 import { initializeTransactionTriage } from './transaction-triage.js';
@@ -999,6 +1000,17 @@ async function applyMigrations(db: Database): Promise<void> {
          CHECK(stage IN ('dump','upload','config'))`,
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (61)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=62'))
+        .rows.length
+    ) {
+      // A day with no stored rate used to be one fact. It is two: a day nobody
+      // published, which will never fill and is not a fault, and a day the sync
+      // has not reached, which is. Only the first can be recorded here, because
+      // only it is something a provider actually told us.
+      await initializeFxCoverage(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (62)');
     }
   });
 }

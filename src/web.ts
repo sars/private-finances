@@ -21,6 +21,7 @@ import { backupSummary, type BackupHealth } from './backup-health.js';
 import { storageDetail } from './storage-health.js';
 import { readStorage } from './storage.js';
 import { convertedSpending } from './analytics.js';
+import { fxConversionStatus } from './fx-status.js';
 import { AccountBalances, convertedBalances } from './account-balances.js';
 import { UiLayouts, arrange } from './ui-layout.js';
 import {
@@ -899,19 +900,20 @@ export function web(
         return;
       }
       if (req.method === 'GET' && route === '/api/fx') {
-        const owner = url.searchParams.get('owner') || undefined;
-        if (owner && owner !== 'rodion' && owner !== 'katya')
-          throw new Error('invalid_owner');
-        const rows = filterTransactions(
-          await repo.list(owner as Owner | undefined),
-          parseFilters(url.searchParams),
-        );
+        // Conversion status covers the whole ledger. There is nothing to filter
+        // by: "is everything counted" is not a question about a subset, and a
+        // filtered answer would be the one kind of wrong that looks right.
         json(
           200,
-          await convertedSpending(
+          await fxConversionStatus(
             repo,
-            rows,
+            await repo.list(),
             url.searchParams.get('display') || 'UAH',
+            // A quote is matched to a payment's UTC date, so coverage is
+            // counted in UTC days too. Riga's calendar runs two hours ahead,
+            // which would leave the strip showing an unfetched day every
+            // evening — a warning that is on every night is not a warning.
+            new Date().toISOString().slice(0, 10),
           ),
         );
         return;
@@ -984,17 +986,26 @@ export function web(
         return;
       }
       if (req.method === 'GET' && route === '/fx') {
-        const target = url.searchParams.get('display') || 'UAH';
-        const owner = url.searchParams.get('owner') || undefined;
-        if (owner && owner !== 'rodion' && owner !== 'katya')
-          throw new Error('invalid_owner');
-        const rows = filterTransactions(
-          await repo.list(owner as Owner | undefined),
-          parseFilters(url.searchParams),
+        // The no-script twin of the Conversion status screen. It answers the
+        // same question in the same order — is everything counted, what is not,
+        // and are the rates still arriving — so the two surfaces cannot say
+        // different things about the same ledger.
+        const status = await fxConversionStatus(
+          repo,
+          await repo.list(),
+          url.searchParams.get('display') || 'UAH',
+          new Date().toISOString().slice(0, 10),
         );
-        const totals = await convertedSpending(repo, rows, target);
+        const target = status.currency;
+        const missing = status.conversions.missing;
         html(
-          `<h1>Display currency</h1><p>Uses recorded bank amounts where available. Third-currency historical market rates are not configured. Original purchase amounts may exclude bank fees. Missing conversions remain outside these partial totals.</p><form method="get"><label>Currency<select name="display">${['UAH', 'EUR', 'USD', 'GBP'].map((c) => `<option ${c === target ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label>From (Europe/Riga)<input type="date" name="from" value="${escape(url.searchParams.get('from') || '')}"></label><label>Through (Europe/Riga)<input type="date" name="to" value="${escape(url.searchParams.get('to') || '')}"></label><button>Show</button></form><p class="warning">${totals.missing} transactions have no verified conversion to ${escape(target)}.</p><div class="totals"><section class="total"><h2>Covered confirmed expenses</h2><p>${money(totals.confirmedMinor, target)}</p></section><section class="total"><h2>Covered unresolved payments</h2><p>${money(totals.unresolvedMinor, target)}</p></section><section class="total"><h2>Covered pending payments</h2><p>${money(totals.pendingMinor, target)}</p></section></div>${totals.converted.map((t) => `<p>${escape(t.description)}: ${money(t.amountMinor, target)} · ${escape(t.source)}</p>`).join('')}`,
+          `<h1>Conversion status</h1>
+          <p class="${missing ? 'warning' : ''}">${missing ? `${missing} of ${status.conversions.total} transactions have no ${escape(target)} amount.` : `All ${status.conversions.total} transactions have a ${escape(target)} amount.`}</p>
+          <p>${status.conversions.method.bank} from the bank · ${status.conversions.method.daily} by daily rate · ${status.conversions.method.identity} already in ${escape(target)}.</p>
+          ${missing ? `<h2>Not converted</h2>${status.unconverted.map((row) => `<section class="total"><p>${escape(row.bookedAt.slice(0, 10))} · ${escape(row.account.name)} · ${money(row.amountMinor, row.currency)}</p><p>${escape(row.reason)}</p></section>`).join('')}${status.unconvertedCapped ? `<p>Showing the first ${status.unconverted.length} of ${missing}.</p>` : ''}` : ''}
+          <h2>Rates</h2>
+          <p>${status.rates.current ? `Rates current through ${escape(status.rates.current)}` : 'No rates are stored'} · ${status.rates.covered} of ${status.rates.needed} days.</p>
+          <p>${status.rates.days.filter((day) => day.state === 'not_fetched').length} days not fetched · ${status.rates.days.filter((day) => day.state === 'empty_at_source').length} empty at source.</p>`,
         );
         return;
       }

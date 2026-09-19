@@ -53,7 +53,7 @@ export const screenGroups: ScreenGroup[] = [
       { href: '/categories', label: 'Categories & rules', icon: Tags },
       { href: '/accounts', label: 'Accounts & exclusions', icon: Wallet },
       { href: '/connections', label: 'Bank connections', icon: Landmark },
-      { href: '/fx', label: 'Currency conversion', icon: Coins },
+      { href: '/fx', label: 'Conversion status', icon: Coins },
       { href: '/settings', label: 'Settings', icon: Settings, admin: true },
     ],
   },

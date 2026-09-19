@@ -6,6 +6,7 @@ import {
   type FxResult,
   type FxProvenance,
 } from './fx.js';
+import { compareFxSources } from './fx-sources.js';
 
 export interface DailyFxRate {
   id: string;
@@ -145,6 +146,12 @@ export class FxRates {
   }
 }
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+/**
+ * The latest version of each source/pair for a date, most trusted source first.
+ *
+ * Ordering is by declared precedence rather than by source string: callers take
+ * the first match, so the sort is the selection rule. See `fx-sources.ts`.
+ */
 function latest(rates: readonly DailyFxRate[], date: string): DailyFxRate[] {
   const found = new Map<string, DailyFxRate>();
   for (const rate of rates) {
@@ -156,7 +163,7 @@ function latest(rates: readonly DailyFxRate[], date: string): DailyFxRate[] {
   }
   return [...found.values()].sort(
     (a, b) =>
-      compare(a.source, b.source) ||
+      compareFxSources(a.source, b.source) ||
       compare(a.base, b.base) ||
       compare(a.target, b.target),
   );
