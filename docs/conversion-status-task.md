@@ -109,7 +109,46 @@ surrounding days 24–28 October carry no cross-currency Monobank payment either
 So for that specific date: PrivatBank published nothing, Monobank has no archive
 to ask, and our own data holds no rate to derive. Every real source is empty.
 
-### Recommendation: carry the last published commercial rate forward
+### First, check a multi-bank commercial aggregator — not yet verified
+
+The owner's direction is to look at an aggregator of real Ukrainian bank rates
+before settling for anything derived. **This has not been checked; checking it
+is the first step of this task.**
+
+Two candidates, both publishing what banks actually quoted rather than a central
+bank's reference number, and both carrying history:
+
+- **Minfin** (`minfin.com.ua`) — cash and card rates per bank, years of history,
+  an API with some endpoints behind a key.
+- **Finance.ua** — the same idea, historical per-bank rates.
+
+The banks to cover are **Monobank, PrivatBank, Alfa-Bank and A-Bank**
+(`abank.ua` — confirm this is the bank the owner meant by "ababk"). Either take
+a named bank's commercial rate, or **an average of the commercial rates** across
+those banks for the day. An average is the more robust choice: it does not
+depend on any single bank having published, and it is still a commercial number
+throughout.
+
+What the check has to answer, in order:
+
+1. Does either aggregator expose historical daily rates without a paid key?
+2. Do they hold **26 October 2025** specifically? That day was a Sunday, and most
+   Ukrainian banks do not publish weekend cash rates, so the alternative source
+   may have exactly the same hole. This is the question that decides the rest.
+3. If the date is present, how many of the four banks published it, and is an
+   average meaningful or is it one bank's number wearing a disguise?
+4. What are the terms of use and the rate limits, and is the endpoint stable
+   enough to sit in a nightly timer?
+
+If the aggregator has the day, it becomes the second source and the gap closes
+with a real commercial rate. Record it under its own source string with full
+provenance — which aggregator, which banks, which date, retrieved when — and
+slot it into the precedence list below. `docs/server-requirements.md` then
+records that outbound dependency instead of Monobank's.
+
+Only if the check comes back empty does the fallback below apply.
+
+### Fallback if no source has the day: carry the last published rate forward
 
 A published rate does not stop existing when the bank takes a day off — it stays
 in force until a new one supersedes it. On 26 October 2025 the rate in force was
@@ -130,6 +169,8 @@ already supports.
 
 ### Rules
 
+0. Run the aggregator check above first. The carry-forward rules exist only for
+   dates that survive it with nothing published anywhere.
 1. Carry forward only when **every** source is empty for that date, and only
    from the most recent earlier date that has a usable commercial rate. Never
    interpolate, never average, never reach backward from a later day.
@@ -276,8 +317,11 @@ come from the global setting.
 
 ## Acceptance
 
-- With the carry-forward applied, the ledger reports zero unconverted
-  transactions and the strip shows 372 of 372 days.
+- The aggregator check is answered in writing before any fallback is built, and
+  its finding for 26 October 2025 is recorded either way.
+- Once the gap is closed — by an aggregator rate if one exists, by a carried
+  rate if not — the ledger reports zero unconverted transactions and the strip
+  shows 372 of 372 days.
 - Storing two sources for one date selects the PrivatBank commercial midpoint,
   proven by a test rather than by reading the code, and a carried rate never
   displaces a published one.
