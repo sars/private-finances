@@ -34,6 +34,13 @@ function day(value: string) {
   return Number.isFinite(parsed) ? dayOnly.format(parsed) : '—';
 }
 
+/** How much a bank answered with — the size only, never the contents. */
+function bytes(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** What each stage of an import is, said once rather than in every row. */
 const stageName: Record<AttemptStep['stage'], string> = {
   claim: 'Took the connection',
@@ -70,6 +77,7 @@ function Step({
   const meta = [
     step.path,
     step.status ? `HTTP ${step.status}` : '',
+    step.size === undefined ? '' : bytes(step.size),
     step.count === undefined
       ? ''
       : `${step.count}${step.note ? ` ${step.note}` : ''}`,

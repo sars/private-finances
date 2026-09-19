@@ -49,7 +49,15 @@ pointed at a database that refuses every write.
 
 A step is a stage, an offset from the start, a duration, and whatever that
 stage knows: the account (by the application's own identifier), a request path,
-an HTTP status, a count, an error code, and the wait a bank asked for.
+an HTTP status, the size in bytes of what came back, a count, an error code, and
+the wait a bank asked for.
+
+Every request is reported, not only the refused ones. The first version of this
+reported failures alone, which made a healthy run look as though it had asked
+the bank for nothing at all — caught on the first real import after release,
+because the production step log held stages and no requests. A request that
+never produced a response at all (a timeout, a refused socket) is reported with
+no status, and is the failure most worth seeing, since nothing else records it.
 
 A step must **never** carry a payload, an amount, a description, a merchant, a
 counterparty, a token, a session identifier or a provider account id. Enable

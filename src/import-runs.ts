@@ -58,6 +58,8 @@ export type AttemptStep = {
   /** A request path with every variable segment replaced; see `sanitizePath`. */
   path?: string;
   status?: number;
+  /** Bytes a bank answered a request with; never any of those bytes. */
+  size?: number;
   /** Items the stage handled: accounts listed, payments fetched, rows written. */
   count?: number;
   /** A `ConnectorError` code, or the stage's own word for what went wrong. */

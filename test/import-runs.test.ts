@@ -271,6 +271,46 @@ test('a refused request reaches the observer with its status and the wait the ba
   assert.equal(sanitizePath(seen[0]!.path), '/accounts/…/transactions');
 });
 
+test('a request that worked is reported too, not only the refusals', async () => {
+  // The first version of this reported only failures, so a healthy run showed
+  // no requests at all — and what was asked of the bank is most of what the
+  // run screen exists to show. Caught on the first real import after release.
+  const seen: {
+    path: string;
+    status?: number;
+    size?: number;
+    code?: string;
+  }[] = [];
+  const body = JSON.stringify({ accounts: [] });
+  const ask = requester(
+    'https://api.enablebanking.com',
+    0,
+    async () => new Response(body, { status: 200 }),
+    (event) => seen.push(event),
+  );
+  await ask('/sessions/abc', {});
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.status, 200);
+  assert.equal(seen[0]!.size, Buffer.byteLength(body));
+  assert.equal(seen[0]!.code, undefined);
+});
+
+test('a request that never got an answer is reported with no status', async () => {
+  const seen: { path: string; status?: number; code?: string }[] = [];
+  const ask = requester(
+    'https://api.monobank.ua',
+    0,
+    async () => {
+      throw new Error('socket hang up');
+    },
+    (event) => seen.push(event),
+  );
+  await assert.rejects(ask('/personal/client-info', {}));
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.status, undefined);
+  assert.equal(seen[0]!.code, 'transient');
+});
+
 test('an observer that throws cannot break an import', async () => {
   const ask = requester(
     'https://api.monobank.ua',
