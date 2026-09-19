@@ -339,11 +339,6 @@ export default function Review() {
               />
             </Field>
           </FilterBar>
-          {pages.isFetching && pages.data && !pages.isFetchingNextPage && (
-            <p role="status" className="text-xs text-muted-foreground">
-              Updating payments…
-            </p>
-          )}
           <PagedList
             items={payments}
             keyOf={(t) => t.id}

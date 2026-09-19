@@ -520,11 +520,6 @@ export default function Transactions() {
         {from} – {to} · Europe/Riga · {whoLabel} · amounts in {displayCurrency},
         original bank amounts beside them
       </p>
-      {pages.isFetching && pages.data && !pages.isFetchingNextPage && (
-        <p role="status" className="text-xs text-muted-foreground">
-          Updating payments…
-        </p>
-      )}
       <PagedList
         items={payments}
         keyOf={(t) => t.id}

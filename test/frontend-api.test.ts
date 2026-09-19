@@ -319,10 +319,19 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
       (await (await get('/api/connections')).json()).connections[0].bank,
       'Wise',
     );
-    assert.equal(
-      (await (await get('/api/fx?display=UAH')).json()).currency,
-      'UAH',
+    // Conversion status takes no display currency: it answers for every
+    // reporting currency at once, so a failure cannot hide behind the one
+    // being viewed.
+    const fx = await (await get('/api/fx')).json();
+    assert.deepEqual(
+      fx.conversions.currencies
+        .map((c: { currency: string }) => c.currency)
+        .sort(),
+      ['EUR', 'UAH', 'USD'],
     );
+    // Sterling is not among them: it is no longer a currency a total is
+    // reported in, and asking for it is refused rather than quietly honoured.
+    assert.equal((await get('/api/review?display=GBP')).status, 400);
     const post = (path: string, fields: Record<string, string>, as = cookie) =>
       fetch(base + path, {
         method: 'POST',

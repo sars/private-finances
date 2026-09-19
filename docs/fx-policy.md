@@ -31,6 +31,19 @@ date is not a substitution, it is another bank's answer to the same question.
 A date neither source publishes stays missing, with its rows visible and
 excluded from every total.
 
+## What the status page measures
+
+Every reporting currency at once — hryvnia, euro and dollars — never whichever
+one the header happens to be showing. Conversion genuinely is per-target: a
+hryvnia payment is already in hryvnia but needs a rate to become euro. A page
+that answered for one currency could therefore read green while the ledger was
+unconvertible in another, which is the one thing a status page must not do. The
+worst currency leads, and a payment names the currencies it is missing from.
+
+The page also lists the stored rate for each covered day, newest first, with the
+source that would win that day. The coverage strip says a day has a rate; the
+history says what it was.
+
 ## Source precedence
 
 Selection order is declared, in `src/fx-sources.ts`, and is **not** alphabetical:

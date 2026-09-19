@@ -9,7 +9,10 @@
 // paths, which are private financial evidence: keep that output off GitHub, out
 // of logs and out of a model prompt.
 import { postgresDatabase } from '../dist/src/database.js';
-import { clusterMerchants, merchantKey } from '../dist/src/merchant-clustering.js';
+import {
+  clusterMerchants,
+  merchantKey,
+} from '../dist/src/merchant-clustering.js';
 
 const detail = process.argv.includes('--detail');
 const url =

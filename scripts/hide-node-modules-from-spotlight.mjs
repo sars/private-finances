@@ -17,7 +17,10 @@ import { writeFileSync } from 'node:fs';
 
 if (process.platform === 'darwin') {
   try {
-    writeFileSync(new URL('../node_modules/.metadata_never_index', import.meta.url), '');
+    writeFileSync(
+      new URL('../node_modules/.metadata_never_index', import.meta.url),
+      '',
+    );
   } catch {
     // No marker this time; `exclude-dev-caches` can place it later.
   }

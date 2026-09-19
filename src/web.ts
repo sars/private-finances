@@ -900,15 +900,16 @@ export function web(
         return;
       }
       if (req.method === 'GET' && route === '/api/fx') {
-        // Conversion status covers the whole ledger. There is nothing to filter
-        // by: "is everything counted" is not a question about a subset, and a
-        // filtered answer would be the one kind of wrong that looks right.
+        // Conversion status covers the whole ledger, in every currency a total
+        // can be reported in. There is nothing to filter by and no display
+        // currency to pick: "is everything counted" is not a question about a
+        // subset, and an answer scoped to one currency could read green while
+        // another was broken.
         json(
           200,
           await fxConversionStatus(
             repo,
             await repo.list(),
-            url.searchParams.get('display') || 'UAH',
             // A quote is matched to a payment's UTC date, so coverage is
             // counted in UTC days too. Riga's calendar runs two hours ahead,
             // which would leave the strip showing an unfetched day every
@@ -993,16 +994,14 @@ export function web(
         const status = await fxConversionStatus(
           repo,
           await repo.list(),
-          url.searchParams.get('display') || 'UAH',
           new Date().toISOString().slice(0, 10),
         );
-        const target = status.currency;
         const missing = status.conversions.missing;
         html(
           `<h1>Conversion status</h1>
-          <p class="${missing ? 'warning' : ''}">${missing ? `${missing} of ${status.conversions.total} transactions have no ${escape(target)} amount.` : `All ${status.conversions.total} transactions have a ${escape(target)} amount.`}</p>
-          <p>${status.conversions.method.bank} from the bank · ${status.conversions.method.daily} by daily rate · ${status.conversions.method.identity} already in ${escape(target)}.</p>
-          ${missing ? `<h2>Not converted</h2>${status.unconverted.map((row) => `<section class="total"><p>${escape(row.bookedAt.slice(0, 10))} · ${escape(row.account.name)} · ${money(row.amountMinor, row.currency)}</p><p>${escape(row.reason)}</p></section>`).join('')}${status.unconvertedCapped ? `<p>Showing the first ${status.unconverted.length} of ${missing}.</p>` : ''}` : ''}
+          <p class="${missing ? 'warning' : ''}">${missing ? `${missing} of ${status.conversions.total} transactions are missing an amount in at least one reporting currency.` : `All ${status.conversions.total} transactions convert to every reporting currency.`}</p>
+          ${status.conversions.currencies.map((entry) => `<section class="total"><h2>${escape(entry.currency)}</h2><p>${entry.method.bank} from the bank · ${entry.method.daily} by daily rate · ${entry.method.identity} already in ${escape(entry.currency)}${entry.missing ? ` · <strong>${entry.missing} missing</strong>` : ''}</p></section>`).join('')}
+          ${missing ? `<h2>Not converted</h2>${status.unconverted.map((row) => `<section class="total"><p>${escape(row.bookedAt.slice(0, 10))} · ${escape(row.account.name)} · ${money(row.amountMinor, row.currency)}</p><p>${escape(row.reason)} · no ${escape(row.missingFor.join(', '))} amount</p></section>`).join('')}${status.unconvertedCapped ? `<p>Showing the first ${status.unconverted.length} of ${missing}.</p>` : ''}` : ''}
           <h2>Rates</h2>
           <p>${status.rates.current ? `Rates current through ${escape(status.rates.current)}` : 'No rates are stored'} · ${status.rates.covered} of ${status.rates.needed} days.</p>
           <p>${status.rates.days.filter((day) => day.state === 'not_fetched').length} days not fetched · ${status.rates.days.filter((day) => day.state === 'empty_at_source').length} empty at source.</p>`,

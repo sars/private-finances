@@ -1,5 +1,5 @@
 import type { Repository, Transaction } from './repository.js';
-import { convertedSpending } from './analytics.js';
+import { convertedSpending, type ConvertedSpendingRow } from './analytics.js';
 import { accountDisplayName } from './account-names.js';
 import { fxCoverage, type FxDay } from './fx-coverage.js';
 import { compareFxSources } from './fx-sources.js';
@@ -11,8 +11,18 @@ import { compareFxSources } from './fx-sources.js';
  * count them. The page only ever shows counts and the handful of failures, so
  * that is what it gets; thousands of rows were being sent to be discarded.
  */
+/**
+ * Every currency a total can be reported in.
+ *
+ * The status is measured against all of them at once, not against whichever one
+ * the header happens to be showing. Conversion really is per-target — a hryvnia
+ * payment is already in hryvnia but needs a rate to become euro — so a page
+ * that answered for one currency could read green while the ledger was broken
+ * in another, which is the one thing a status page must not do.
+ */
+export const REPORTING_CURRENCIES = ['UAH', 'EUR', 'USD'] as const;
+
 export interface FxConversionStatus {
-  currency: string;
   rates: {
     from: string;
     to: string;
@@ -26,22 +36,24 @@ export interface FxConversionStatus {
     current: string | null;
     /** How many days each source accounts for, most trusted source first. */
     sources: { source: string; days: number }[];
-    /** The newest stored quote for each pair: the rate itself, and where it
-     * came from. Without this the page talks about rates without showing one. */
-    latest: {
-      base: string;
-      target: string;
-      rate: string;
-      source: string;
-      asOf: string;
-    }[];
   };
   conversions: {
+    /** The same set of rows for every currency: all of them, pending included. */
     total: number;
-    converted: number;
+    /** Every reporting currency, worst first, so a failure cannot hide behind
+     * whichever one the header is showing. */
+    currencies: {
+      currency: string;
+      converted: number;
+      missing: number;
+      /** How each converted row got its figure. Not a health metric — a
+       * canary: almost every bank-recorded figure is Monobank's own converted
+       * amount, and if that field stopped arriving they would all quietly fall
+       * back to a daily estimate with nothing else noticing. */
+      method: { bank: number; daily: number; identity: number };
+    }[];
+    /** Rows with no amount in at least one reporting currency. */
     missing: number;
-    /** How each converted row got its figure. Not a health metric — a canary. */
-    method: { bank: number; daily: number; identity: number };
   };
   unconverted: {
     id: string;
@@ -58,6 +70,8 @@ export interface FxConversionStatus {
     amountMinor: string;
     currency: string;
     reason: string;
+    /** Which reporting currencies this payment has no amount in. */
+    missingFor: string[];
   }[];
   /** True when the list above was capped; `conversions.missing` stays exact. */
   unconvertedCapped: boolean;
@@ -118,18 +132,52 @@ const accountKey = (source: string, accountId: string) =>
 export async function fxConversionStatus(
   repo: Repository,
   rows: Transaction[],
-  target: string,
   today: string,
 ): Promise<FxConversionStatus> {
-  const spending = await convertedSpending(repo, rows, target);
-  const method = { bank: 0, daily: 0, identity: 0 };
-  for (const row of spending.rows) {
-    if (row.status !== 'converted') continue;
-    if (row.method === 'actual_bank') method.bank++;
-    else if (row.method === 'market_estimate') method.daily++;
-    else if (row.method === 'identity') method.identity++;
+  // Once per reporting currency, against the same rows. A payment that cannot
+  // be priced in euro is a failure even while the page is showing hryvnia.
+  const currencies: FxConversionStatus['conversions']['currencies'] = [];
+  const failures = new Map<
+    string,
+    { row: ConvertedSpendingRow; missingFor: string[] }
+  >();
+  for (const currency of REPORTING_CURRENCIES) {
+    const spending = await convertedSpending(repo, rows, currency);
+    const method = { bank: 0, daily: 0, identity: 0 };
+    let missing = 0;
+    for (const row of spending.rows) {
+      if (row.status === 'missing') {
+        missing++;
+        const held = failures.get(row.id);
+        if (held) held.missingFor.push(currency);
+        else failures.set(row.id, { row, missingFor: [currency] });
+        continue;
+      }
+      if (row.method === 'actual_bank') method.bank++;
+      else if (row.method === 'market_estimate') method.daily++;
+      else if (row.method === 'identity') method.identity++;
+    }
+    currencies.push({
+      currency,
+      converted: spending.rows.length - missing,
+      missing,
+      method,
+    });
   }
-  const missingRows = spending.rows.filter((row) => row.status === 'missing');
+  // Worst first: whatever is broken is the first thing read.
+  currencies.sort(
+    (a, b) =>
+      b.missing - a.missing ||
+      REPORTING_CURRENCIES.indexOf(
+        a.currency as (typeof REPORTING_CURRENCIES)[number],
+      ) -
+        REPORTING_CURRENCIES.indexOf(
+          b.currency as (typeof REPORTING_CURRENCIES)[number],
+        ),
+  );
+  const missingRows = [...failures.values()].sort((a, b) =>
+    a.row.bookedAt < b.row.bookedAt ? 1 : -1,
+  );
   const dates = rows
     .map((row) => new Date(row.bookedAt).toISOString().slice(0, 10))
     .sort();
@@ -163,40 +211,6 @@ export async function fxConversionStatus(
   ).rows
     .map((row) => ({ source: String(row.source), days: Number(row.days) }))
     .sort((a, b) => compareFxSources(a.source, b.source));
-  // The newest day each pair has a quote for, then the most trusted source that
-  // published on that day — the same precedence a conversion uses, so the rate
-  // shown is the rate that would be applied.
-  const newest = new Map<
-    string,
-    FxConversionStatus['rates']['latest'][number] & { version: number }
-  >();
-  for (const row of (
-    await repo.db.query(
-      `SELECT base,target,rate,source,version,to_char(as_of,'YYYY-MM-DD') AS day
-       FROM daily_fx_rates WHERE (base,target,as_of) IN
-       (SELECT base,target,max(as_of) FROM daily_fx_rates GROUP BY base,target)`,
-    )
-  ).rows) {
-    const quote = {
-      base: String(row.base),
-      target: String(row.target),
-      rate: String(row.rate),
-      source: String(row.source),
-      asOf: String(row.day),
-      version: Number(row.version),
-    };
-    const key = `${quote.base}/${quote.target}`;
-    const held = newest.get(key);
-    if (
-      !held ||
-      compareFxSources(quote.source, held.source) < 0 ||
-      (quote.source === held.source && quote.version > held.version)
-    )
-      newest.set(key, quote);
-  }
-  const latestQuotes = [...newest.values()]
-    .sort((a, b) => (a.base < b.base ? -1 : a.base > b.base ? 1 : 0))
-    .map(({ version: _version, ...quote }) => quote);
   const accounts = new Map(
     (
       await repo.db.query(
@@ -209,7 +223,6 @@ export async function fxConversionStatus(
   );
   const byId = new Map(rows.map((row) => [row.id, row]));
   return {
-    currency: target,
     rates: {
       from,
       to,
@@ -218,44 +231,48 @@ export async function fxConversionStatus(
       needed: days.filter((day) => day.state !== 'not_needed').length,
       current,
       sources,
-      latest: latestQuotes,
     },
     conversions: {
-      total: spending.rows.length,
-      converted: spending.rows.length - missingRows.length,
+      total: rows.length,
+      currencies,
       missing: missingRows.length,
-      method,
     },
-    unconverted: missingRows.slice(0, UNCONVERTED_LIMIT).map((row) => {
-      const source = byId.get(row.id)!;
-      const registered = accounts.get(
-        accountKey(source.source, source.accountId),
-      );
-      const label = registered?.label == null ? null : String(registered.label);
-      return {
-        id: row.id,
-        bookedAt: row.bookedAt,
-        // The name the owner recognises, the same one Balances and Transactions
-        // use. An account nobody has registered still gets that name, built
-        // from what the connector knows, never the integration's raw label.
-        account: {
-          name: accountDisplayName({
-            owner: source.owner,
+    unconverted: missingRows
+      .slice(0, UNCONVERTED_LIMIT)
+      .map(({ row, missingFor }) => {
+        const source = byId.get(row.id)!;
+        const registered = accounts.get(
+          accountKey(source.source, source.accountId),
+        );
+        const label =
+          registered?.label == null ? null : String(registered.label);
+        return {
+          id: row.id,
+          bookedAt: row.bookedAt,
+          // The name the owner recognises, the same one Balances and Transactions
+          // use. An account nobody has registered still gets that name, built
+          // from what the connector knows, never the integration's raw label.
+          account: {
+            name: accountDisplayName({
+              owner: source.owner,
+              source: source.source,
+              label,
+              currency: source.currency,
+            }),
             source: source.source,
             label,
+            owner: source.owner,
             currency: source.currency,
-          }),
-          source: source.source,
-          label,
-          owner: source.owner,
-          currency: source.currency,
-        },
-        description: row.description,
-        amountMinor: row.originalAmountMinor,
-        currency: row.originalCurrency,
-        reason: missingReasonSentence(row.missingReason ?? 'no_matching_quote'),
-      };
-    }),
+          },
+          description: row.description,
+          amountMinor: row.originalAmountMinor,
+          currency: row.originalCurrency,
+          reason: missingReasonSentence(
+            row.missingReason ?? 'no_matching_quote',
+          ),
+          missingFor,
+        };
+      }),
     unconvertedCapped: missingRows.length > UNCONVERTED_LIMIT,
   };
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRefreshSignal } from './lib/query';
 import { money, tally } from './lib/format';
-import { useDisplayCurrency } from './lib/display-currency';
 import { CircleAlert } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccountBadge, PageHeader, RefreshButton } from '@/components/finance';
@@ -33,6 +33,10 @@ const monthFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 });
 const day = (date: string) => dayFormat.format(new Date(`${date}T00:00:00Z`));
+const short = new Intl.ListFormat('en-GB', {
+  style: 'long',
+  type: 'conjunction',
+});
 
 /** The four things a calendar day can be, what each means, and what to do. */
 const states: Record<
@@ -137,45 +141,147 @@ function DayDetail({ entry }: { entry: FxDay }) {
 }
 
 /**
- * How each converted payment got its figure.
+ * Every reporting currency, worst first.
  *
- * This line never says anything is wrong, and it earns its space anyway. Almost
- * every bank-recorded figure is Monobank's own converted amount; if that field
- * stopped arriving, all of them would quietly fall back to a daily estimate and
- * nothing else in the application would notice. Seeing the shares move is the
- * only warning that collapse would ever give.
+ * Conversion really is per-target — a hryvnia payment is already in hryvnia but
+ * needs a rate to become euro — so this cannot be one number. What it must not
+ * be is one number for whichever currency the header happens to be showing:
+ * that page could read green while the ledger was broken in another currency,
+ * which is the one thing a status page must not do. All three, always.
+ *
+ * The method columns never say anything is wrong and earn their space anyway.
+ * Almost every bank-recorded figure is Monobank's own converted amount; if that
+ * field stopped arriving they would all quietly fall back to a daily estimate
+ * and nothing else in the application would notice.
  */
-function Composition({
-  method,
-  currency,
+function CurrencyTable({
+  currencies,
+  total,
 }: {
-  method: FxConversionStatus['conversions']['method'];
-  currency: string;
+  currencies: FxConversionStatus['conversions']['currencies'];
+  total: number;
 }) {
-  const parts = [
-    [method.bank, 'from the bank'],
-    [method.daily, 'by daily rate'],
-    [method.identity, `already in ${currency}`],
-  ] as const;
-  const shown = parts.filter(([value]) => value > 0);
-  if (!shown.length) return null;
   return (
-    <p className="text-muted-foreground mt-1 text-sm">
-      {shown.map(([value, label], index) => (
-        <span key={label}>
-          {index > 0 && ' · '}
-          <span className="text-foreground tabular-nums">
-            {tally(value)}
-          </span>{' '}
-          {label}
-        </span>
+    <ul className="divide-border divide-y">
+      <li className="text-muted-foreground flex gap-3 pb-1 text-xs">
+        <span className="w-10 shrink-0">In</span>
+        <span className="flex-1 text-right">From the bank</span>
+        <span className="flex-1 text-right">By daily rate</span>
+        <span className="flex-1 text-right">Already in it</span>
+        <span className="w-20 shrink-0 text-right">Missing</span>
+      </li>
+      {currencies.map((entry) => (
+        <li
+          key={entry.currency}
+          className="flex min-h-11 items-center gap-3 py-2 text-sm tabular-nums"
+        >
+          <span className="w-10 shrink-0 font-medium">{entry.currency}</span>
+          <span className="flex-1 text-right">{tally(entry.method.bank)}</span>
+          <span className="flex-1 text-right">{tally(entry.method.daily)}</span>
+          <span className="flex-1 text-right">
+            {tally(entry.method.identity)}
+          </span>
+          <span
+            className={`w-20 shrink-0 text-right ${entry.missing ? 'text-warning font-medium' : 'text-muted-foreground'}`}
+          >
+            {entry.missing ? tally(entry.missing) : 'None'}
+          </span>
+        </li>
       ))}
-    </p>
+    </ul>
+  );
+}
+
+/**
+ * What the rate actually was, day by day.
+ *
+ * The strip above says a day is covered; this says what it was covered *with*.
+ * Newest first, because "what is it now" is the question asked most, and the
+ * answer to it is the first row.
+ *
+ * Only covered days appear: a day with no rate has nothing to list, and the
+ * strip already shows where those fall. Rows arrive a page at a time rather
+ * than a year at once, so the document stays light on a phone.
+ */
+const PAGE = 30;
+function RateHistory({
+  days,
+  selected,
+}: {
+  days: FxDay[];
+  selected: string | null;
+}) {
+  const [shown, setShown] = useState(PAGE);
+  const history = useMemo(
+    () =>
+      days
+        .filter((entry) => entry.rates && Object.keys(entry.rates).length)
+        .reverse(),
+    [days],
+  );
+  // Every pair any day quotes, so the columns are stable as you scroll back
+  // through days where one of them was briefly absent.
+  const pairs = useMemo(() => {
+    const seen = new Set<string>();
+    for (const entry of history)
+      for (const pair of Object.keys(entry.rates ?? {})) seen.add(pair);
+    return [...seen].sort();
+  }, [history]);
+  if (!history.length) return null;
+  const rows = history.slice(0, shown);
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">Daily rates</h3>
+      <ul className="divide-border divide-y">
+        <li className="text-muted-foreground flex gap-3 pb-1 text-xs">
+          <span className="w-24 shrink-0">Date</span>
+          {pairs.map((pair) => (
+            <span key={pair} className="flex-1 text-right">
+              {pair.replace('/', ' → ')}
+            </span>
+          ))}
+          <span className="hidden w-28 shrink-0 text-right sm:block">
+            Source
+          </span>
+        </li>
+        {rows.map((entry) => (
+          <li
+            key={entry.date}
+            className={`flex min-h-11 items-center gap-3 py-2 text-sm tabular-nums ${
+              selected === entry.date ? 'bg-muted/50' : ''
+            }`}
+          >
+            <span className="text-muted-foreground w-24 shrink-0 text-xs">
+              {day(entry.date)}
+            </span>
+            {pairs.map((pair) => (
+              <span key={pair} className="flex-1 text-right">
+                {entry.rates?.[pair] ?? '—'}
+              </span>
+            ))}
+            <span className="text-muted-foreground hidden w-28 shrink-0 truncate text-right text-xs sm:block">
+              {entry.source ? sourceLabel(entry.source) : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {shown < history.length && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShown((held) => held + PAGE)}
+        >
+          Show {Math.min(PAGE, history.length - shown)} more
+        </Button>
+      )}
+      <p className="text-muted-foreground text-xs tabular-nums">
+        {tally(rows.length)} of {tally(history.length)} days
+      </p>
+    </div>
   );
 }
 
 export default function Fx() {
-  const { currency: target } = useDisplayCurrency();
   const [status, setStatus] = useState<FxConversionStatus>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -186,14 +292,11 @@ export default function Fx() {
     setError('');
     (async () => {
       try {
-        const response = await fetch(
-          '/api/fx?display=' + encodeURIComponent(target),
-          {
-            signal: controller.signal,
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json' },
-          },
-        );
+        const response = await fetch('/api/fx', {
+          signal: controller.signal,
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        });
         if (!response.ok)
           throw new Error(
             response.status === 401
@@ -209,7 +312,7 @@ export default function Fx() {
       }
     })();
     return () => controller.abort();
-  }, [target, refresh]);
+  }, [refresh]);
 
   const [selected, setSelected] = useState<string | null>(null);
   const selectedDay = useMemo(
@@ -224,11 +327,16 @@ export default function Fx() {
   }, [status]);
 
   const everything = status ? status.conversions.missing === 0 : false;
+  // Name the currencies that are short, rather than whichever one the header is
+  // showing: the failure is the point, not the current view.
+  const shortfall = (status?.conversions.currencies ?? [])
+    .filter((entry) => entry.missing > 0)
+    .map((entry) => `an ${entry.currency} amount`);
   return (
     <div className="space-y-5">
       <PageHeader
         title="Conversion status"
-        description={`Whether every payment is counted in ${target}, and whether the rates behind it are still arriving.`}
+        description="Whether every payment is counted in every currency a total can be reported in, and whether the rates behind them are still arriving."
         actions={<RefreshButton />}
       />
       {error && (
@@ -243,18 +351,18 @@ export default function Fx() {
             <CardHeader>
               <CardTitle>Conversions</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <p
                 role={everything ? undefined : 'status'}
                 className={`text-lg font-semibold tracking-tight ${everything ? '' : 'text-warning'}`}
               >
                 {everything
-                  ? `All ${tally(status.conversions.total)} transactions have a ${target} amount`
-                  : `${tally(status.conversions.missing)} of ${tally(status.conversions.total)} transactions have no ${target} amount`}
+                  ? `All ${tally(status.conversions.total)} transactions convert to every currency`
+                  : `${tally(status.conversions.missing)} of ${tally(status.conversions.total)} transactions are missing ${short.format(shortfall)}`}
               </p>
-              <Composition
-                method={status.conversions.method}
-                currency={target}
+              <CurrencyTable
+                currencies={status.conversions.currencies}
+                total={status.conversions.total}
               />
             </CardContent>
           </Card>
@@ -337,33 +445,9 @@ export default function Fx() {
                 )}{' '}
                 <span className="text-muted-foreground tabular-nums">
                   · {tally(status.rates.covered)} of{' '}
-                  {tally(status.rates.needed)} days
+                  {tally(status.rates.needed)} days that need a rate have one
                 </span>
               </p>
-              {/* The rate itself. A page about rates that never showed one made
-                  the owner take the coverage claim on trust; this is the number
-                  a conversion on that day would actually use, chosen by the
-                  same source precedence the conversion applies. */}
-              {status.rates.latest.length > 0 && (
-                <ul className="divide-border divide-y">
-                  {status.rates.latest.map((quote) => (
-                    <li
-                      key={`${quote.base}/${quote.target}`}
-                      className="flex min-h-11 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2"
-                    >
-                      <span className="text-sm tabular-nums">
-                        1 {quote.base} ={' '}
-                        <span className="font-medium">
-                          {quote.rate} {quote.target}
-                        </span>
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {sourceLabel(quote.source)} · {day(quote.asOf)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
               {status.rates.sources.length > 0 && (
                 <p className="text-muted-foreground text-sm">
                   {status.rates.sources.map((entry, index) => (
@@ -385,7 +469,6 @@ export default function Fx() {
                   setSelected((held) => (held === date ? null : date))
                 }
               />
-              {selectedDay && <DayDetail entry={selectedDay} />}
               <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 {present.map((state) => (
                   <li key={state} className="flex items-center gap-1.5">
@@ -397,6 +480,8 @@ export default function Fx() {
                   </li>
                 ))}
               </ul>
+              {selectedDay && <DayDetail entry={selectedDay} />}
+              <RateHistory days={status.rates.days} selected={selected} />
             </CardContent>
           </Card>
         </>
