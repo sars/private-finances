@@ -10,6 +10,14 @@ import {
   fetchPrivatBankRates,
   storePrivatBankRates,
 } from './privatbank-rates.js';
+import {
+  MinfinRateError,
+  MINFIN_ARCHIVE_START,
+  fetchMinfinRates,
+  storeMinfinRates,
+} from './minfin-rates.js';
+import { MINFIN_SOURCE } from './fx-sources.js';
+import { provenEmptyDates, recordFxAbsence } from './fx-coverage.js';
 
 /** Inclusive daily range, or distinct imported transaction dates within the provider archive. */
 export function planFxSyncDates(
@@ -65,20 +73,26 @@ async function main() {
       process.argv.slice(2),
       transactionDates,
     );
+    // Any source, not just the primary one. A day the secondary source filled
+    // is a settled day; asking both providers about it again every night would
+    // be a nightly request to each of them for a date that can no longer change.
     const existing = new Set(
       (
         await db.query(
-          "SELECT DISTINCT to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_rates WHERE source=$1",
-          [PRIVATBANK_SOURCE],
+          "SELECT DISTINCT to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_rates",
         )
       ).rows.map((row) => String(row.day)),
     );
+    // A day both sources have already answered "nothing" to cannot change, so
+    // it is settled rather than retried. Before this, an empty Sunday was asked
+    // about on every run for as long as it stayed empty.
+    const settled = refresh ? new Set<string>() : await provenEmptyDates(db);
     let fetched = 0,
       stored = 0,
       skipped = 0,
       unavailable = 0;
     for (const date of dates) {
-      if (!refresh && existing.has(date)) {
+      if (!refresh && (existing.has(date) || settled.has(date))) {
         skipped++;
         log({ event: 'fx_day_skipped', date, count: 0 });
         continue;
@@ -89,15 +103,76 @@ async function main() {
       const result = await storePrivatBankRates(db, date, rates, refresh);
       stored += result.stored;
       if (result.skipped) skipped++;
-      if (!rates.length) unavailable++;
-      log({
-        event: result.skipped
-          ? 'fx_day_skipped'
-          : rates.length
-            ? 'fx_day_stored'
-            : 'fx_day_unavailable',
+      if (rates.length) {
+        log({
+          event: result.skipped ? 'fx_day_skipped' : 'fx_day_stored',
+          date,
+          count: result.stored,
+        });
+        continue;
+      }
+      // PrivatBank publishes nothing on the days it does not trade, and eleven
+      // months of nightly retries against an empty archive will not change
+      // that. The day is recorded as genuinely empty at that source — which is
+      // what lets the status page show it as a closed fact rather than as a
+      // permanent warning — and the secondary source is asked instead.
+      await recordFxAbsence(
+        db,
+        PRIVATBANK_SOURCE,
         date,
-        count: result.stored,
+        new Date().toISOString(),
+        'The PrivatBank archive returned no commercial rates for this date.',
+      );
+      if (date < MINFIN_ARCHIVE_START) {
+        // Before the secondary archive begins there is nothing for it to have
+        // published, and that is a fact rather than a failure — so it is
+        // recorded as one, and the day settles as empty at source instead of
+        // sitting on the status page as a gap somebody might still fill.
+        await recordFxAbsence(
+          db,
+          MINFIN_SOURCE,
+          date,
+          new Date().toISOString(),
+          `Minfin publishes no rates before ${MINFIN_ARCHIVE_START}.`,
+        );
+        unavailable++;
+        log({ event: 'fx_day_unavailable', date, count: 0 });
+        continue;
+      }
+      let secondary: Awaited<ReturnType<typeof fetchMinfinRates>>;
+      try {
+        await sleep(2000);
+        secondary = await fetchMinfinRates(date);
+      } catch (error) {
+        if (!(error instanceof MinfinRateError)) throw error;
+        // A source that could not be read is not a source that published
+        // nothing. The day stays unresolved, no absence is recorded for it, and
+        // the next run asks again.
+        unavailable++;
+        log({ event: 'fx_day_secondary_failed', date, count: 0 });
+        continue;
+      }
+      const second = await storeMinfinRates(db, date, secondary, refresh);
+      stored += second.stored;
+      if (second.skipped) skipped++;
+      if (!secondary.length) {
+        await recordFxAbsence(
+          db,
+          MINFIN_SOURCE,
+          date,
+          new Date().toISOString(),
+          'Minfin published no average bank rate for this date.',
+        );
+        unavailable++;
+      }
+      log({
+        event: secondary.length
+          ? second.skipped
+            ? 'fx_day_skipped'
+            : 'fx_day_stored_secondary'
+          : 'fx_day_unavailable',
+        date,
+        count: second.stored,
       });
     }
     log({
@@ -121,7 +196,8 @@ if (
       JSON.stringify({
         event: 'fx_sync_failed',
         code:
-          error instanceof PrivatBankRateError
+          error instanceof PrivatBankRateError ||
+          error instanceof MinfinRateError
             ? error.code
             : 'configuration_or_store_error',
       }) + '\n',

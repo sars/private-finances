@@ -129,6 +129,13 @@ Enabled timers: `private-finances-sync@` for `enablebanking-rodion-wise`,
 minutes of randomised delay). `private-finances-local-backup` is installed but
 not enabled.
 
+`private-finances-fx-sync` reaches two hosts outbound, both over HTTPS and
+neither authenticated: `api.privatbank.ua` for the primary commercial archive,
+and `minfin.com.ua` for the average bank rate on the days PrivatBank publishes
+nothing. The second is requested only for those days — a handful a year — so a
+host allow-list needs both, but only the first sees nightly traffic. Neither
+carries a credential, so neither belongs in `backup.env` or anywhere else.
+
 `private-finances-backup.service` is the only unit that reads `backup.env`, and
 the only one that **runs as root** — deliberately, because it backs up the
 server's configuration as well as its database, and that configuration is

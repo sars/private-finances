@@ -1,8 +1,9 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Database } from './database.js';
 import { FxRates, type DailyFxRateInput } from './fx-rates.js';
+import { PRIVATBANK_SOURCE } from './fx-sources.js';
 
-export const PRIVATBANK_SOURCE = 'PrivatBank commercial midpoint';
+export { PRIVATBANK_SOURCE };
 const MAX_RESPONSE_BYTES = 128 * 1024;
 const currencies = new Set(['USD', 'EUR', 'GBP', 'JPY', 'KWD']);
 export type ParsedPrivatBankRate = Omit<DailyFxRateInput, 'version'>;
@@ -51,7 +52,8 @@ function object(value: unknown): Record<string, unknown> {
     throw new PrivatBankRateError('invalid_response');
   return value as Record<string, unknown>;
 }
-function midpoint(purchase: unknown, sale: unknown): string {
+/** `(buy + sell) / 2` in exact decimal text; shared by every commercial source. */
+export function commercialMidpoint(purchase: unknown, sale: unknown): string {
   if (
     typeof purchase !== 'string' ||
     typeof sale !== 'string' ||
@@ -117,7 +119,7 @@ export function parsePrivatBankRates(
         !Object.hasOwn(rate, 'purchaseRate')
       )
         continue;
-      const value = midpoint(rate.purchaseRate, rate.saleRate);
+      const value = commercialMidpoint(rate.purchaseRate, rate.saleRate);
       rates.push({
         source: PRIVATBANK_SOURCE,
         base: rate.currency,

@@ -53,3 +53,9 @@ export function usd(value: string) {
     maximumFractionDigits: Number(value) > 0 && Number(value) < 0.01 ? 4 : 2,
   }).format(Number(value));
 }
+/** "4,189"; a count of things, never money. */
+export function tally(value: number) {
+  return new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 }).format(
+    value,
+  );
+}

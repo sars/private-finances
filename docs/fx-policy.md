@@ -1,19 +1,49 @@
 # Display currency and daily FX policy
 
-The owner approved PrivatBank commercial buy/sell midpoints for historical display
-conversion. A verified transaction-specific bank amount always takes precedence.
-Daily market conversions are estimates, including when the account bank is not
-PrivatBank. They do not change transaction amounts, classifications or reports in
-the original currency. Inflows and non-spending records remain visible without
-being included in confirmed spending.
+The owner approved commercial buy/sell midpoints for historical display
+conversion, from two sources and no others: **PrivatBank's own published rate**,
+and, for the days PrivatBank publishes nothing, **Minfin's average of the
+commercial rates across Ukrainian banks**. Both are prices people actually
+trade at. Neither is the National Bank's reference rate, which the owner
+rejected as an administrative number nobody trades on; it is never read, from
+either source.
+
+A verified transaction-specific bank amount always takes precedence over both.
+Daily market conversions are estimates, including when the account bank is
+neither of the two. They do not change transaction amounts, classifications or
+reports in the original currency. Inflows and non-spending records remain
+visible without being included in confirmed spending.
 
 The public archive distinguishes PrivatBank `purchaseRate` / `saleRate` from NBU
 `saleRateNB` / `purchaseRateNB`. Only the two commercial fields are used. The
 midpoint is `(purchaseRate + saleRate) / 2`, expressed as UAH per one major unit of
-the foreign currency. NBU-only entries remain unavailable; there is no NBU or
-nearest-date fallback. USD, EUR, GBP, JPY and KWD are accepted only when both
-commercial fields exist; UAH is the conversion pivot. Provider coverage can be
-narrower than this supported list.
+the foreign currency. NBU-only entries remain unavailable. USD, EUR, GBP, JPY and
+KWD are accepted only when both commercial fields exist; UAH is the conversion
+pivot. Provider coverage can be narrower than this supported list.
+
+There is still no NBU fallback, no nearest-date fallback, no interpolation and no
+carried-forward rate. What there is instead is a **second commercial source for
+the same day**. PrivatBank does not trade at weekends and publishes an empty
+archive for them — 26 October 2025 was a Sunday, and eleven months of nightly
+retries had already failed against it — so a second source asked about that same
+date is not a substitution, it is another bank's answer to the same question.
+A date neither source publishes stays missing, with its rows visible and
+excluded from every total.
+
+## Source precedence
+
+Selection order is declared, in `src/fx-sources.ts`, and is **not** alphabetical:
+
+1. `PrivatBank commercial midpoint`
+2. `Minfin bank average midpoint`
+
+This matters more than it looks. The store used to order candidate quotes by
+source string, so precedence was an accident of spelling — and `Minfin…` sorts
+before `PrivatBank…`, which would have silently demoted the owner's approved
+primary on every date both sources covered. A source nobody has ranked sorts
+after both, so a name added later can never displace either by accident.
+`test/fx-source-precedence.test.ts` stores both sources for one date and asserts
+the winner, rather than leaving that to a reading of the code.
 
 Response numbers retain their original decimal text. Midpoints and UAH cross
 rates use integer/rational arithmetic; only the final converted minor amount is
@@ -21,8 +51,8 @@ rounded, halfway away from zero. A daily quote matches the transaction's UTC dat
 Each stored quote retains its source, request URL, commercial buy/sell values,
 as-of date, retrieval timestamp and immutable version. Corrections append versions.
 Direct/inverse quotes take precedence over a same-source UAH cross rate; the latest
-version of each source/pair/date wins, with stable source ordering when more than
-one stored source is available. Missing rows remain visible with a reason and
+version of each source/pair/date wins, and where more than one source has stored a
+quote for a date the declared precedence above decides, never the alphabet. Missing rows remain visible with a reason and
 are excluded from converted subtotals; coverage counts explain partial totals.
 
 ## Operator import
@@ -57,11 +87,50 @@ Progress contains dates and counts, never transaction amounts or account IDs.
 The CLI itself does not install scheduling. Production uses the hardened
 `private-finances-fx-sync.service` and `.timer`: daily at 05:00 UTC plus up to ten
 minutes, after a successful local backup. The initial pass is resumable by stored
-date. Missing archive days remain visible; the timer retries them on later runs.
+date. A day the primary archive returns empty is recorded as empty **at that source**,
+in `daily_fx_absences`, and the secondary source is then asked about the same
+date. A day both sources have answered "nothing" to is a closed fact and stops
+being retried as if it might fill; a day neither has been asked about is still
+outstanding. Those are different things, and the conversion status page draws
+them differently — the first grey and silent, the second amber and actionable —
+because a warning that is on permanently is a warning nobody reads.
 
-## Source
+A source that could not be *read* — a timeout, an HTTP error, a page whose layout
+no longer matches — is not a source that published nothing. No absence is
+recorded for it and the next run asks again.
+
+A date already filled by either source is skipped on later runs, so neither
+provider is asked nightly about a date that can no longer change.
+
+## Sources
 
 [PrivatBank/LiqPay archive documentation](https://www.liqpay.ua/en/doc/api/public/archive?tab=0),
 reviewed September 12, 2026: the archive covers four years; JSON responses identify
 the requested date, bank PB and base currency UAH, with separate commercial and
 NBU fields. The midpoint is the owner's reporting policy, not a provider field.
+
+[Minfin rates in banks](https://minfin.com.ua/ua/currency/banks/eur/2025-10-26/),
+checked 19 September 2026. Minfin publishes, per calendar day back to 4 January
+2006, the average of the commercial cash rates it collects across Ukrainian
+banks — the panel includes PrivatBank, monobank, абанк and Sens Bank (Alfa-Bank),
+the four the owner named — together with the NBU rate in a separate column that
+is never read. `api.minfin.com.ua` requires a paid key and the per-bank
+historical breakdown sits behind it; the rates **page** is free, unauthenticated
+and not disallowed by `robots.txt`, and is what the application reads.
+
+That makes this source a scrape of a rendered page, and it is treated as one.
+Two assertions have to hold before a number is taken: the date picker's `value`
+must equal the date requested (Minfin serves the current day's rates for a URL it
+does not recognise, and storing those against a date in October would be a
+fabricated rate wearing a real one's clothes), and the average row's currency
+link must match the currency requested. Only the two cells marked
+`type="average"` are read — the NBU column carries no such marker — and anything
+other than exactly a buy and a sell makes the day unavailable rather than a
+guess. Because it is a scrape, Minfin is a **gap filler**: it is asked only about
+days the primary source left empty, never nightly, and never as the primary.
+
+One thing the free page cannot answer: how many banks contributed to a given
+past date. The average is published, the per-bank breakdown for a historical
+date is not. The figure is therefore "the average across Minfin's bank panel",
+which is broader than the four banks the owner named and cannot be narrowed to
+them without a paid key.
