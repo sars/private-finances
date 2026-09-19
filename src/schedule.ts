@@ -3,6 +3,8 @@ import { lstat, readFile, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BANK_SLUGS } from './connectors/banks.js';
+import { postgresDatabase } from './database.js';
+import { recordNextAttempt } from './import-runs.js';
 
 /** PF-002: bounded reconciliation, never a historical completeness watermark. */
 export function dailyReplayWindow(now: Date): { from: string; to: string } {
@@ -89,6 +91,30 @@ async function transientStreak(path: string): Promise<number> {
     ? streak
     : TRANSIENT_BACKOFF_MS.length;
 }
+/**
+ * Why this connection is waiting, as the run that set the cooldown wrote it.
+ *
+ * A wait set by a release that predates this file, or cleared by hand on the
+ * server, leaves no reason — which is honest and still useful, because the time
+ * is the part the owner is waiting for. Only the words this module writes are
+ * accepted, so nothing a bank says can reach a screen through here.
+ */
+const RETRY_REASONS = new Set([
+  'rate_limit',
+  'transient',
+  'polling_interval',
+  'blocked',
+]);
+async function reasonOf(path: string): Promise<string | null> {
+  try {
+    const reason = (await readFile(path, 'utf8')).trim();
+    return RETRY_REASONS.has(reason) ? reason : null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    return null;
+  }
+}
+
 export async function scheduleEnabled(
   directory: string,
   instance: string,
@@ -122,6 +148,20 @@ type ScheduleOptions = {
   invoke: (args: string[]) => Promise<SyncResult>;
   hourlyPolling?: boolean;
   halfHourlyPolling?: boolean;
+  /**
+   * Told when this connection will next be tried, and why it is waiting.
+   *
+   * The cooldown lives in a file here, which the web process deliberately does
+   * not read, so until this existed the dashboard could only say that the last
+   * import had failed — never that the next one was twelve hours off. A bank
+   * that answers "slow down" then looks identical to a bank that has broken,
+   * and the half-hourly timer firing in between says nothing, because a
+   * deferred run exits before it touches anything at all.
+   *
+   * Diagnostic only: a failure to report must never change what the scheduler
+   * does, so the caller's errors are swallowed by `report` below.
+   */
+  announce?: (retryAfter: Date | null, reason: string | null) => Promise<void>;
 };
 
 export async function runScheduledSync(options: ScheduleOptions) {
@@ -132,10 +172,37 @@ export async function runScheduledSync(options: ScheduleOptions) {
     options.stateDirectory,
     `${options.instance}.retry-after`,
   );
+  const reasonFile = resolve(
+    options.stateDirectory,
+    `${options.instance}.retry-reason`,
+  );
+  /** Never lets a diagnostic write change what the scheduler decides. */
+  const report = async (retryAfter: Date | null, reason: string | null) => {
+    try {
+      await options.announce?.(retryAfter, reason);
+    } catch {
+      // Saying why a bank is waiting must not stop it from waiting.
+    }
+  };
+  /** Records a wait in both places: the file it is enforced from, and the
+   * database the screens read. The reason sits beside the time because the
+   * time alone cannot distinguish a bank resting from a bank in trouble. */
+  const wait = async (until: number, reason: string) => {
+    await writeFile(cooldown, String(until), { mode: 0o600 });
+    await writeFile(reasonFile, reason + '\n', { mode: 0o600 });
+    await report(new Date(until), reason);
+  };
   try {
     const retryAt = Number(await readFile(cooldown, 'utf8'));
     if (!Number.isFinite(retryAt)) throw new Error('invalid_schedule_cooldown');
-    if (options.now.getTime() < retryAt) return 'deferred';
+    if (options.now.getTime() < retryAt) {
+      // Re-stated on every deferral rather than only when the cooldown was
+      // set, so a wait that began before this record existed still reaches the
+      // screen, and a cooldown cleared by hand on the server stops claiming a
+      // bank is asleep when it is not.
+      await report(new Date(retryAt), await reasonOf(reasonFile));
+      return 'deferred';
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
@@ -145,7 +212,11 @@ export async function runScheduledSync(options: ScheduleOptions) {
     // leaves the latch in place: a possibly failed consent is never retried.
     await writeFile(latch, 'review_required\n', { flag: 'wx', mode: 0o600 });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'blocked';
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      // No time to give: a latched instance waits for a person, not a clock.
+      await report(null, 'blocked');
+      return 'blocked';
+    }
     throw error;
   }
   // A concurrent operator invocation may have checked the old cooldown before
@@ -195,34 +266,27 @@ export async function runScheduledSync(options: ScheduleOptions) {
   )
     await writeFile(conservative, result + '\n', { mode: 0o600 });
   if (result === 'success' && provider === 'enablebanking')
-    await writeFile(
-      cooldown,
-      String(
-        Math.max(options.now.getTime(), Date.now()) + backgroundHours * 3600000,
-      ),
-      { mode: 0o600 },
+    await wait(
+      Math.max(options.now.getTime(), Date.now()) + backgroundHours * 3600000,
+      'polling_interval',
     );
   if (result === 'rate_limit')
-    await writeFile(
-      cooldown,
+    await wait(
       // Twelve hours: long enough to let a bank's limit reset, short enough
       // that a balance is not a day and a half old by the next attempt (the
       // owner halved it from 24 hours on September 18, 2026).
-      String(Math.max(options.now.getTime(), Date.now()) + 43200000),
-      { mode: 0o600 },
+      Math.max(options.now.getTime(), Date.now()) + 43200000,
+      'rate_limit',
     );
   if (result === 'transient') {
     const streak = (await transientStreak(streakFile)) + 1;
     await writeFile(streakFile, String(streak) + '\n', { mode: 0o600 });
-    await writeFile(
-      cooldown,
-      String(
-        Math.max(options.now.getTime(), Date.now()) +
-          TRANSIENT_BACKOFF_MS[
-            Math.min(streak, TRANSIENT_BACKOFF_MS.length) - 1
-          ]!,
-      ),
-      { mode: 0o600 },
+    await wait(
+      Math.max(options.now.getTime(), Date.now()) +
+        TRANSIENT_BACKOFF_MS[
+          Math.min(streak, TRANSIENT_BACKOFF_MS.length) - 1
+        ]!,
+      'transient',
     );
   }
   // The streak counts consecutive failures, so anything that worked ends it.
@@ -265,15 +329,40 @@ function invokeCli(args: string[]): Promise<SyncResult> {
   });
 }
 
+/**
+ * Puts the next-attempt time where the screens can read it.
+ *
+ * Opened per announcement and closed immediately: this process usually does
+ * nothing but read a file and exit, and holding a connection open for that
+ * would cost more than the fact is worth. A database that cannot be reached
+ * costs the announcement and nothing else.
+ */
+async function announceToDatabase(
+  connection: string,
+  retryAfter: Date | null,
+  reason: string | null,
+): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const db = postgresDatabase(process.env.DATABASE_URL);
+  try {
+    await recordNextAttempt(db, connection, retryAfter, reason);
+  } finally {
+    await db.close();
+  }
+}
+
 async function main() {
   const instance = process.argv[2] ?? '';
-  parseInstance(instance);
+  const [provider, owner, bank] = parseInstance(instance);
+  const connection = `${provider}:${owner}${bank ? `:${bank}` : ''}`;
   const result = await runScheduledSync({
     instance,
     now: new Date(),
     stateDirectory: '/var/lib/private-finances-sync',
     ready: () => scheduleEnabled('/etc/private-finances', instance),
     invoke: invokeCli,
+    announce: (retryAfter, reason) =>
+      announceToDatabase(connection, retryAfter, reason),
     halfHourlyPolling: await verifiedMarker(
       resolve('/etc/private-finances/schedules', `${instance}.half-hourly`),
       instance,

@@ -55,6 +55,15 @@ export type ImportConnection = {
   accounts: ImportAccount[];
   /** The provider's approval, for banks that need one. */
   consent: { status: string; country: string; expiresAt: string } | null;
+  /**
+   * When the scheduler will next ask this bank anything, and why it is
+   * waiting. A bank that has been told to slow down waits half a day, and
+   * every timer in between exits without a request, so "the last run failed"
+   * on its own reads as a fault when it is usually a rest. Null when nothing
+   * is holding it back, and on a release whose scheduler has not run yet.
+   */
+  nextAttemptAt: string | null;
+  retryReason: string | null;
 };
 
 export type ImportRun = {
@@ -133,7 +142,7 @@ export async function importStatus(
 ): Promise<ImportStatus> {
   const at = now.toISOString();
   const runs = await db.query(
-    'SELECT connection,state,last_success_at,error_code FROM bank_sync_runs ORDER BY connection',
+    'SELECT connection,state,last_success_at,error_code,retry_after,retry_reason FROM bank_sync_runs ORDER BY connection',
   );
   const windows = await db.query(
     `SELECT connection,
@@ -232,6 +241,8 @@ export async function importStatus(
       changed30d: Number(window?.changed_30d ?? 0),
       accounts: accountsByConnection.get(connection) ?? [],
       consent: consentByConnection.get(connection) ?? null,
+      nextAttemptAt: iso(row.retry_after),
+      retryReason: row.retry_reason ? String(row.retry_reason) : null,
     };
   });
   // A bank approved but never imported has no run row yet; it is still a
@@ -251,6 +262,8 @@ export async function importStatus(
         changed30d: 0,
         accounts: [],
         consent,
+        nextAttemptAt: null,
+        retryReason: null,
       });
   connections.sort((a, b) =>
     a.owner === b.owner

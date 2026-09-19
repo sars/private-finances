@@ -38,10 +38,13 @@ const DAY = 86400000;
 const advice: Record<string, string> = {
   auth: 'The bank no longer accepts our credentials. Reconnect this bank.',
   consent: 'The approval has expired or was revoked. Approve this bank again.',
-  rate_limit:
-    'The bank asked us to slow down. The next scheduled attempt retries.',
+  // Neither of these says "the next scheduled attempt retries" any more,
+  // because for a rate limit it does not: the connection rests for half a day
+  // and the timers in between exit without asking the bank anything. The hour
+  // it resumes is stated separately, from what the scheduler wrote down.
+  rate_limit: 'The bank asked us to slow down, so this connection is resting.',
   transient:
-    'The bank was temporarily unavailable. The next scheduled attempt retries.',
+    'The bank was temporarily unavailable. It backs off and tries again.',
   schema:
     'The bank returned data in a shape we do not accept. Needs a look before retrying.',
   incomplete:
@@ -76,6 +79,25 @@ function ago(value: string | null, now: number) {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours} h ago`;
   return `${Math.round(hours / 24)} days ago`;
+}
+const clockOnly = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Riga',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+/**
+ * A moment still ahead, as a wall clock the owner can wait for: "14:24",
+ * "tomorrow at 02:10". Null once it has passed, so a stale mark left by a
+ * scheduler that has since stopped never claims a bank is about to wake.
+ */
+function upcoming(value: string | null, now: number): string | null {
+  const parsed = value ? Date.parse(value) : NaN;
+  if (!Number.isFinite(parsed) || parsed <= now) return null;
+  const clock = clockOnly.format(parsed);
+  const sameDay = dateOnly.format(parsed) === dateOnly.format(now);
+  if (sameDay) return clock;
+  const tomorrow = dateOnly.format(now + DAY) === dateOnly.format(parsed);
+  return tomorrow ? `tomorrow at ${clock}` : `${day(value)} at ${clock}`;
 }
 function asOwner(owner: string): Owner | null {
   return owner === 'rodion' || owner === 'katya' ? owner : null;
@@ -143,6 +165,7 @@ function ConnectionCard({
   const consentDays = c.consent
     ? Math.ceil((Date.parse(c.consent.expiresAt) - now) / DAY)
     : null;
+  const waiting = upcoming(c.nextAttemptAt, now);
   return (
     <Card className="gap-4 shadow-xs">
       <CardHeader>
@@ -180,6 +203,19 @@ function ConnectionCard({
             {c.lastRunAt && c.lastRunAt !== c.lastSuccessAt
               ? ` · last window ${when(c.lastRunAt)}`
               : ''}
+          </p>
+        )}
+        {waiting && (
+          <p
+            className={
+              c.retryReason === 'polling_interval'
+                ? 'text-xs text-muted-foreground'
+                : 'text-xs text-warning'
+            }
+          >
+            {c.retryReason === 'polling_interval'
+              ? `Next attempt ${waiting}`
+              : `Resting until ${waiting}; nothing is asked of the bank before then`}
           </p>
         )}
         {c.consent && consentDays !== null && (
@@ -397,7 +433,17 @@ export default function Imports() {
             ))}
           </section>
           <section className="space-y-3">
-            <h2 className="text-base font-semibold">Recent runs</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">Recent runs</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                render={<a href="/imports/runs" />}
+              >
+                All runs
+                <ArrowUpRight className="ml-2 size-3.5" />
+              </Button>
+            </div>
             {data.runs.length ? (
               <RunsTable runs={data.runs} now={now} />
             ) : (
@@ -406,9 +452,9 @@ export default function Imports() {
               </p>
             )}
             <p className="text-xs leading-relaxed text-muted-foreground">
-              A run covers only the window it asked for; "changed" counts
-              payments written or rewritten by that run. Whether the whole
-              history is present is a separate question, answered per account.
+              These are the windows that completed. A run that failed, or that
+              never reached the bank, is on the all-runs screen — which is where
+              a connection in trouble shows what happened.
             </p>
           </section>
         </>
