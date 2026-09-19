@@ -892,7 +892,7 @@ it ships an unsettled purchase still waits for the bank.
 # A failed import used to leave nothing behind — September 19, 2026
 
 Asked what was wrong with Swedbank, and why it could not be found on the list of
-recent runs, the answer turned out to be that it could not be found *because* it
+recent runs, the answer turned out to be that it could not be found _because_ it
 had failed. "Recent runs" read `bank_import_windows`, which records coverage and
 is written only when a window commits, so a connection in trouble wrote no row
 and vanished from the very screen meant to show it. Its only other trace was a

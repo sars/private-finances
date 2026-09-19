@@ -228,6 +228,7 @@ databases get them too. There is no backfill: every existing row is a photo,
 whose stored image is already its own preview, and the viewer falls back to it.
 
 ## Duplicate receipts
+
 A payment that already carries a matched receipt never gains a second automatic
 link, whether it is pending or booked, and whether the link would come from the
 pending sweep or from re-attachment to a settled row. If a later photo would resolve to that same payment, it is marked
@@ -236,7 +237,6 @@ protects receipts that were already pending before duplicate detection existed,
 which the intake checks cannot see. Manual attachment is unaffected for ordinary
 receipts; a receipt already marked duplicate is outside the attach contract, so
 neither the sweep nor the API can produce a second link.
-
 
 Implemented and covered by synthetic tests; not deployed. The same purchase can
 reach the bot twice — two photos, two messages, or both owners sending it — and
@@ -262,7 +262,6 @@ available, so an owner who disagrees can remove the row. No existing receipt can
 in this state, so the migration adds `image_sha256`, `duplicate_of` and the widened
 state constraint without any backfill.
 
-
 ## Deleting a receipt
 
 Implemented and tested, not yet deployed. Either family member can delete a
@@ -277,6 +276,7 @@ untouched. Deletion is refused with a clear message while the photo is being
 read, because a paid model request may be in flight. Deleted receipts no longer
 appear in the receipt list or API, their photo is no longer retrievable, and
 they can never be selected as categorization evidence again.
+
 ## Telegram feedback on receipt photos
 
 Implemented and covered by synthetic tests; not deployed. The worker answers on the
@@ -301,7 +301,6 @@ Existing receipts are backfilled as already acknowledged when the columns are fi
 created, so enabling this feature sends no retroactive reactions or replies. A job
 re-queued by the monthly budget guard (`budget_wait`) stays `queued` and produces no
 feedback in this version.
-
 
 ## Receipt-informed transaction categories
 

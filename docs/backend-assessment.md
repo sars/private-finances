@@ -38,17 +38,17 @@ local HTTP/body reading; exclude browser rendering and the user's internet route
 Decimal MB below; no payload content was logged. These are samples, not p95, a load
 benchmark or precise CPU/SQL attribution. Each scenario's exact filters are below.
 
-| API scenario | Observed range | JSON response size |
-| --- | --- | --- |
-| Bootstrap | 0.9–28.3 ms | 347 bytes |
-| Overview, household Sep 1–12, UAH | 147–269 ms | 0.197 MB |
-| Overview, household Jan 1–Sep 12, EUR | 492–572 ms | 5.926 MB |
-| Review default | 222–235 ms | 0.993 MB |
-| Review all history, EUR | 332–372 ms | 3.412 MB |
-| FX household Jan 1–Sep 12, EUR | 299–341 ms | 3.538 MB |
-| Receipts | 3.7–6.7 ms | 1,789 bytes |
-| Accounts | 75–79 ms | 7,508 bytes |
-| Operations | 9–11 ms | 2,921 bytes |
+| API scenario                          | Observed range | JSON response size |
+| ------------------------------------- | -------------- | ------------------ |
+| Bootstrap                             | 0.9–28.3 ms    | 347 bytes          |
+| Overview, household Sep 1–12, UAH     | 147–269 ms     | 0.197 MB           |
+| Overview, household Jan 1–Sep 12, EUR | 492–572 ms     | 5.926 MB           |
+| Review default                        | 222–235 ms     | 0.993 MB           |
+| Review all history, EUR               | 332–372 ms     | 3.412 MB           |
+| FX household Jan 1–Sep 12, EUR        | 299–341 ms     | 3.538 MB           |
+| Receipts                              | 3.7–6.7 ms     | 1,789 bytes        |
+| Accounts                              | 75–79 ms       | 7,508 bytes        |
+| Operations                            | 9–11 ms        | 2,921 bytes        |
 
 Exact scenarios: `/api/overview?display=UAH&from=2026-09-01&to=2026-09-12`,
 `/api/overview?display=EUR&from=2026-01-01&to=2026-09-12`, `/api/review`,
@@ -80,8 +80,9 @@ above succeeded independently.
 ## Why pages can feel slow
 
 Visible loading depends on API work + network/request sequencing + response transfer
-+ JSON processing + client rendering. Some stages overlap. Fast local receipt API
-timing means receipt-page delays need client/network investigation too.
+
+- JSON processing + client rendering. Some stages overlap. Fast local receipt API
+  timing means receipt-page delays need client/network investigation too.
 
 Code-confirmed inefficient patterns (impact not individually profiled yet):
 
@@ -116,13 +117,13 @@ Modern fit here means typed contracts, validation, observable behavior, testabil
 and support for the existing deployment. It does not mean the youngest framework.
 No popularity/growth ranking or framework benchmark is asserted.
 
-| Option | Advantages | Costs and fit for this application |
-| --- | --- | --- |
-| Native Node HTTP, refactored | No migration/dependency cost; existing behavior | We continue maintaining routing, validation and response conventions ourselves. Valid short-term optimization path. |
-| **Fastify + TypeScript** | Schema-based request validation/response serialization; encapsulated plugins for modules; stays on current runtime | Schema and route migration effort; auth/CSRF/error/receipt/consent contracts need regression checks. Best balance for this app. |
-| NestJS with Fastify | Prescribed modules, dependency injection, guards and framework conventions | More abstraction and ceremony; reasonable for larger multi-developer backends, unnecessary overhead for current team/size in my assessment. |
-| Hono | Small Web-Standards API, portable across runtimes | Attractive for edge/multi-runtime deployment; those are not current needs, and service/schema conventions still need design. |
-| Python FastAPI | Typed validation/OpenAPI and a natural Python analytics ecosystem | Rewrites working TypeScript financial/integration logic and creates a second language boundary. Current LLM work calls APIs; Python is not required. |
+| Option                       | Advantages                                                                                                         | Costs and fit for this application                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native Node HTTP, refactored | No migration/dependency cost; existing behavior                                                                    | We continue maintaining routing, validation and response conventions ourselves. Valid short-term optimization path.                                  |
+| **Fastify + TypeScript**     | Schema-based request validation/response serialization; encapsulated plugins for modules; stays on current runtime | Schema and route migration effort; auth/CSRF/error/receipt/consent contracts need regression checks. Best balance for this app.                      |
+| NestJS with Fastify          | Prescribed modules, dependency injection, guards and framework conventions                                         | More abstraction and ceremony; reasonable for larger multi-developer backends, unnecessary overhead for current team/size in my assessment.          |
+| Hono                         | Small Web-Standards API, portable across runtimes                                                                  | Attractive for edge/multi-runtime deployment; those are not current needs, and service/schema conventions still need design.                         |
+| Python FastAPI               | Typed validation/OpenAPI and a natural Python analytics ecosystem                                                  | Rewrites working TypeScript financial/integration logic and creates a second language boundary. Current LLM work calls APIs; Python is not required. |
 
 Official references reviewed:
 [Fastify schemas](https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/),

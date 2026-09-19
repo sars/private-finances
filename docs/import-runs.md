@@ -79,12 +79,12 @@ what the scheduler decides; a test holds that too.
 
 ## Where it shows
 
-| Screen | What it answers |
-| --- | --- |
-| `/imports` | Is each connection healthy, and when does a resting one resume |
-| `/imports/runs` | What has been happening, filtered by bank, outcome and period |
-| `/imports/runs/{id}` | What one attempt asked for, what came back, where it stopped |
-| `/ops` | A bank silent for over 25 hours, now with the hour it next tries |
+| Screen               | What it answers                                                  |
+| -------------------- | ---------------------------------------------------------------- |
+| `/imports`           | Is each connection healthy, and when does a resting one resume   |
+| `/imports/runs`      | What has been happening, filtered by bank, outcome and period    |
+| `/imports/runs/{id}` | What one attempt asked for, what came back, where it stopped     |
+| `/ops`               | A bank silent for over 25 hours, now with the hour it next tries |
 
 `/api/import-runs` pages with a keyset (`started_at`, `id`) rather than an
 offset, for the reason the payments list does: a table being appended to while

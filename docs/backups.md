@@ -5,13 +5,16 @@ encrypted by [restic](https://restic.readthedocs.io/) and uploaded to a private
 Amazon S3 bucket is what changes that. The owner chose S3, in the AWS account
 they already hold; the cost at this data size is a few cents a month.
 
-This is running. The bucket exists in `eu-north-1`, the restic repository was
-initialised on 19 September 2026, the daily timer is enabled and the first
-snapshot is uploaded. What is still outstanding is the proof of restore, and
-until that is done a backup is a belief rather than protection.
+This is running, and the restore has been proved rather than assumed. The bucket
+exists, the daily timer is enabled, and each run uploads two things: the database
+and the server configuration a rebuilt machine would need around it. Retention is
+the one part still outstanding.
 
 The account section below is kept because it is how the bucket was built and
-how it would be rebuilt.
+how it would be rebuilt. The bucket's own name, its region and the IAM user are
+not here — they are private configuration, recorded outside Git in
+`~/.config/private-finances/aws-backup.md` along with how to recover from the
+bucket on a machine that is not this server.
 
 ## What the owner does in AWS
 
@@ -103,12 +106,9 @@ Nothing below needs the owner once the five values exist.
    over the unix socket, so the operating-system user is the credential.
    systemd reads this file as root and injects it into the backup service
    alone, which is why the AWS keys never have to be readable by anyone else.
-3. The repository password lives in its own file, `RESTIC_PASSWORD_FILE`. It
-   must be readable by `private-finances`, the user the service runs as —
-   `chown private-finances:private-finances`, mode `400`. The containing
-   directory is `root:private-finances` `0750`, so nobody else can traverse to
-   it. On its own that password opens nothing: reaching the bucket also needs
-   the AWS keys, which stay root-only.
+3. The repository password lives in its own file, `RESTIC_PASSWORD_FILE`,
+   `root:root` mode `600`. The service runs as root, so nothing else needs to
+   read it — and in particular the web application's user cannot.
 4. `restic init` once, against that repository.
 5. Install `private-finances-backup.service` and `.timer`, then
    `systemctl enable --now private-finances-backup.timer`.
@@ -118,14 +118,47 @@ delay, and `Persistent=true` catches up a run the server slept through.
 
 ## What a run does
 
-`scripts/backup.sh`, as the `private-finances` user:
+One job backs up both halves of what a rebuilt machine would need: the data, and
+the configuration around it. `scripts/backup.sh`:
 
 - dumps the database with `pg_dump --format=custom --no-owner --no-acl` into a
   temporary owner-only directory that is removed on exit, success or not;
 - refuses to upload a dump under 1 KiB, because an empty dump that `pg_dump`
   did not complain about is a failure, not a very small backup;
-- pipes the dump into `restic backup --stdin`, tagged `private-finances`;
+- pipes the dump into `restic backup --stdin`, tagged `database`;
+- uploads the server's configuration as a second snapshot, tagged `config`;
 - records the attempt in the application's `backup_runs` table.
+
+**It runs as root**, because the configuration worth saving is exactly what no
+unprivileged process may read — the bank keys, the tokens, the environment
+files. The database is not touched as root: the script drops to the service user
+with `runuser` for `pg_dump` and for `psql`, because that connection is
+peer-authenticated over the unix socket and the operating-system user _is_ the
+credential. One consequence is an improvement — the repository password file is
+root-only again, so the web application's user can no longer read it.
+
+Two snapshots rather than one, because restic takes either a stream or a set of
+paths in a single run and not both, and because a restore usually wants one or
+the other: `restic restore latest --tag config --target /` puts the credentials
+back without unpacking a database dump beside them.
+
+### What is in the configuration snapshot
+
+`/etc/private-finances` (environment files, bank PEM keys, tokens, schedule
+markers), the project's systemd units and their timer overrides, `/etc/caddy`
+and `/etc/postgresql`. Each is included only if present, so a host missing one
+still produces a backup rather than failing before the important part.
+`BACKUP_CONFIG_PATHS` in `backup.env` overrides the list, space separated.
+
+Two things are deliberately **not** in it. The application's own code, because
+it lives in a public repository and is rebuilt from a release rather than
+restored. And `/var/lib/private-finances`, which holds pre-deployment dumps —
+derived data, and larger than everything else here put together.
+
+Restoring the configuration does not restore access to the banks: consents
+expire every few days and are re-approved through the dashboard whatever
+happens. What it does restore is the application key, the PEM files and the
+tokens, which are the slow things to obtain again.
 
 Diagnostics from `pg_dump` and `restic` never reach the service log: they can
 carry connection details. The log carries the event and the stage it failed at,
@@ -144,12 +177,17 @@ into a non-zero exit rather than a silent success.
 
 The System health page reads `backup_runs` and states one of four things:
 
-| Shown                          | Meaning                                                       |
-| ------------------------------ | ------------------------------------------------------------- |
-| **Never**                      | No off-server copy has ever been made. The opening state.     |
-| **_n_ h ago**                  | The last copy succeeded that long ago.                        |
-| **_n_ h ago · expected daily** | A day and the timer's delay have passed without a new one.    |
-| **Failed**                     | The newest attempt failed, at the export or the upload stage. |
+| Shown                          | Meaning                                                    |
+| ------------------------------ | ---------------------------------------------------------- |
+| **Never**                      | No off-server copy has ever been made. The opening state.  |
+| **_n_ h ago**                  | The last copy succeeded that long ago.                     |
+| **_n_ h ago · expected daily** | A day and the timer's delay have passed without a new one. |
+| **Failed**                     | The newest attempt failed, and the detail names the stage. |
+
+A failure names one of three stages, because they mean different things to a
+rebuild. `Database export` is the dump itself; `Upload` is the dump not reaching
+the bucket; `Server configuration upload` means the money's history is safe and
+the credentials are not.
 
 A newer failure outranks an older success: when the last run failed, the age of
 the last good copy is no longer the thing to report, though the page still names

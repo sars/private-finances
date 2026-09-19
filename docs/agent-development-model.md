@@ -18,11 +18,11 @@ strong general model: it reads code it did not write and must catch mistakes in 
 return a diff. They start with no context, so a brief must supply everything. They
 are split across two capability tiers:
 
-- *Routine tier* — a cheaper, fast model for work whose shape is already known and
+- _Routine tier_ — a cheaper, fast model for work whose shape is already known and
   whose correctness is already fenced by tests: user-interface screens,
   documentation, mechanical refactors, updating test doubles after an interface
   change.
-- *Deep tier* — the same class of model as the orchestrator, for work that needs
+- _Deep tier_ — the same class of model as the orchestrator, for work that needs
   real debugging, touches invariants, or is large enough that a wrong turn is
   expensive.
 
@@ -54,17 +54,17 @@ surface was the right one.
 
 At the time of writing this project uses Anthropic's Claude models:
 
-| Role | Model |
-| --- | --- |
-| Orchestrator | Claude Opus 5 |
-| Routine implementer | Claude Sonnet 5 |
-| Deep implementer | Claude Opus 5 |
-| Escalation | Claude Fable 5.1 |
+| Role                | Model            |
+| ------------------- | ---------------- |
+| Orchestrator        | Claude Opus 5    |
+| Routine implementer | Claude Sonnet 5  |
+| Deep implementer    | Claude Opus 5    |
+| Escalation          | Claude Fable 5.1 |
 
 Substitute equivalents from any provider: the pattern needs a capable orchestrator,
 two implementer tiers separated by cost, and one escalation tier above both. The
 orchestrator model is selected by the owner in the client; a session cannot change
-its own model, which is why escalation has to be *requested out loud* (below).
+its own model, which is why escalation has to be _requested out loud_ (below).
 
 ## Isolation
 
@@ -89,7 +89,7 @@ the invariants that apply; the tests to add; the exact verification commands; an
 an instruction to report what it could not do. Briefs are long on purpose. A brief
 that omits the invariants produces a diff that violates them.
 
-Ask explicitly for what was *not* done. A subagent that reports only successes is
+Ask explicitly for what was _not_ done. A subagent that reports only successes is
 the main source of silent defects.
 
 ## The verification contract
