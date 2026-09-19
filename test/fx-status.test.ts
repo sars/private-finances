@@ -119,17 +119,26 @@ test('a day nothing published leaves its payments visible, listed and uncounted'
     // The account by the name the owner recognises, not the integration's.
     assert.match(row!.account.name, /^Rodion · Monobank/);
     assert.equal(status.unconvertedCapped, false);
-    assert.deepEqual(status.rates, {
-      from: '2025-10-25',
-      to: '2025-10-26',
-      days: [
-        { date: '2025-10-25', state: 'covered' },
-        { date: '2025-10-26', state: 'empty_at_source' },
-      ],
-      covered: 1,
-      needed: 2,
-      current: '2025-10-25',
-    });
+    assert.deepEqual(status.rates.days, [
+      { date: '2025-10-25', state: 'covered' },
+      { date: '2025-10-26', state: 'empty_at_source' },
+    ]);
+    assert.equal(status.rates.covered, 1);
+    assert.equal(status.rates.needed, 2);
+    assert.equal(status.rates.current, '2025-10-25');
+    assert.deepEqual(status.rates.sources, [
+      { source: PRIVATBANK_SOURCE, days: 1 },
+    ]);
+    // A page about rates shows one. The pair, the figure and where it came from.
+    assert.deepEqual(status.rates.latest, [
+      {
+        base: 'UAH',
+        target: 'EUR',
+        rate: '0.02',
+        source: PRIVATBANK_SOURCE,
+        asOf: '2025-10-25',
+      },
+    ]);
     // The page is counts and failures. The ledger itself stays on the server.
     assert.deepEqual(Object.keys(status).sort(), [
       'conversions',
@@ -198,10 +207,59 @@ test('days since the last stored quote show as unfetched, not as empty', async (
     assert.equal(status.rates.current, '2025-10-26');
     assert.deepEqual(
       status.rates.days.map((day) => day.state),
-      ['covered', 'covered', 'not_fetched', 'not_fetched', 'not_fetched'],
+      ['covered', 'covered', 'not_needed', 'not_needed', 'not_fetched'],
     );
     assert.equal(status.rates.covered, 2);
-    assert.equal(status.rates.needed, 5);
+    // 27 and 28 October carry no payment, so they need no rate and are not
+    // counted; only the 29th, which the sync asks about as today, is a gap.
+    assert.equal(status.rates.needed, 3);
+    assert.deepEqual(
+      status.rates.sources,
+      [
+        { source: PRIVATBANK_SOURCE, days: 1 },
+        { source: MINFIN_SOURCE, days: 1 },
+      ],
+      'most trusted source first, not alphabetical',
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+/**
+ * The failure this was written for: the nightly sync only ever asks about days
+ * that carry a payment, so counting the days it deliberately skips as gaps left
+ * two cells amber on the real page with nothing able to clear them. A warning
+ * that cannot be acted on is the one kind this page must never show.
+ */
+test('a day with no payments needs no rate and is not counted as a gap', async () => {
+  const { db, repo } = await ledger();
+  try {
+    const rates = new FxRates(db);
+    await rates.insert(quote(PRIVATBANK_SOURCE, '2025-10-25'));
+    await rates.insert(quote(MINFIN_SOURCE, '2025-10-26'));
+    const status = await fxConversionStatus(
+      repo,
+      await repo.list(),
+      'EUR',
+      '2025-10-31',
+    );
+    // 27 to 30 October hold no payment at all; 31 October is today, which the
+    // sync always asks about, so it is the only real gap.
+    assert.deepEqual(
+      status.rates.days.map((day) => day.state),
+      [
+        'covered',
+        'covered',
+        'not_needed',
+        'not_needed',
+        'not_needed',
+        'not_needed',
+        'not_fetched',
+      ],
+    );
+    assert.equal(status.rates.needed, 3);
+    assert.equal(status.rates.covered, 2);
   } finally {
     await db.close();
   }

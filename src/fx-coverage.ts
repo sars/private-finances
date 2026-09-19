@@ -11,7 +11,8 @@ export const FX_ARCHIVE_SOURCES: readonly string[] = [
   MINFIN_SOURCE,
 ];
 
-export type FxDayState = 'covered' | 'empty_at_source' | 'not_fetched';
+export type FxDayState =
+  'covered' | 'empty_at_source' | 'not_fetched' | 'not_needed';
 export interface FxDay {
   date: string;
   state: FxDayState;
@@ -98,11 +99,17 @@ export function eachDate(from: string, to: string): string[] {
  * A day is empty at source only once **every** source has been asked and come
  * back with nothing; a day only one of them has been asked about is still
  * waiting, and says so.
+ *
+ * `needed` is the set of days that actually require a rate — the days the sync
+ * itself asks about. Every calendar day still gets a cell, because the shape of
+ * the calendar is what makes a gap legible, but a day outside that set is drawn
+ * as needing nothing and is left out of the count.
  */
 export async function fxCoverage(
   db: Database,
   from: string,
   to: string,
+  needed?: ReadonlySet<string>,
 ): Promise<FxDay[]> {
   const dates = eachDate(from, to);
   const covered = new Set(
@@ -126,6 +133,11 @@ export async function fxCoverage(
   }
   return dates.map((date): FxDay => {
     if (covered.has(date)) return { date, state: 'covered' };
+    // A day with no payment on it needs no rate, so a missing one is not a gap
+    // and must not read as a fault. The sync only ever asks about days that
+    // carry a transaction; counting the days it deliberately skips against it
+    // would leave a warning on the page that nothing could ever clear.
+    if (needed && !needed.has(date)) return { date, state: 'not_needed' };
     const sources = asked.get(date);
     const empty =
       !!sources && FX_ARCHIVE_SOURCES.every((source) => sources.has(source));
