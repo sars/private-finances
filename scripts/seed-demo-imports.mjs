@@ -7,6 +7,11 @@ import { syncBank } from '../dist/src/bank-sync.js';
 import { ConnectorError } from '../dist/src/connectors/types.js';
 import { synthetic } from '../dist/src/synthetic.js';
 import { FxRates } from '../dist/src/fx-rates.js';
+import {
+  FX_ARCHIVE_SOURCES,
+  recordFxAbsence,
+} from '../dist/src/fx-coverage.js';
+import { PRIVATBANK_SOURCE } from '../dist/src/fx-sources.js';
 
 const db = memoryDatabase('data/demo');
 await migrate(db);
@@ -112,9 +117,27 @@ for (const c of runs) {
 // Daily rates, so the demo can show a household total in one currency rather
 // than only the warning that says it could not. Synthetic figures, and the
 // same shape the real feed writes.
+// Enough days back to fill the conversion status strip, with two deliberate
+// holes so all three of its states are visible: day 9 is left empty and
+// recorded as such at every source (a day nobody published, which will never
+// fill), and the last two days are simply not seeded (a sync that has not
+// reached them yet, which is the state worth acting on).
 const rates = new FxRates(db);
-for (let back = 0; back < 3; back++) {
+const EMPTY_AT_SOURCE = 9;
+const NOT_FETCHED = 2;
+for (let back = NOT_FETCHED; back < 40; back++) {
   const asOf = new Date(Date.now() - back * 86400000).toISOString().slice(0, 10);
+  if (back === EMPTY_AT_SOURCE) {
+    for (const source of FX_ARCHIVE_SOURCES)
+      await recordFxAbsence(
+        db,
+        source,
+        asOf,
+        `${asOf}T12:00:00.000Z`,
+        'synthetic demo: nothing published for this day',
+      );
+    continue;
+  }
   for (const [base, rate] of [
     ['USD', '41.50'],
     ['EUR', '48.20'],
@@ -122,7 +145,7 @@ for (let back = 0; back < 3; back++) {
   ]) {
     try {
       await rates.insert({
-        source: 'demo',
+        source: PRIVATBANK_SOURCE,
         base,
         target: 'UAH',
         rate,

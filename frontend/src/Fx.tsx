@@ -112,7 +112,9 @@ function Composition({
       {shown.map(([value, label], index) => (
         <span key={label}>
           {index > 0 && ' · '}
-          <span className="text-foreground tabular-nums">{tally(value)}</span>{' '}
+          <span className="text-foreground tabular-nums">
+            {tally(value)}
+          </span>{' '}
           {label}
         </span>
       ))}
@@ -219,7 +221,7 @@ export default function Fx() {
                       key={row.id}
                       className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2 sm:flex-nowrap"
                     >
-                      <span className="text-muted-foreground w-24 shrink-0 text-xs tabular-nums">
+                      <span className="text-muted-foreground w-20 shrink-0 text-xs tabular-nums sm:w-24">
                         {day(row.bookedAt.slice(0, 10))}
                       </span>
                       <AccountBadge
@@ -235,19 +237,25 @@ export default function Fx() {
                       >
                         {row.account.name}
                       </span>
-                      <span className="text-sm tabular-nums">
-                        {money(row.amountMinor, row.currency)}
-                      </span>
-                      <span className="text-muted-foreground w-full text-xs sm:w-56 sm:shrink-0">
-                        {row.reason}
-                      </span>
+                      {/* On the phone the amount and the reason drop to a line
+                          of their own, so the account keeps the whole first
+                          line and stays readable; `sm:contents` dissolves the
+                          wrapper on desktop, where all four sit in one row. */}
+                      <div className="flex w-full items-center gap-3 sm:contents">
+                        <span className="text-sm tabular-nums">
+                          {money(row.amountMinor, row.currency)}
+                        </span>
+                        <span className="text-muted-foreground text-xs sm:w-56 sm:shrink-0">
+                          {row.reason}
+                        </span>
+                      </div>
                     </li>
                   ))}
                 </ul>
                 {status.unconvertedCapped && (
                   <p className="text-muted-foreground text-xs">
-                    Showing the first {tally(status.unconverted.length)}{' '}
-                    of {tally(status.conversions.missing)}.
+                    Showing the first {tally(status.unconverted.length)} of{' '}
+                    {tally(status.conversions.missing)}.
                   </p>
                 )}
               </CardContent>

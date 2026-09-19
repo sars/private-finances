@@ -37,7 +37,11 @@ async function ledger() {
       currency: 'UAH',
       amountMinor: '-45000',
       description: 'Bank converted',
-      sourceDetails: { amount: -45000, operationAmount: -900, currencyCode: 978 },
+      sourceDetails: {
+        amount: -45000,
+        operationAmount: -900,
+        currencyCode: 978,
+      },
     },
     // Priced by the stored daily rate for the 25th.
     {

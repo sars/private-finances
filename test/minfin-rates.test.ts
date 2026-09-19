@@ -94,8 +94,7 @@ test('a page for a different currency than the one asked for is refused', () => 
 test('a layout that no longer matches makes the day unavailable, not a guess', () => {
   const moved = page('2025-10-26').replace(/type="average"/g, 'type="rate"');
   assert.throws(
-    () =>
-      parseMinfinRate(moved, 'EUR', '2025-10-26', '2026-09-19T12:00:00Z'),
+    () => parseMinfinRate(moved, 'EUR', '2025-10-26', '2026-09-19T12:00:00Z'),
     (error: unknown) =>
       error instanceof MinfinRateError && error.code === 'invalid_response',
   );
