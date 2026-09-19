@@ -9,12 +9,21 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**aa398fdc414eecdf06f357500a8fed6a5af5a923**, live since September 19, 2026 at
+**6dbefae121394e9b86d70fecb9635dcf4643da08**, live since September 19, 2026 at
 schema version 61, deployed with `deploy/release.sh`: both services active,
-schema 61, 4,189 transactions, all seven import timers armed afterwards. It
-carries PR #100 and adds no migration.
+schema 61, 4,189 transactions, the import timers and the Telegram worker
+resumed afterwards. Every gate passed on the first attempt — 650 application
+tests on the server, and a rehearsal on a restored copy that reached schema 61
+in 25 milliseconds with 4,189 transactions, 141 active refund links, no expense
+without a category and nothing filed on a heading. It carries PR #104 and PR
+#102 and adds no migration.
 
-It is the last of four releases that afternoon. `7d8642d9` (PR #95) added the
+It replaced `babc698c` (PR #101), the retention rule for pre-deployment dumps,
+which this section had not named: that release went out earlier the same day
+and the record here still said `aa398fdc`. The rule worked on its first real
+occasion — the switch reported `predeploy_pruned` with one dump removed.
+
+Before those, four releases that afternoon. `7d8642d9` (PR #95) added the
 import-run record and migration 60; `47fdec7d` (PR #96) added migration 61 and
 the configuration backup; `6e200f74` (PR #98) was a one-line fix to the backup
 script; `bcd5d0dc` (PR #97) and `aa398fdc` (PR #100) are three corrections to
@@ -895,6 +904,40 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# Amounts stopped falling off the phone — September 19, 2026
+
+The owner opened Spending analytics on a phone, chose **This month**, and found
+that the card "What made the heaviest … heavy" ran its content past the right
+edge and could not be read in full. Nothing about it looked broken on a desktop,
+and nothing looked broken on the phone either until you noticed which half was
+missing: the amounts, the loudest thing on every row, sat outside the card.
+
+The page does not scroll sideways — the design forbids it, and the shell holds
+to that — so the overflow had nowhere to show itself. The card simply clipped
+what would not fit, which is why this survived every screenshot taken of the
+screen. Measured in a browser at 390 px with long category names and five-figure
+sums, the card's content was 462 px wide inside a 358 px card: 104 px of it
+unreachable, while the page's own `scrollWidth` stayed at exactly 390 and
+reported nothing wrong.
+
+The cause is a rule of CSS grid rather than a missing width. Each period panel
+is a grid item, and a grid item's automatic minimum width is its content's
+min-content width; the rows inside pin their amount with `shrink-0`, so that
+minimum was the full width of `+12 345,67 UAH over usual` plus a category name.
+The track grew past the card instead of the text giving way. The panels take
+`min-w-0` now, so the text gives way instead: names truncate with a title,
+amounts stay on one line, and the period's own name wraps rather than
+truncating — a `title` tooltip is not reachable on a phone, and that label is
+the row's identity.
+
+Two things worth keeping from how it was found. The defect is invisible in the
+source and invisible in the demo data, which is small enough that every row
+happens to fit; it appears only when a real household's names and sums are put
+through the real layout, so it was reproduced against a running app and measured
+rather than reasoned about. And the measurement is the test: content width equal
+to card width, and no element outside the card's content box, which is now true
+where it was 462 against 358 before.
 
 # The backup now saves the credentials too — September 19, 2026
 
