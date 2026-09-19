@@ -9,17 +9,18 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**860801e2153434400378a8103e0b2cfe3786e249**, live since September 19, 2026 at
-schema version 59, deployed with `deploy/release.sh` in one pass over
-`997972a89797db05181df51661b29f872fb51174`: the rehearsal on a restored copy
-reached schema 59 in 23 milliseconds with 4,176 transactions, 140 active refund
-links, no expense without a category and nothing filed on a heading; imports and
-the worker paused and resumed around the switch, and verification afterwards
-reported both services active, release `860801e`, schema 59 and 4,176
-transactions. It carries PR #92 and adds no migration.
+**6e200f74c6ae7ea18b82e6d94a987a79cc89956a**, live since September 19, 2026 at
+schema version 61, deployed with `deploy/release.sh`: both services active,
+schema 61, 4,189 transactions. It carries PR #98, a one-line fix to the backup
+script, and adds no migration. The release before it, `47fdec7d`, carries PR #96
+and migration 61.
 
-Off-server backup is live. The daily timer is enabled, two snapshots are in the
-bucket, and System health reads the age of the last copy rather than **Never**.
+Off-server backup is live and covers both halves of a rebuild. Each daily run
+uploads two snapshots — the database, and the server configuration: the bank
+PEM keys, the tokens, the environment files, the project's systemd units,
+`/etc/caddy` and `/etc/postgresql`. Both restores have been proved. System health
+reads the age of the last copy rather than **Never**, and names which of the
+three stages failed when one does.
 
 The installed app moves itself to a new release now. Getting one onto the phone
 had meant deleting the app and installing it again, for two reasons that had
@@ -888,6 +889,47 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# The backup now saves the credentials too — September 19, 2026
+
+Losing the machine would have cost the credentials even though the money's
+history was safe. The bank PEM keys, the Monobank and Telegram tokens, the
+OpenAI key, the environment files and the schedule markers existed only on that
+disk, and re-obtaining them is the slow half of a rebuild. The owner asked for
+them to be covered and asked why it would not simply be part of the same backup.
+It is: one timer, one script, one credential, one repository, two snapshots
+tagged `database` and `config`.
+
+The service runs as root now, because the configuration worth saving is exactly
+what no unprivileged process may read. The database is still not touched as
+root — the script drops to the service user with `runuser` for `pg_dump` and
+`psql`, whose connection is peer-authenticated, so the operating-system user is
+the credential. One consequence is a tightening rather than a loosening: the
+restic password file is root-only again, and the web application's user can no
+longer read it.
+
+The first run after installing that unit failed within the minute, at the dump.
+`mktemp -d` creates its directory 0700 and owned by root, so although the dump's
+own subdirectory belonged to the service user, the path to it crossed a
+directory that user could not enter. 0711 grants the crossing without the
+listing, so the error and result files beside the dump stay unreadable. Nothing
+was at risk: the failure was recorded as a dump-stage failure, the run exited
+non-zero and no incomplete backup was uploaded, which is how it surfaced at
+once. The stubs in the test file all run as one user and cannot reproduce a
+permissions fault, so the invariant is asserted directly — pg_dump's stub records
+the mode of the directory it is handed, and the test requires it crossable and
+not listable.
+
+Proved rather than assumed, again: snapshot `446ae16a` holds 77 files, restores
+into a temporary directory, and `diff -rq` against the live tree reports no
+difference in any of the three paths. What it does not restore is bank access —
+consents expire every few days and are re-approved through the dashboard
+whatever happens.
+
+Two things are deliberately outside the backup. The application's own code,
+which is public and rebuilt from a release rather than restored. And
+`/var/lib/private-finances`, which holds pre-deployment dumps: derived data, and
+larger than everything else put together.
 
 # A failed import used to leave nothing behind — September 19, 2026
 
