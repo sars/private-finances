@@ -8,7 +8,11 @@ import {
   type ReactNode,
 } from 'react';
 import { Choice } from '@/components/finance';
-const currencies = ['UAH', 'EUR', 'USD', 'GBP'];
+// Kept in step with `displayCurrencies` in navigation-state, which validates
+// what arrives in the URL. A currency saved here before it was withdrawn fails
+// that check and falls back, rather than sticking on a value the picker no
+// longer offers.
+const currencies = ['UAH', 'EUR', 'USD'];
 const Context = createContext({
   currency: 'UAH',
   setCurrency: (_value: string) => {},

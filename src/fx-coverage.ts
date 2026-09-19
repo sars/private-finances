@@ -1,5 +1,9 @@
 import type { Database, Executor } from './database.js';
-import { MINFIN_SOURCE, PRIVATBANK_SOURCE } from './fx-sources.js';
+import {
+  MINFIN_SOURCE,
+  PRIVATBANK_SOURCE,
+  compareFxSources,
+} from './fx-sources.js';
 
 /**
  * The sources asked about a calendar day, both commercial, neither the National
@@ -16,6 +20,9 @@ export type FxDayState =
 export interface FxDay {
   date: string;
   state: FxDayState;
+  /** Which source stored the day's rate; only ever set on a covered day. The
+   * page shows it when a cell is tapped, so a square can explain itself. */
+  source?: string;
 }
 
 const dateValid = (value: string) =>
@@ -112,14 +119,20 @@ export async function fxCoverage(
   needed?: ReadonlySet<string>,
 ): Promise<FxDay[]> {
   const dates = eachDate(from, to);
-  const covered = new Set(
-    (
-      await db.query(
-        "SELECT DISTINCT to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_rates WHERE as_of>=$1 AND as_of<=$2",
-        [from, to],
-      )
-    ).rows.map((row) => String(row.day)),
-  );
+  // The source that would win the day, not merely one that stored something:
+  // the cell names the rate a conversion on that date would actually use.
+  const covered = new Map<string, string>();
+  for (const row of (
+    await db.query(
+      "SELECT DISTINCT source,to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_rates WHERE as_of>=$1 AND as_of<=$2",
+      [from, to],
+    )
+  ).rows) {
+    const day = String(row.day),
+      source = String(row.source);
+    const held = covered.get(day);
+    if (!held || compareFxSources(source, held) < 0) covered.set(day, source);
+  }
   const asked = new Map<string, Set<string>>();
   for (const row of (
     await db.query(
@@ -132,7 +145,8 @@ export async function fxCoverage(
     asked.get(day)!.add(String(row.source));
   }
   return dates.map((date): FxDay => {
-    if (covered.has(date)) return { date, state: 'covered' };
+    const source = covered.get(date);
+    if (source) return { date, state: 'covered', source };
     // A day with no payment on it needs no rate, so a missing one is not a gap
     // and must not read as a fault. The sync only ever asks about days that
     // carry a transaction; counting the days it deliberately skips against it

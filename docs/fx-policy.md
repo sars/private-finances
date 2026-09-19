@@ -2,8 +2,9 @@
 
 The owner approved commercial buy/sell midpoints for historical display
 conversion, from two sources and no others: **PrivatBank's own published rate**,
-and, for the days PrivatBank publishes nothing, **Minfin's average of the
-commercial rates across Ukrainian banks**. Both are prices people actually
+and, for the days PrivatBank publishes nothing, **the mean of the card rates
+published by the household's own four banks** — Monobank, PrivatBank, Sens Bank
+(Alfa) and A-Bank — read through Minfin. Both are prices people actually
 trade at. Neither is the National Bank's reference rate, which the owner
 rejected as an administrative number nobody trades on; it is never read, from
 either source.
@@ -35,7 +36,14 @@ excluded from every total.
 Selection order is declared, in `src/fx-sources.ts`, and is **not** alphabetical:
 
 1. `PrivatBank commercial midpoint`
-2. `Minfin bank average midpoint`
+2. `Minfin household bank card midpoint`
+3. `Minfin bank average midpoint` — **retired**, never written again
+
+The third existed for one release. It came from scraping Minfin's rendered page,
+which publishes only an average across every bank it tracks; the JSON the site
+itself calls carries the per-bank breakdown, so the rate became the mean of the
+household's own four banks instead. Quotes are immutable, so the rows already
+written under that name stay where they are, outranked by everything above.
 
 This matters more than it looks. The store used to order candidate quotes by
 source string, so precedence was an accident of spelling — and `Minfin…` sorts
@@ -115,28 +123,38 @@ reviewed September 12, 2026: the archive covers four years; JSON responses ident
 the requested date, bank PB and base currency UAH, with separate commercial and
 NBU fields. The midpoint is the owner's reporting policy, not a provider field.
 
-[Minfin rates in banks](https://minfin.com.ua/ua/currency/banks/eur/2025-10-26/),
-checked 19 September 2026. Minfin publishes, per calendar day back to 4 January
-2006, the average of the commercial cash rates it collects across Ukrainian
-banks — the panel includes PrivatBank, monobank, абанк and Sens Bank (Alfa-Bank),
-the four the owner named — together with the NBU rate in a separate column that
-is never read. `api.minfin.com.ua` requires a paid key and the per-bank
-historical breakdown sits behind it; the rates **page** is free, unauthenticated
-and not disallowed by `robots.txt`, and is what the application reads.
+Minfin's per-bank rates, read as JSON and checked 19 September 2026:
 
-That makes this source a scrape of a rendered page, and it is treated as one.
-Two assertions have to hold before a number is taken: the date picker's `value`
-must equal the date requested (Minfin serves the current day's rates for a URL it
-does not recognise, and storing those against a date in October would be a
-fabricated rate wearing a real one's clothes), and the average row's currency
-link must match the currency requested. Only the two cells marked
-`type="average"` are read — the NBU column carries no such marker — and anything
-other than exactly a buy and a sell makes the day unavailable rather than a
-guess. Because it is a scrape, Minfin is a **gap filler**: it is asked only about
-days the primary source left empty, never nightly, and never as the primary.
+```
+GET https://minfin.com.ua/api/currency/rates/banks/eur/?page=1&cpp=100&date=2025-10-26&commercial_sort=true
+  {"data":[{"slug":"privatbank","cash":{...},"card":{"date":"2025-10-26T21:41:28+02:00","bid":"48.52","ask":"49.2611"}}, …]}
+```
 
-One thing the free page cannot answer: how many banks contributed to a given
-past date. The average is published, the per-bank breakdown for a historical
-date is not. The figure is therefore "the average across Minfin's bank panel",
-which is broader than the four banks the owner named and cannot be narrowed to
-them without a paid key.
+Free, unauthenticated, and dated back to 2006. `api.minfin.com.ua`, the
+advertised product, needs a paid key; this is the endpoint the site's own page
+calls, so it is an internal interface rather than a published contract and could
+change without notice. It is read at most a handful of times a year, only for
+days the primary source left empty.
+
+Four banks count, and no others: **monobank, privatbank, sensebank** (Sens Bank,
+formerly Alfa-Bank) **and a-bank**. Their **card** rates are used, because the
+spending being converted is card purchases and the card rate is what the bank
+actually charged. The stored figure is the mean of each contributing bank's
+buy/sell midpoint — the same number as the midpoint of the means, so nothing is
+hidden in the choice — carried to six decimal places and rounded half away from
+zero. The arithmetic is exact integer arithmetic until that last division.
+
+A bank that published nothing usable for the day is left out rather than guessed
+at, and the provenance names every bank that did contribute with its figures, so
+a day carried by one bank reads as exactly that rather than hiding behind the
+word "average". On 26 October 2025 three of the four published a euro card rate
+(Sens Bank quoted none) and all four published a dollar one.
+
+**Sterling has no secondary source.** Not one of the four quotes GBP, in cash or
+on a card, so there is nothing of theirs to average; the twelve banks that do
+quote it disagree by several hryvnia and the household holds no relationship with
+any of them. A sterling payment on a day the primary source left empty therefore
+stays missing and is listed, which is the standing rule rather than an exception
+to it. Sterling was also withdrawn as a display currency: totals are reported in
+hryvnia, euro or dollars. Payments *made* in sterling are unaffected and still
+convert into whichever of those three is selected.
