@@ -182,9 +182,52 @@ test('runs are filtered by bank and outcome, and paged without repeating a row',
       });
       seen.push(...page.runs.map((run) => run.id));
       cursor = page.nextCursor;
+      // The cursor reaches SQL as a uuid cast, which PostgreSQL raises on
+      // rather than ignoring, so its shape is part of the contract.
+      if (cursor)
+        assert.match(
+          cursor,
+          /^[^|]+\|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+        );
     } while (cursor);
     assert.equal(seen.length, 5);
     assert.equal(new Set(seen).size, 5);
+  } finally {
+    await db.close();
+  }
+});
+
+test('a cursor that is not a cursor returns the first page instead of failing', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    const repo = new Repository(db);
+    const from = new Date('2026-09-01');
+    const to = new Date('2026-09-02');
+    const recorder = new AttemptRecorder(db, 'monobank:rodion', from, to);
+    await recorder.open();
+    await syncBank(
+      repo,
+      connectorThat(async () => [ONE]),
+      from,
+      to,
+      recorder,
+    );
+
+    // Each of these would reach PostgreSQL as a cast it cannot make, failing
+    // the whole request rather than the one filter, if it were not caught.
+    for (const cursor of [
+      'nonsense',
+      '2026-09-19T00:00:00.000Z|not-a-uuid',
+      '2026-09-19T00:00:00.000Z|',
+      'not-a-date|a45128c1-5946-41cc-bf3c-1d490520524b',
+      "|'; DROP TABLE bank_sync_attempts; --",
+    ])
+      assert.equal(
+        (await importRuns(db, { cursor })).runs.length,
+        1,
+        `cursor ${cursor} should have been ignored`,
+      );
   } finally {
     await db.close();
   }

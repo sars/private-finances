@@ -271,7 +271,18 @@ export async function recordNextAttempt(
   );
 }
 
-/** The cursor is the row's own order key, so a page cannot skip or repeat. */
+/**
+ * The cursor is the row's own order key, so a page cannot skip or repeat.
+ *
+ * Both halves are checked against the shape the columns actually hold, not
+ * merely for being present. The id reaches SQL as `$n::uuid`, and PostgreSQL
+ * raises on a cast it cannot make — so a cursor someone has mistyped in the
+ * address bar would fail the whole request rather than the one filter. An
+ * unreadable cursor is ignored, which returns the first page: the same
+ * narrowing-is-optional rule the other filters follow.
+ */
+const CURSOR_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function decodeCursor(
   cursor: string,
 ): { startedAt: string; id: string } | null {
@@ -279,7 +290,8 @@ function decodeCursor(
   if (at <= 0) return null;
   const startedAt = cursor.slice(0, at);
   const id = cursor.slice(at + 1);
-  if (!Number.isFinite(Date.parse(startedAt)) || !id) return null;
+  if (!Number.isFinite(Date.parse(startedAt))) return null;
+  if (!CURSOR_UUID.test(id)) return null;
   return { startedAt, id };
 }
 
