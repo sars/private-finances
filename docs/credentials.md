@@ -175,9 +175,9 @@ into `private-finances-backup.service` alone.
 **cannot be replaced or recovered**. AWS has no copy and nothing on the server
 can reconstruct it; losing it destroys every backup in the bucket however healthy
 the bucket looks. It is held in the owner's password manager and, for the service
-to use, in the file named by `RESTIC_PASSWORD_FILE` — owned by the service user
-`private-finances` at mode 400, not root-only, because the service must read it.
-On its own it opens nothing: reaching the bucket also needs the AWS key.
+to use, in the file named by `RESTIC_PASSWORD_FILE` — `root:root` mode 600. The
+backup service runs as root, so nothing unprivileged reads it; the web
+application's user in particular cannot.
 
 Rotating AWS credentials never touches the encrypted repository. Rotating the
 restic password is a different operation entirely (`restic key`), and must never

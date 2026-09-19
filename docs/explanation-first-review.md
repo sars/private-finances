@@ -29,6 +29,7 @@ out of automatic question/classification workers while their owner reviews them.
 Receipt attachment remains available; auto classification cannot race that draft.
 
 UX references reviewed for this increment:
+
 - [NN/g: bottom sheets](https://www.nngroup.com/articles/bottom-sheet/) — overlays
   support short interactions rather than complex evidence review.
 - [shadcn Field](https://ui.shadcn.com/docs/components/base/field) — semantic grouped

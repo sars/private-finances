@@ -83,7 +83,6 @@ worker per bot/application database. The database serializes polling workers,
 but another application consuming the same bot's updates can still steal them.
 No real Telegram delivery has been tested by the synthetic test suite.
 
-
 ## Optional automatic delivery
 
 `TELEGRAM_AUTO_QUESTIONS=true` queues at most five new questions per owner per UTC
@@ -96,7 +95,6 @@ snapshots created after that explicit cutoff. This avoids sending an old backlog
 when first connecting the bot. Each snapshot is queued once; uncertain sends
 require operator review and are not blindly retried. Keep this unset until the
 private group and both owner identities are verified.
-
 
 ### Prompt questions for new payments
 
@@ -125,7 +123,6 @@ limits nor the shared $10 monthly budget.
 Invalid cutoff configuration stops startup. Unsetting the cutoff restores legacy
 current-month daily selection; do not use that as a silent rollback if older
 questions should remain in the app. Disable automatic questions to pause instead.
-
 
 Receipt setup verification: call getMe privately using the server-held token and
 check can_read_all_group_messages=true. Then send one receipt photo from each

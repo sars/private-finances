@@ -41,7 +41,7 @@ and the measurement undercut its premise. Of 587 outgoing money-transfer
 payments on production only about a third carry a counterparty IBAN, and a
 masked card number appears on 38 payments in a ledger of 4,064 — across 28
 distinct cards, 22 of which appear exactly once, because the number a bank
-prints is the *other* party's card and the other party is usually a stranger
+prints is the _other_ party's card and the other party is usually a stranger
 paid once.
 
 So the ordinary case is a bare name, and a name cannot be verified: the bank
@@ -167,7 +167,7 @@ column into an `owner` condition, merges identical cross-owner pairs, keeps
 disagreeing pairs as two owner-conditioned rules and reports the count, and
 retires — `active=false`, reason recorded — every exact-description rule whose
 only matching payment already carries that rule's decision. Merges into
-merchant-key rules are *not* applied by the migration; they are proposals shown
+merchant-key rules are _not_ applied by the migration; they are proposals shown
 once for bulk confirmation. Rule minting on confirmation
 (`saveRuleFromDescription` callers in `src/web.ts`, `src/reply-workflow.ts`,
 `src/payment-explanations.ts`) is removed and replaced by an explicit,

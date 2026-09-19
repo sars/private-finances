@@ -1,11 +1,14 @@
 [Unit]
-Description=Encrypted Private Finances database backup
+Description=Encrypted Private Finances backup: database and server configuration
 After=network-online.target postgresql.service
 
 [Service]
 Type=oneshot
-User=private-finances
-Group=private-finances
+# Runs as root. The configuration this backs up — bank keys, tokens, the
+# environment files — is exactly what no unprivileged process may read, so an
+# unprivileged backup could not save it. The database is still handled as the
+# service user: the script drops to it for pg_dump and psql, whose connection is
+# peer-authenticated. Nothing here writes outside its private /tmp and its cache.
 EnvironmentFile=/etc/private-finances/backup.env
 ExecStart=/bin/bash /opt/private-finances/current/scripts/backup.sh
 UMask=0077

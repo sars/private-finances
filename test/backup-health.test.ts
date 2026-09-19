@@ -228,3 +228,27 @@ test("the backup script's own INSERT parses and satisfies the constraints", asyn
     await db.close();
   }
 });
+
+test('a run that saved the money and lost the credentials says which half failed', async () => {
+  const db = await database();
+  try {
+    await recordBackupRun(db, {
+      destination: 'amazon-s3',
+      outcome: 'failed',
+      stage: 'config',
+      startedAt: hoursAgo(1),
+      finishedAt: hoursAgo(1),
+    });
+    const health = await backupHealth(db, now);
+    assert.equal(health.state, 'failing');
+    assert.equal(health.lastFailureStage, 'config');
+    // Not "Upload failed": the database reached the bucket and the server's
+    // configuration did not, and a rebuild would be missing every credential.
+    assert.match(
+      backupSummary(health).detail,
+      /^Server configuration upload failed/,
+    );
+  } finally {
+    await db.close();
+  }
+});

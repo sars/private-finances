@@ -54,20 +54,20 @@ asking. A payment a person has already classified or linked is never touched.
 
 The system links silently when the answer cannot be in doubt:
 
-| Situation | What happens |
-| --- | --- |
-| One candidate with the same original amount | Linked, no question |
-| Several, and exactly one also repeats the ledger amount exactly | Linked to that one, no question |
-| Exactly one candidate a whisker away — three minor units or one per cent | Linked to that one, no question |
-| A partial refund with several possible parents | Linked to the latest of them, no question |
-| Several candidates a whisker away | The closest in amount, and if that ties, the one nearest before the refund |
-| A partial refund with exactly one larger outstanding charge | Linked, no question |
-| A candidate already reduced by as much as it was charged | Not a candidate at all |
-| Several candidates nobody could tell apart | Linked to the nearest preceding one, no question |
-| Several candidates that differ | Question |
-| An amount that matches nothing exactly, including a cent adrift | Question |
-| Money from a person | Question |
-| Nothing plausible | Stays visible as unexplained incoming money |
+| Situation                                                                | What happens                                                               |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| One candidate with the same original amount                              | Linked, no question                                                        |
+| Several, and exactly one also repeats the ledger amount exactly          | Linked to that one, no question                                            |
+| Exactly one candidate a whisker away — three minor units or one per cent | Linked to that one, no question                                            |
+| A partial refund with several possible parents                           | Linked to the latest of them, no question                                  |
+| Several candidates a whisker away                                        | The closest in amount, and if that ties, the one nearest before the refund |
+| A partial refund with exactly one larger outstanding charge              | Linked, no question                                                        |
+| A candidate already reduced by as much as it was charged                 | Not a candidate at all                                                     |
+| Several candidates nobody could tell apart                               | Linked to the nearest preceding one, no question                           |
+| Several candidates that differ                                           | Question                                                                   |
+| An amount that matches nothing exactly, including a cent adrift          | Question                                                                   |
+| Money from a person                                                      | Question                                                                   |
+| Nothing plausible                                                        | Stays visible as unexplained incoming money                                |
 
 Among charges nobody could tell apart, the refund goes to the **nearest one
 before it**, not the oldest. The owner's ride receipts settled this: a ride

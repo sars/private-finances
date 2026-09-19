@@ -20,7 +20,7 @@ unresolved, and she was never told. On 17 September it happened again to three
 of her answers, and this time the cause was found: the worker offers every
 update to the refund questions, the receipts and the suggestion workflow before
 the clarification consumer, all inside the poller's one transaction, and the
-refund flow took the update number *before* checking whether the reply was to
+refund flow took the update number _before_ checking whether the reply was to
 one of its questions. Its row stayed when it declined the message, so the
 clarification consumer saw its own insert refused and treated the answer as a
 duplicate — a result nothing logged. The write-up is
@@ -50,7 +50,7 @@ not logged as a discarded reply either.
 
 The model step can fail too, and that used to be the last silent path: on
 17 September 2026 the owner answered the Facebook question twice with
-"business, for advertising", the model answered non-personal *with* a
+"business, for advertising", the model answered non-personal _with_ a
 category, the validator rejected the pair as invalid output, and the workflow
 row went `failed` with no log line and nothing in the chat. A category beside a
 non-personal kind is now dropped rather than refused — the kind is the

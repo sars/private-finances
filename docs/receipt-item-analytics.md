@@ -21,11 +21,11 @@ The model may translate or normalize a label while preserving the printed text.
 
 ## Preserve three distinct layers
 
-| Layer | Owns | Does not own |
-| --- | --- | --- |
-| Bank ledger | Provider record, monetary amount/currency, owner, date, booking state, revisions | OCR guesses or invented item prices |
-| Receipt evidence | Original image, extracted fields and lines, confidence, extraction versions, attachment history | Authoritative bank totals or automatic proof of spending eligibility |
-| Reporting allocation | Versioned assignment of an eligible payment's amount to categories/items, exact reconciliation, decision provenance | New bank transactions or edits to imported money |
+| Layer                | Owns                                                                                                                | Does not own                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Bank ledger          | Provider record, monetary amount/currency, owner, date, booking state, revisions                                    | OCR guesses or invented item prices                                  |
+| Receipt evidence     | Original image, extracted fields and lines, confidence, extraction versions, attachment history                     | Authoritative bank totals or automatic proof of spending eligibility |
+| Reporting allocation | Versioned assignment of an eligible payment's amount to categories/items, exact reconciliation, decision provenance | New bank transactions or edits to imported money                     |
 
 Preserve the provider history and existing human decisions. Store receipt changes
 as new evidence versions. Bank corrections invalidate stale proposals for review;

@@ -980,6 +980,26 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (60)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=61'))
+        .rows.length
+    ) {
+      // The backup carries the server's configuration as well as its data now,
+      // so a run can fail at a third place: the database export, the upload of
+      // that export, or the upload of the configuration. A run that saved the
+      // money and lost the credentials is not the same event as one that saved
+      // neither, and the operations page should be able to say which.
+      // PostgreSQL has no ALTER for a check's expression, so it is replaced;
+      // every existing row already satisfies the wider one.
+      await tx.query(
+        'ALTER TABLE backup_runs DROP CONSTRAINT IF EXISTS backup_runs_stage_check',
+      );
+      await tx.query(
+        `ALTER TABLE backup_runs ADD CONSTRAINT backup_runs_stage_check
+         CHECK(stage IN ('dump','upload','config'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (61)');
+    }
   });
 }
 

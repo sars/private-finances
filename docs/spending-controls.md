@@ -36,6 +36,7 @@ not enter personal spending. Runtime evidence and real bank descriptions remain
 on the server, outside Git and model prompts.
 
 Design references consulted:
+
 - [NN/g: dashboard hierarchy and linear comparisons](https://www.nngroup.com/articles/dashboards-preattentive/): favor legible amounts, bars and trends over decorative encodings.
 - [NN/g: filter behavior](https://www.nngroup.com/articles/applying-filters/): make filter scope and resulting data changes clear; preserve user context.
 - [PrivatBank/LiqPay archive documentation](https://www.liqpay.ua/en/doc/api/public/archive?tab=0): commercial buy/sell fields are distinct from NBU fields.

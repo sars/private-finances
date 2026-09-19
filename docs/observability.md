@@ -19,17 +19,17 @@ source watermarks: звіт можна пояснити після подаль�
 
 ## Екран /ops
 
-| Показник | Що означає |
-| --- | --- |
-| Останній успішний sync по owner/account/provider | Повнота; «не підключено» відрізняється від «застаріло» |
-| Queue depth / oldest job / heartbeat | Прогрес та зависання; запланована пауза окремо |
-| Imported / corrected / duplicate / failed | Якість імпорту |
-| Unresolved count та суми по валюті | Наскільки неповна аналітика |
-| Consent expiry / auth errors / rate limits | Потрібна дія власника або пауза connector |
-| LLM requests / cost / budget left | Вартість, поточний cap, невдалі виклики |
-| Last report / delivery state | Створення звіту окремо від доставки |
-| Release / last deploy / backup age / restore date | Стан експлуатації |
-| DB / disk / memory | Стан інфраструктури |
+| Показник                                          | Що означає                                             |
+| ------------------------------------------------- | ------------------------------------------------------ |
+| Останній успішний sync по owner/account/provider  | Повнота; «не підключено» відрізняється від «застаріло» |
+| Queue depth / oldest job / heartbeat              | Прогрес та зависання; запланована пауза окремо         |
+| Imported / corrected / duplicate / failed         | Якість імпорту                                         |
+| Unresolved count та суми по валюті                | Наскільки неповна аналітика                            |
+| Consent expiry / auth errors / rate limits        | Потрібна дія власника або пауза connector              |
+| LLM requests / cost / budget left                 | Вартість, поточний cap, невдалі виклики                |
+| Last report / delivery state                      | Створення звіту окремо від доставки                    |
+| Release / last deploy / backup age / restore date | Стан експлуатації                                      |
+| DB / disk / memory                                | Стан інфраструктури                                    |
 
 Liveness відповідає лише чи живий процес; readiness — чи може виконувати роботу;
 freshness — чи дані актуальні. Зелений HTTP status не доказ свіжих даних.

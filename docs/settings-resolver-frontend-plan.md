@@ -27,6 +27,7 @@ Family transfers must be confirmed, not inferred solely from a similar name.
 
 Rodion is the initial admin. Enforce permissions at the API, not just navigation.
 Admin settings manage household browsing defaults:
+
 - Hide business transactions: on.
 - Hide confirmed family/own-account transfers: on.
 - Hide credits linked to a purchase as a refund: on; the purchase itself always
@@ -62,6 +63,7 @@ operation, receipt evidence, owner explanations and matched transfer/refund link
 Keep raw private evidence server-side; send only relevant redacted features to AI.
 
 Resolution order:
+
 1. Preserve human decisions and confirmed refund/transfer links.
 2. Apply account defaults and explicit transaction exceptions.
 3. Evaluate scoped rules with required conditions and exclusions; detect conflicts.
@@ -95,11 +97,11 @@ not success. Compare in shadow mode before applying revised resolver decisions.
 
 Keep React + Vite + shadcn/ui + Tailwind + Recharts + Lucide.
 
-| Option | Benefit | Cost / limitation |
-|---|---|---|
-| TanStack Router + TanStack Query (recommended) | Typed/validated URL state; shared data caching and targeted invalidation; good fit for many financial filters | Two new focused dependencies; route/query conventions and incremental migration needed |
-| React Router Data mode + TanStack Query | Smooth client navigation and established routing APIs; similarly capable | More application conventions for typed/validated search state; avoid duplicate loader and query caches |
-| Next.js | Server/client rendering and integrated routing/navigation | Larger server/framework migration with little immediate benefit for this private dashboard; does not fix slow SQL |
+| Option                                         | Benefit                                                                                                       | Cost / limitation                                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| TanStack Router + TanStack Query (recommended) | Typed/validated URL state; shared data caching and targeted invalidation; good fit for many financial filters | Two new focused dependencies; route/query conventions and incremental migration needed                            |
+| React Router Data mode + TanStack Query        | Smooth client navigation and established routing APIs; similarly capable                                      | More application conventions for typed/validated search state; avoid duplicate loader and query caches            |
+| Next.js                                        | Server/client rendering and integrated routing/navigation                                                     | Larger server/framework migration with little immediate benefit for this private dashboard; does not fix slow SQL |
 
 Sources: [TanStack URL state](https://tanstack.com/router/latest/docs/guide/search-params),
 [Query defaults](https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults),
@@ -110,6 +112,7 @@ Sources: [TanStack URL state](https://tanstack.com/router/latest/docs/guide/sear
 Reviewed September 12, 2026. Pinned Router/Query are implemented in the deployed release; see STATUS for verification.
 
 Original code-confirmed causes addressed by this increment (not benchmark results):
+
 - main.tsx chooses a screen once and navigation uses ordinary document links.
 - Filter/detail URL changes use replaceState without popstate synchronization.
 - Review selectedId changes refetch bootstrap, categories and the entire list.

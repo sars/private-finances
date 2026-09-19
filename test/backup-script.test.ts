@@ -22,7 +22,10 @@ type Run = {
   recorded: string[];
   /** What psql was given on stdin, one entry per invocation. */
   sql: string[];
+  /** restic's argv, one entry per invocation. */
+  resticCalls: string[];
   uploaded: boolean;
+  configUploaded: boolean;
 };
 
 function runBackup(stubs: {
@@ -31,6 +34,8 @@ function runBackup(stubs: {
   resticExits?: number;
   resticOutput?: string;
   psqlExits?: number;
+  configExits?: number;
+  configPaths?: string;
 }): Run {
   const home = mkdtempSync(join(tmpdir(), 'pf-backup-'));
   const bin = join(home, 'bin');
@@ -38,6 +43,8 @@ function runBackup(stubs: {
   const log = join(home, 'psql.log');
   const sqlLog = join(home, 'psql-stdin.log');
   const uploaded = join(home, 'uploaded');
+  const configUploaded = join(home, 'config-uploaded');
+  const resticLog = join(home, 'restic.log');
   const stub = (name: string, body: string) => {
     const path = join(bin, name);
     writeFileSync(path, `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
@@ -51,15 +58,45 @@ for arg in "$@"; do case "$arg" in --file=*) target="\${arg#--file=}";; esac; do
 if [ "${stubs.dumpExits ?? 0}" != "0" ]; then echo 'connection refused' >&2; exit ${stubs.dumpExits ?? 0}; fi
 head -c ${dumpBytes} /dev/zero > "$target"`,
   );
+  // Two invocations per run now: the database as a stream, then the
+  // configuration as paths. Only the streaming one may read stdin — consuming
+  // it unconditionally would leave the second call waiting on the test's own.
   stub(
     'restic',
     `set -e
-cat > /dev/null
+printf '%s\\0' "$@" >> ${JSON.stringify(resticLog)}
+printf '\\n---\\n' >> ${JSON.stringify(resticLog)}
+for arg in "$@"; do
+  if [ "$arg" = --stdin ]; then cat > /dev/null; fi
+  if [ "$arg" = config ]; then part=config; fi
+done
+if [ "\${part:-database}" = config ]; then
+  if [ "${stubs.configExits ?? 0}" != "0" ]; then echo 'bucket denied' >&2; exit ${stubs.configExits ?? 0}; fi
+  touch ${JSON.stringify(configUploaded)}
+  echo '{"message_type":"summary","snapshot_id":"ab12cd34","total_bytes_processed":2048}'
+  exit 0
+fi
 if [ "${stubs.resticExits ?? 0}" != "0" ]; then echo 'bucket denied' >&2; exit ${stubs.resticExits ?? 0}; fi
 touch ${JSON.stringify(uploaded)}
 cat <<'JSON'
 ${stubs.resticOutput ?? '{"message_type":"status","percent_done":0.5}\n{"message_type":"summary","snapshot_id":"9f2c1ab4","total_bytes_processed":4096}'}
 JSON`,
+  );
+  // The script runs as root in production and drops to the service user for
+  // the two PostgreSQL calls. Under test there is no root and no such user, so
+  // `runuser -u <user> -- cmd …` becomes plain `cmd …`.
+  stub(
+    'runuser',
+    `while [ "$1" = -u ] || [ "$1" = -- ]; do
+  if [ "$1" = -u ]; then shift 2; else shift; fi
+done
+exec "$@"`,
+  );
+  // Real `install` would refuse to chown to a user that does not exist here.
+  stub(
+    'install',
+    `for last; do :; done
+mkdir -p "$last"`,
   );
   // Records argv *and* stdin. Only stdin proves the statement can actually run:
   // psql expands its `:'name'` placeholders when it reads a script and not when
@@ -81,6 +118,7 @@ exit ${stubs.psqlExits ?? 0}`,
       PGDATABASE: 'private_finances_test',
       RESTIC_REPOSITORY: 's3:example.invalid/bucket',
       RESTIC_PASSWORD_FILE: '/dev/null',
+      BACKUP_CONFIG_PATHS: stubs.configPaths ?? home,
     },
   });
   let recorded: string[] = [];
@@ -99,11 +137,21 @@ exit ${stubs.psqlExits ?? 0}`,
   } catch {
     sql = [];
   }
-  let wasUploaded = true;
+  const exists = (path: string) => {
+    try {
+      readFileSync(path);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let resticCalls: string[] = [];
   try {
-    readFileSync(uploaded);
+    resticCalls = readFileSync(resticLog, 'utf8')
+      .split('\n---\n')
+      .filter((entry) => entry.trim().length > 0);
   } catch {
-    wasUploaded = false;
+    resticCalls = [];
   }
   return {
     status: result.status ?? -1,
@@ -111,7 +159,9 @@ exit ${stubs.psqlExits ?? 0}`,
     stderr: result.stderr,
     recorded,
     sql,
-    uploaded: wasUploaded,
+    resticCalls,
+    uploaded: exists(uploaded),
+    configUploaded: exists(configUploaded),
   };
 }
 
@@ -204,6 +254,47 @@ test('an upload with no summary is still a backup, recorded without a snapshot i
   assert.equal(run.uploaded, true);
   assert.match(run.recorded[0]!, /outcome=succeeded/);
   assert.match(run.recorded[0]!, /snapshot=\x00/);
+});
+
+test('one run uploads the database and the server configuration', () => {
+  const run = runBackup({});
+  assert.equal(run.status, 0);
+  assert.equal(run.uploaded, true);
+  assert.equal(run.configUploaded, true);
+  assert.match(run.stdout, /"config":true/);
+  // One job, one credential, one repository — two snapshots, tagged apart so a
+  // restore can ask for the credentials without unpacking a database dump.
+  assert.equal(run.resticCalls.length, 2);
+  assert.match(run.resticCalls[0]!, /--tag\x00database/);
+  assert.match(run.resticCalls[0]!, /--stdin/);
+  assert.match(run.resticCalls[1]!, /--tag\x00config/);
+  assert.doesNotMatch(run.resticCalls[1]!, /--stdin/);
+});
+
+test('losing the configuration upload fails the run and names that stage', () => {
+  // The database is already in the bucket by this point. The run is still a
+  // failure — a rebuild would be missing every credential — but the stage says
+  // which half survived, which is the difference between re-approving the banks
+  // and having lost the money's history too.
+  const run = runBackup({ configExits: 1 });
+  assert.equal(run.status, 1);
+  assert.equal(run.uploaded, true);
+  assert.equal(run.configUploaded, false);
+  assert.match(run.stderr, /"event":"backup_failed","stage":"config"/);
+  assert.doesNotMatch(run.stderr, /bucket denied/);
+  assert.match(run.recorded[0]!, /outcome=failed/);
+  assert.match(run.recorded[0]!, /stage=config/);
+});
+
+test('a host with none of the configuration paths still backs the database up', () => {
+  const run = runBackup({ configPaths: '/nonexistent/one /nonexistent/two' });
+  assert.equal(run.status, 0);
+  assert.equal(run.uploaded, true);
+  assert.equal(run.configUploaded, false);
+  assert.equal(run.resticCalls.length, 1);
+  assert.match(run.stderr, /"event":"backup_config_absent"/);
+  assert.match(run.stdout, /"config":false/);
+  assert.match(run.recorded[0]!, /outcome=succeeded/);
 });
 
 test('a good backup that cannot be written down is still a good backup', () => {

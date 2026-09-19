@@ -19,7 +19,7 @@ import type { Executor } from './database.js';
  * order to know where to look.
  */
 export type BackupOutcome = 'succeeded' | 'failed';
-export type BackupStage = 'dump' | 'upload';
+export type BackupStage = 'dump' | 'upload' | 'config';
 
 /**
  * A backup is expected every day, so a successful one is late once a whole day
@@ -36,7 +36,7 @@ export async function initializeBackupHealth(tx: Executor): Promise<void> {
       id uuid PRIMARY KEY,
       destination text NOT NULL CHECK(destination ~ '^[a-z][a-z0-9-]{0,39}$'),
       outcome text NOT NULL CHECK(outcome IN ('succeeded','failed')),
-      stage text CHECK(stage IN ('dump','upload')),
+      stage text CHECK(stage IN ('dump','upload','config')),
       started_at timestamptz NOT NULL,
       finished_at timestamptz NOT NULL DEFAULT now(),
       snapshot_id text CHECK(snapshot_id ~ '^[0-9a-f]{8,64}$'),
@@ -152,6 +152,17 @@ function backupAge(hours: number): string {
 const DESTINATIONS: Record<string, string> = { 'amazon-s3': 'Amazon S3' };
 
 /**
+ * What the owner is told died. A run that saved the database and lost the
+ * server's configuration is a different event from one that saved neither, and
+ * the difference decides what a rebuild would still have to be done by hand.
+ */
+const STAGE_LABELS: Record<BackupStage, string> = {
+  dump: 'Database export',
+  upload: 'Upload',
+  config: 'Server configuration upload',
+};
+
+/**
  * The two lines the operations page shows, in one place so that the React page
  * and the no-JavaScript shell cannot drift into saying different things about
  * the same state. Formatting of the instant is left to the caller, which knows
@@ -169,7 +180,7 @@ export function backupSummary(
     return {
       headline: 'Failed',
       detail: [
-        `${backup.lastFailureStage === 'dump' ? 'Database export' : 'Upload'} failed`,
+        `${STAGE_LABELS[backup.lastFailureStage ?? 'upload']} failed`,
         backup.consecutiveFailures > 1
           ? `${backup.consecutiveFailures} runs`
           : null,

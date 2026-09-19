@@ -27,8 +27,7 @@ contradiction, account-purpose, direction and human-decision protections remain.
 Other supported consumer decisions retain their previous confidence requirements.
 
 The policy also rejects model-only Transport interpretations of software-store
-MCC 5734 and specific AI/code-tool interpretations of generic digital-goods MCC
-5818. MCC 8398 gains a charity label, but does not independently authorize a
+MCC 5734 and specific AI/code-tool interpretations of generic digital-goods MCC 5818. MCC 8398 gains a charity label, but does not independently authorize a
 donation classification. Owner-confirmed rules can resolve these contexts.
 
 Ready proposals are reconsidered once per policy version without another paid

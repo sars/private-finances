@@ -64,7 +64,6 @@ Do not enable automatic application while old importer releases that lack this
 invalidation are running. Existing generic Other suggestions are not automatically
 applied. A targeted, audited retriage may be needed after adding a missing category.
 
-
 ## Evidence policy version 2
 
 The worker applies one generic confidence policy across merchants; no named

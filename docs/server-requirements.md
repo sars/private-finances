@@ -43,8 +43,9 @@ but the household loses its only off-server copy, which System health states
 rather than hides. Every other entry is required for the service to run.
 
 Install restic, if a rebuilt host lacks it, with `sudo apt-get install restic`.
-Ubuntu 24.04 ships 0.16.4, which is sufficient; the backup script calls it
-through `restic backup --stdin`, never a shell.
+Ubuntu 24.04 ships 0.16.4, which is sufficient. The backup script invokes it
+twice per run — once streaming the database dump on stdin, once with the
+configuration paths — and never through a shell.
 
 Two PostgreSQL capabilities became load-bearing at schema version 25, both part
 of a stock server rather than extensions to install. The category tree enforces
@@ -78,19 +79,15 @@ Banking PEM keys, Monobank tokens, the OpenAI API key and the Telegram bot token
 None of these belong in Git, an artifact, a log or a model prompt; this file
 deliberately lists only their names.
 
-Two backup files need their ownership stated, because it is not the usual
-root-only pattern and a rebuilt host that copies the pattern blindly gets a
-backup that cannot run:
+Both backup files are root-only, and a rebuilt host should keep them that way:
 
 - `backup.env` is `root:root` mode `600`. systemd reads it as root and injects
   it into `private-finances-backup.service` alone, which is how the AWS keys
   inside it stay unreadable by every other process.
 - the restic repository password lives in its own file, named by
-  `RESTIC_PASSWORD_FILE`, owned `private-finances:private-finances` mode `400`.
-  The service runs as that user and must be able to read it. The containing
-  directory is `root:private-finances` mode `0750`, so nothing else can traverse
-  to it, and the password alone opens nothing: reaching the bucket also needs
-  the AWS keys, which never leave root.
+  `RESTIC_PASSWORD_FILE`, owned `root:root` mode `600`. The backup service runs
+  as root, so nothing unprivileged needs to read it — in particular the web
+  application's user cannot.
 
 `backup.env` contains no database password. The connection is peer-authenticated
 over the unix socket, so the operating-system user is the credential and there is
@@ -115,10 +112,20 @@ minutes of randomised delay). `private-finances-local-backup` is installed but
 not enabled.
 
 `private-finances-backup.service` is the only unit that reads `backup.env`, and
-it runs as `private-finances` under `ProtectSystem=strict`, `ProtectHome=true`,
-`PrivateTmp=true` and `NoNewPrivileges=true`, with `CacheDirectory=` giving
-restic `/var/cache/private-finances-restic`. It needs that cache directory, a
-writable private `/tmp` for the dump, and nothing else on disk.
+the only one that **runs as root** — deliberately, because it backs up the
+server's configuration as well as its database, and that configuration is
+precisely what no unprivileged process may read. It only ever reads: it runs
+under `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true` and
+`NoNewPrivileges=true`, with `CacheDirectory=` giving restic
+`/var/cache/private-finances-restic`, and needs that cache directory, a writable
+private `/tmp` for the dump, and nothing else. It drops to `private-finances`
+with `runuser` for `pg_dump` and `psql`, so the database is never touched as
+root; `runuser` (util-linux) preserves the `PG*` environment, which peer
+authentication depends on.
+
+It also requires `runuser`, which is part of `util-linux` and present on any
+Ubuntu host, and `python3`, already required above, to read restic's JSON
+summary.
 
 ## Known deviations
 
