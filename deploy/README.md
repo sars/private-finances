@@ -24,9 +24,10 @@ roughly a day of headroom left:
 
 | What | Where | Rule | Applied by |
 | --- | --- | --- | --- |
-| Release tree, ~520 MB | `/opt/private-finances/releases/<sha>` | the newest five, plus the live one whatever its age | `switch-release.py` |
+| Release tree, ~520 MB | `/opt/private-finances/releases/<sha>` | newest ten by modification time, plus the live one whatever its age | `switch-release.py`, using `release_retention.py`'s rule |
 | Pre-deployment dump | `/var/lib/private-finances/predeploy` | newest fourteen plus one a day for fourteen days | `switch-release.py`, using `local-backup.py`'s rule |
 | Build tree and archive | `/tmp/pf-build-<short>`, `/tmp/pf-<short>.tar.gz` | removed on every exit, success or failure | `release.sh`'s `cleanup_on_exit` trap |
+| Rehearsal dump and its restored database | `/tmp/pf-rehearsal.dump`, `private_finances_migration_check` | removed on every exit once the rehearsal has been reached | `release.sh`'s `cleanup_on_exit` trap |
 
 A release tree is a build artefact and not a record: any commit can be rebuilt
 from Git, so an old tree only buys a rollback that skips a build, and a rollback
@@ -37,10 +38,16 @@ described under "Open browser tabs across releases" below.
 
 Both prunes run only after a switch has succeeded, and a prune that fails is
 reported as `release_prune_failed` or `predeploy_prune_failed` rather than
-failing a deployment that has already worked. What was left in place before
-these rules existed: 136 release trees at 45 GB, and 21 abandoned build trees at
-5.8 GB, because the build cleanup was the script's last step and only a release
-that reached the end ever ran it.
+failing a deployment that has already worked.
+
+The two `/tmp` rules exist because their cleanup used to be written as the last
+step of a happy path, so only a run that reached the end performed it: 21
+abandoned build trees at 5.8 GB had collected that way. The rehearsal's dump and
+its restored database matter beyond the disk — both are full copies of the
+household's data, and a rehearsal that failed partway left them in place. The
+database is dropped only once the rehearsal has actually been reached, so an
+early failure cannot pull it out from under a release running concurrently in
+another session.
 
 The operations page shows how much room is left, so the next time this matters
 nobody has to open an SSH session to find out.

@@ -12,13 +12,7 @@ import time
 import urllib.request
 from runpy import run_path
 from frontend_assets import retain_frontend_assets
-
-RELEASES = Path('/opt/private-finances/releases')
-
-# How many release trees survive a switch. Each is a complete copy of the
-# application including node_modules, about 520 MB, so the number is a direct
-# multiplier on disk: five is 2.6 GB.
-KEEP_RELEASES = 5
+from release_retention import expired_releases
 
 
 def prune_predeploy(directory):
@@ -47,47 +41,6 @@ def prune_predeploy(directory):
     for old in expired(Path(directory)):
         old.unlink()
         removed += 1
-    return removed
-
-
-def prune_releases(directory, live):
-    """Drop the release trees no rollback can still reach.
-
-    Nothing removed them until now. By 19 September 2026 there were 136 trees
-    under /opt/private-finances/releases, 45 GB — 92% of a 96 GB disk shared
-    with other applications, and still growing by roughly 9 GB a day at this
-    project's release rate of between eight and twenty-three deployments daily.
-    A disk that fills stops the database, so this is not housekeeping.
-
-    A release tree is a build artefact and not a record. Every commit can be
-    rebuilt from Git, so the only thing an old tree buys is a rollback that
-    skips a build, and `main` here rolls back exactly one release. The
-    fingerprinted frontend assets an older client may still ask for are
-    retained separately by `retain_frontend_assets`, which copies them forward
-    into the live tree rather than depending on the old one surviving. Five
-    trees is therefore already generous depth rather than a considered number.
-
-    Ordering is by `st_ctime_ns`, not `st_mtime`: the tree arrives via `cp -a`,
-    which preserves the build directory's modification time, while the inode's
-    change time is set by the copy and the `chown -R` that follows it and so
-    always reflects when this server received the release.
-
-    The live tree is kept whatever its age, which matters when a rollback has
-    made an older release current again. Anything that is not a 40-character
-    SHA directory is left alone entirely.
-    """
-    trees = [
-        path
-        for path in directory.iterdir()
-        if path.is_dir() and not path.is_symlink() and re.fullmatch('[a-f0-9]{40}', path.name)
-    ]
-    trees.sort(key=lambda path: path.stat().st_ctime_ns, reverse=True)
-    keep = set(trees[:KEEP_RELEASES]) | {live}
-    removed = 0
-    for tree in trees:
-        if tree not in keep:
-            shutil.rmtree(tree)
-            removed += 1
     return removed
 
 
@@ -125,7 +78,7 @@ def main():
     sha = sys.argv[1]
     if not re.fullmatch('[a-f0-9]{40}', sha):
         raise RuntimeError('invalid_sha')
-    release = RELEASES / sha
+    release = Path('/opt/private-finances/releases') / sha
     if not (release / 'dist/src/main.js').is_file() or release.stat().st_uid != 0:
         raise RuntimeError('verified_root_owned_release_required')
     with open('/var/lib/private-finances/deploy.lock', 'a') as lock:
@@ -163,12 +116,18 @@ def main():
             print(json.dumps({'event': 'predeploy_pruned', 'removed': removed}))
         except Exception:
             print('{"event":"predeploy_prune_failed"}', file=sys.stderr)
-        # Same contract as the dumps above: only after a switch has succeeded,
-        # and a prune that fails is reported rather than allowed to fail a
-        # deployment that has already worked.
+        # Both the release now serving and the one it replaced are among the
+        # newest by modification time and survive on that alone, but a rollback
+        # and the retained frontend assets both depend on the previous release
+        # still existing, so it is skipped by name rather than by arithmetic.
         try:
-            removed = prune_releases(RELEASES, release)
-            print(json.dumps({'event': 'releases_pruned', 'removed': removed}))
+            gone = 0
+            for old_release in expired_releases(release.parent, release):
+                if old_release == current:
+                    continue
+                shutil.rmtree(old_release)
+                gone += 1
+            print(json.dumps({'event': 'releases_pruned', 'removed': gone}))
         except Exception:
             print('{"event":"release_prune_failed"}', file=sys.stderr)
 

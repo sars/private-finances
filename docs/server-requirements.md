@@ -63,10 +63,28 @@ directly through `execFile` with an argument array, never a shell.
 
 ## Filesystem layout
 
-- `/opt/private-finances/releases/<commit sha>` — immutable built releases, root owned.
+- `/opt/private-finances/releases/<commit sha>` — immutable built releases, root
+  owned. Each is a complete tree with its own `node_modules`, about 518 MB.
 - `/opt/private-finances/current` — symlink to the active release, switched atomically.
 - `/var/lib/private-finances/predeploy/` — automatic `pg_dump` taken before every switch.
 - `/etc/private-finances/` — root-owned configuration, mode 600.
+
+**Both growing directories are now bounded, and both were not.** On 19 September
+2026 the releases directory held 136 trees and 45 GB and the predeploy directory
+138 dumps and 442 MB, on a root filesystem 92% full and shared with other
+applications; at about seventeen releases a day that is roughly 8.8 GB a day
+against 7.9 GB free, so it had well under a day left. `deploy/switch-release.py`
+now prunes both after a switch has succeeded — the newest ten releases plus
+whatever `current` points at, and the backup rule of fourteen recent dumps plus
+one per day for fourteen days. A failed release prunes nothing, and a prune that
+fails is reported without failing a deployment that already worked.
+
+Neither rule will ever remove a name it does not recognise: releases must match a
+40-character commit SHA, dumps must begin with a digit. The predeploy directory
+also holds six deliberately named milestones — `initial-empty`,
+`schema-v3-empty`, `before-monobank-pilot`, `before-enablebanking-pilot`,
+`pilot-records-verified`, `verified-live-dataset` — which a plain "keep the
+newest N" rule would have destroyed.
 
 ## Configuration and credentials
 

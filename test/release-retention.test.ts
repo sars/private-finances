@@ -1,84 +1,68 @@
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 
-// `deploy/switch-release.py` is the only thing that ever removes a release
-// tree, and it runs as root on the server against a directory that holds the
-// running application. The rule it applies is asserted here rather than read,
-// because getting it wrong deletes either the disk's headroom or the release
-// currently serving the household.
-const prune = (body: string) =>
+/**
+ * Built releases are the largest thing this deployment leaves behind — an
+ * unpacked tree with its own `node_modules`, around half a gigabyte each, one
+ * per release and several releases a day. Nothing removed any until now, and by
+ * 19 September 2026 there were 136 of them holding 45 GB on a root filesystem
+ * 92% full and shared with other applications, with under a day of headroom.
+ *
+ * The rule has to be dull and it has to be safe, so what is asserted here is
+ * mostly what it refuses to delete.
+ */
+test('release retention keeps the newest ten and never the one being served', () => {
   execFileSync('python3', [
     '-c',
     `
-import runpy, sys, tempfile, time
+import os, sys, tempfile
 from pathlib import Path
 sys.path.insert(0, 'deploy')
-switch = runpy.run_path('deploy/switch-release.py')
-prune_releases = switch['prune_releases']
-KEEP = switch['KEEP_RELEASES']
+from release_retention import expired_releases
 
-def tree(folder, name):
-    # One directory per release, created in call order so that the change time
-    # the rule sorts by increases with each one. The sleep is what makes that
-    # ordering a fact rather than a race.
-    path = folder / name
-    path.mkdir()
-    (path / 'dist').mkdir()
-    time.sleep(0.002)
-    return path
+with tempfile.TemporaryDirectory() as d:
+    folder = Path(d)
+    shas = ['%040x' % n for n in range(30)]
+    for index, sha in enumerate(shas):
+        release = folder / sha
+        release.mkdir()
+        os.utime(release, (1_700_000_000 + index, 1_700_000_000 + index))
 
-${body}
+    newest = folder / shas[-1]
+    expired = expired_releases(folder, newest)
+    remaining = [p for p in folder.iterdir() if p not in set(expired)]
+    assert len(remaining) == 10, len(remaining)
+    # The ten newest by modification time, and nothing older.
+    assert set(remaining) == {folder / s for s in shas[-10:]}, sorted(p.name for p in remaining)
+
+    # The release being served is kept even when it is the oldest thing there,
+    # which is what a rollback to an old commit leaves behind.
+    oldest = folder / shas[0]
+    expired = expired_releases(folder, oldest)
+    assert oldest not in expired
+    remaining = [p for p in folder.iterdir() if p not in set(expired)]
+    assert len(remaining) == 11, len(remaining)
+
+    # Anything that is not a commit SHA was put there by a person.
+    keepsake = folder / 'known-good'
+    keepsake.mkdir()
+    (folder / 'notes.txt').write_text('x')
+    expired = expired_releases(folder, newest)
+    assert keepsake not in expired
+    assert all(p.name not in ('known-good', 'notes.txt') for p in expired)
+
+    # A symlink is never followed and never removed.
+    link = folder / ('%040x' % 999)
+    link.symlink_to(folder / shas[0])
+    assert link not in expired_releases(folder, newest)
+
+    # Keeping nothing is a bug, not a configuration.
+    try:
+        expired_releases(folder, newest, keep=0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('keep=0 should be refused')
 `,
   ]);
-
-test('a switch keeps a bounded number of release trees', () => {
-  prune(`
-with tempfile.TemporaryDirectory() as d:
-    folder = Path(d)
-    trees = [tree(folder, '%040x' % n) for n in range(1, 13)]
-    live = trees[-1]
-    removed = prune_releases(folder, live)
-    remaining = sorted(p.name for p in folder.iterdir())
-    assert removed == 12 - KEEP, removed
-    assert remaining == sorted(p.name for p in trees[-KEEP:]), remaining
-    assert live.is_dir()
-`);
-});
-
-test('the live release survives however old it is', () => {
-  // The case that matters after a rollback: `current` points at an older tree
-  // while newer ones sit beside it. Deleting it would take the running
-  // application's own files out from under it.
-  prune(`
-with tempfile.TemporaryDirectory() as d:
-    folder = Path(d)
-    trees = [tree(folder, '%040x' % n) for n in range(1, 13)]
-    live = trees[0]
-    prune_releases(folder, live)
-    assert live.is_dir(), 'the live release was removed'
-    assert (live / 'dist').is_dir(), 'the live release was emptied'
-    # It is kept in addition to the newest KEEP, not instead of one of them.
-    assert len(list(folder.iterdir())) == KEEP + 1
-`);
-});
-
-test('nothing that is not a release tree is touched', () => {
-  // The directory is not guaranteed to hold only releases: an operator may
-  // have left a note or a partial copy beside them, and a rule that removed
-  // whatever it did not recognise would be a worse failure than a full disk.
-  prune(`
-with tempfile.TemporaryDirectory() as d:
-    folder = Path(d)
-    trees = [tree(folder, '%040x' % n) for n in range(1, 13)]
-    stray = [folder / 'README', folder / 'main.dump']
-    for path in stray:
-        path.write_text('kept')
-    (folder / 'backup-of-a4e5b17').mkdir()
-    (folder / ('%040X' % 99)).mkdir()
-    prune_releases(folder, trees[-1])
-    for path in stray:
-        assert path.is_file(), path
-    assert (folder / 'backup-of-a4e5b17').is_dir()
-    assert (folder / ('%040X' % 99)).is_dir(), 'uppercase is not the sha format we write'
-`);
 });

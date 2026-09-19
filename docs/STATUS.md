@@ -9,12 +9,21 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**aa398fdc414eecdf06f357500a8fed6a5af5a923**, live since September 19, 2026 at
+**6dbefae121394e9b86d70fecb9635dcf4643da08**, live since September 19, 2026 at
 schema version 61, deployed with `deploy/release.sh`: both services active,
-schema 61, 4,189 transactions, all seven import timers armed afterwards. It
-carries PR #100 and adds no migration.
+schema 61, 4,189 transactions, the import timers and the Telegram worker
+resumed afterwards. Every gate passed on the first attempt — 650 application
+tests on the server, and a rehearsal on a restored copy that reached schema 61
+in 25 milliseconds with 4,189 transactions, 141 active refund links, no expense
+without a category and nothing filed on a heading. It carries PR #104 and PR
+#102 and adds no migration.
 
-It is the last of four releases that afternoon. `7d8642d9` (PR #95) added the
+It replaced `babc698c` (PR #101), the retention rule for pre-deployment dumps,
+which this section had not named: that release went out earlier the same day
+and the record here still said `aa398fdc`. The rule worked on its first real
+occasion — the switch reported `predeploy_pruned` with one dump removed.
+
+Before those, four releases that afternoon. `7d8642d9` (PR #95) added the
 import-run record and migration 60; `47fdec7d` (PR #96) added migration 61 and
 the configuration backup; `6e200f74` (PR #98) was a one-line fix to the backup
 script; `bcd5d0dc` (PR #97) and `aa398fdc` (PR #100) are three corrections to
@@ -896,50 +905,77 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
-# Nothing was deleting the releases — September 19, 2026
+# The rest of what a release left on the disk — September 19, 2026
 
 The owner asked where the server's disk had gone. It was 92% full: 88 GB of 96,
-with 7.9 GB left. Forty-five of those gigabytes were this project's own release
-directory — 136 trees, one per deployment since 11 September, each a complete
-copy of the application at about 520 MB, of which 465 MB is `node_modules`.
-Nothing had ever removed one. At eight to twenty-three deployments a day that
-was roughly 9 GB a day, so the disk had about a day of headroom left, and a full
-disk stops PostgreSQL.
+with 7.9 GB left and, at eight to twenty-three deployments a day, well under a
+day of headroom. Forty-five gigabytes were unpruned release trees, which is the
+subject of the entry below and was already fixed in `release_retention.py` by
+the time this looked. What follows is everything else the same investigation
+turned up, all of it the same mistake in a different place: a cleanup written as
+the last step of a happy path, so only a run that reached the end performed it.
 
-A release tree is a build artefact, not a record — every commit can be rebuilt
-from Git — so the only thing an old one buys is a rollback that skips a build,
-and a rollback goes back one release. `switch-release.py` now keeps the newest
-five plus the live one whatever its age, beside the pre-deployment dump pruning
-it already did, and reports `releases_pruned`. The live tree is kept explicitly
-because after a rollback `current` points at an older one, and the frontend
-assets an already-open tab may still ask for are copied forward into the live
-tree rather than depending on the old one surviving.
+`/tmp` held 5.8 GB in twenty-one abandoned build trees. `release.sh` did remove
+its build directory — as its final line. The trap that restores paused imports
+is now installed before the first remote command instead of halfway down, and is
+the single exit path for every outcome: it removes the build tree, the archive,
+the migration rehearsal's dump and the rehearsal's restored database. That dump
+and that database are full copies of the household's data, which is the first
+reason to remove them and the disk second. The database is dropped only when the
+rehearsal was actually reached, so an early failure cannot pull it out from
+under a release running concurrently in another session.
 
-A second 5.8 GB sat in `/tmp` as twenty-one abandoned build trees. `release.sh`
-did remove its build directory — as its final step, so only a release that
-reached the end ever ran it. The trap that restores paused imports is now
-installed before the first remote command instead of halfway down, and cleans
-the build tree, the archive and the migration rehearsal's dump on every exit.
-That rehearsal dump is a full copy of the household's database and its removal
-had sat inside the rehearsal's own `set -e` block, so a failed rehearsal left it
-in `/tmp`; it is cleaned for that reason first and the disk second.
+Two test files created temporary directories and never removed them — 91
+directories, about 2 MB. Trivial in bytes, but those tests run on the server
+during every deployment, so the count only grows. `backup-script` removes its
+sandbox once it has read everything out of it, and the three scheduler tests in
+`import-runs` use `t.after`, which also runs when an assertion fails, which is
+precisely the run that leaves litter behind.
 
-Two test files created temporary directories and never removed them. Tiny — 91
-directories, about 2 MB — but those tests run on the server during every
-deployment, so the count only grows. `backup-script` removes its sandbox once it
-has read everything out of it, and the three scheduler tests in `import-runs`
-use `t.after`, which also runs when an assertion fails, which is the run that
-leaves litter behind.
+None of this was visible anywhere but an SSH session. The operations page has a
+fourth card now beside the database, the release and the backup: the percentage
+of the disk in use, and how many gigabytes are free of how many. It is judged by
+absolute free space rather than by the percentage, because the question being
+asked is whether the next stretch of releases and dumps will fit, and that is an
+absolute quantity — under 15 GB is tight, under 5 GB is critical. The row goes
+to four columns so the fourth card does not sit alone under the other three.
 
-None of that was visible anywhere but an SSH session, so the operations page has
-a fourth card beside the database, the release and the backup: the percentage
-used, and how many gigabytes are free of how many. It is judged by absolute free
-space rather than by the percentage, because what is being asked is whether the
-next stretch of releases and dumps will fit — under 15 GB is tight, under 5 GB
-is critical.
+The owner cleared the backlog by hand while this was being written, taking the
+disk from 92% to 50%. The rules are what stop it returning.
 
-The owner cleared the backlog by hand while this was being written, which took
-the disk from 92% to 50%. The rules above are what stop it returning.
+# Amounts stopped falling off the phone — September 19, 2026
+
+The owner opened Spending analytics on a phone, chose **This month**, and found
+that the card "What made the heaviest … heavy" ran its content past the right
+edge and could not be read in full. Nothing about it looked broken on a desktop,
+and nothing looked broken on the phone either until you noticed which half was
+missing: the amounts, the loudest thing on every row, sat outside the card.
+
+The page does not scroll sideways — the design forbids it, and the shell holds
+to that — so the overflow had nowhere to show itself. The card simply clipped
+what would not fit, which is why this survived every screenshot taken of the
+screen. Measured in a browser at 390 px with long category names and five-figure
+sums, the card's content was 462 px wide inside a 358 px card: 104 px of it
+unreachable, while the page's own `scrollWidth` stayed at exactly 390 and
+reported nothing wrong.
+
+The cause is a rule of CSS grid rather than a missing width. Each period panel
+is a grid item, and a grid item's automatic minimum width is its content's
+min-content width; the rows inside pin their amount with `shrink-0`, so that
+minimum was the full width of `+12 345,67 UAH over usual` plus a category name.
+The track grew past the card instead of the text giving way. The panels take
+`min-w-0` now, so the text gives way instead: names truncate with a title,
+amounts stay on one line, and the period's own name wraps rather than
+truncating — a `title` tooltip is not reachable on a phone, and that label is
+the row's identity.
+
+Two things worth keeping from how it was found. The defect is invisible in the
+source and invisible in the demo data, which is small enough that every row
+happens to fit; it appears only when a real household's names and sums are put
+through the real layout, so it was reproduced against a running app and measured
+rather than reasoned about. And the measurement is the test: content width equal
+to card width, and no element outside the card's content box, which is now true
+where it was 462 against 358 before.
 
 # The backup now saves the credentials too — September 19, 2026
 
