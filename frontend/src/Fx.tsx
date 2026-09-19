@@ -33,23 +33,33 @@ const monthFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 });
 const day = (date: string) => dayFormat.format(new Date(`${date}T00:00:00Z`));
-const short = new Intl.ListFormat('en-GB', {
+/** "UAH, EUR or USD" — the currencies a payment could not be priced in. */
+const orList = new Intl.ListFormat('en-GB', {
   style: 'long',
-  type: 'conjunction',
+  type: 'disjunction',
 });
 
-/** The four things a calendar day can be, what each means, and what to do. */
+/** The five things a calendar day can be, what each means, and what to do. */
 const states: Record<
   FxDayState,
   { name: string; tone: string; meaning: string }
 > = {
-  // Only one of these is a fault. A day nobody published is a closed fact and a
-  // day with no payment on it needs nothing, so both stay quiet; a day the sync
-  // has not reached is amber, because it is the one the owner can act on.
+  // Two of these are faults, and they are different faults. A day the sync has
+  // not reached is amber: the rate exists somewhere and a run would fetch it.
+  // A day holding a payment nothing could price is red: the rate does not
+  // exist, and the payment is listed above. The other two are quiet, because a
+  // day nobody published is a closed fact and a day with no payment on it needs
+  // nothing at all.
   covered: {
     name: 'Covered',
     tone: 'bg-primary',
-    meaning: 'a rate is stored for this day',
+    meaning: 'everything paid that day could be priced',
+  },
+  incomplete: {
+    name: 'Payment unpriced',
+    tone: 'bg-negative',
+    meaning:
+      'a rate is stored, but not one that could price everything paid that day',
   },
   empty_at_source: {
     name: 'Empty at source',
@@ -135,6 +145,8 @@ function DayDetail({ entry }: { entry: FxDay }) {
         {states[entry.state].meaning}
         {entry.state === 'not_fetched' &&
           '. It fills on the next nightly run — if it stays, that run is failing.'}
+        {entry.state === 'incomplete' &&
+          '. The payment is listed above, with the currencies it cannot reach.'}
       </p>
     </div>
   );
@@ -331,7 +343,7 @@ export default function Fx() {
   // showing: the failure is the point, not the current view.
   const shortfall = (status?.conversions.currencies ?? [])
     .filter((entry) => entry.missing > 0)
-    .map((entry) => `an ${entry.currency} amount`);
+    .map((entry) => entry.currency);
   return (
     <div className="space-y-5">
       <PageHeader
@@ -358,7 +370,7 @@ export default function Fx() {
               >
                 {everything
                   ? `All ${tally(status.conversions.total)} transactions convert to every currency`
-                  : `${tally(status.conversions.missing)} of ${tally(status.conversions.total)} transactions are missing ${short.format(shortfall)}`}
+                  : `${tally(status.conversions.missing)} of ${tally(status.conversions.total)} transactions have no ${orList.format(shortfall)} amount`}
               </p>
               <CurrencyTable
                 currencies={status.conversions.currencies}
@@ -445,7 +457,8 @@ export default function Fx() {
                 )}{' '}
                 <span className="text-muted-foreground tabular-nums">
                   · {tally(status.rates.covered)} of{' '}
-                  {tally(status.rates.needed)} days that need a rate have one
+                  {tally(status.rates.needed)} days priced everything paid on
+                  them
                 </span>
               </p>
               {status.rates.sources.length > 0 && (

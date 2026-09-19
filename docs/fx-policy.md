@@ -143,11 +143,28 @@ GET https://minfin.com.ua/api/currency/rates/banks/eur/?page=1&cpp=100&date=2025
   {"data":[{"slug":"privatbank","cash":{...},"card":{"date":"2025-10-26T21:41:28+02:00","bid":"48.52","ask":"49.2611"}}, …]}
 ```
 
-Free, unauthenticated, and dated back to 2006. `api.minfin.com.ua`, the
-advertised product, needs a paid key; this is the endpoint the site's own page
-calls, so it is an internal interface rather than a published contract and could
-change without notice. It is read at most a handful of times a year, only for
-days the primary source left empty.
+Free, unauthenticated, and dated back to 2006.
+
+**This is an internal endpoint, not a published API.** `api.minfin.com.ua` is
+the advertised product and needs a paid key; the URL above is what Minfin's own
+rates page calls to draw itself. Nothing obliges them to keep it, and no
+deprecation notice will arrive, so it should be treated as something that can
+stop working on any given day rather than as a contract. Three things keep that
+survivable:
+
+- It is read at most a handful of times a year, only for days the primary source
+  left empty, so the failure is rare by construction.
+- A response that is not the expected envelope — a different shape, a bank quoted
+  twice, a rate that is not a decimal, a sell below a buy — raises
+  `invalid_response`. The day is reported unavailable rather than stored from a
+  guess, and no absence is recorded for it, so the next run asks again.
+- The day stays visible as missing on the conversion status page, with its
+  payments listed. A source quietly disappearing shows up as an unconverted
+  payment, never as a silently wrong total.
+
+If it does go, the options are the paid key, a different aggregator, or leaving
+the handful of affected days unconverted — which the application already handles
+as its standing rule. Nothing about the primary source depends on it.
 
 Four banks count, and no others: **monobank, privatbank, sensebank** (Sens Bank,
 formerly Alfa-Bank) **and a-bank**. Their **card** rates are used, because the

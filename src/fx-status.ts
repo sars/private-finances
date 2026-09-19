@@ -200,7 +200,15 @@ export async function fxConversionStatus(
   // definitions identical is what stops the page reporting a gap the sync was
   // never going to fill.
   const needed = new Set([...dates, today]);
-  const days = await fxCoverage(repo.db, from, to, needed);
+  // Days holding a payment nothing could price. A day can have rates stored and
+  // still be one of these, so the strip has to be told rather than infer it
+  // from the presence of a quote.
+  const unpriced = new Set(
+    missingRows.map(({ row }) =>
+      new Date(row.bookedAt).toISOString().slice(0, 10),
+    ),
+  );
+  const days = await fxCoverage(repo.db, from, to, needed, unpriced);
   const current =
     [...days].reverse().find((day) => day.state === 'covered')?.date ?? null;
   const sources = (
@@ -227,6 +235,9 @@ export async function fxConversionStatus(
       from,
       to,
       days,
+      // A day counts as covered only when everything paid on it could be
+      // priced, so this figure and the conversion counts above can never
+      // disagree about the same ledger.
       covered: days.filter((day) => day.state === 'covered').length,
       needed: days.filter((day) => day.state !== 'not_needed').length,
       current,
