@@ -896,6 +896,51 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# Nothing was deleting the releases — September 19, 2026
+
+The owner asked where the server's disk had gone. It was 92% full: 88 GB of 96,
+with 7.9 GB left. Forty-five of those gigabytes were this project's own release
+directory — 136 trees, one per deployment since 11 September, each a complete
+copy of the application at about 520 MB, of which 465 MB is `node_modules`.
+Nothing had ever removed one. At eight to twenty-three deployments a day that
+was roughly 9 GB a day, so the disk had about a day of headroom left, and a full
+disk stops PostgreSQL.
+
+A release tree is a build artefact, not a record — every commit can be rebuilt
+from Git — so the only thing an old one buys is a rollback that skips a build,
+and a rollback goes back one release. `switch-release.py` now keeps the newest
+five plus the live one whatever its age, beside the pre-deployment dump pruning
+it already did, and reports `releases_pruned`. The live tree is kept explicitly
+because after a rollback `current` points at an older one, and the frontend
+assets an already-open tab may still ask for are copied forward into the live
+tree rather than depending on the old one surviving.
+
+A second 5.8 GB sat in `/tmp` as twenty-one abandoned build trees. `release.sh`
+did remove its build directory — as its final step, so only a release that
+reached the end ever ran it. The trap that restores paused imports is now
+installed before the first remote command instead of halfway down, and cleans
+the build tree, the archive and the migration rehearsal's dump on every exit.
+That rehearsal dump is a full copy of the household's database and its removal
+had sat inside the rehearsal's own `set -e` block, so a failed rehearsal left it
+in `/tmp`; it is cleaned for that reason first and the disk second.
+
+Two test files created temporary directories and never removed them. Tiny — 91
+directories, about 2 MB — but those tests run on the server during every
+deployment, so the count only grows. `backup-script` removes its sandbox once it
+has read everything out of it, and the three scheduler tests in `import-runs`
+use `t.after`, which also runs when an assertion fails, which is the run that
+leaves litter behind.
+
+None of that was visible anywhere but an SSH session, so the operations page has
+a fourth card beside the database, the release and the backup: the percentage
+used, and how many gigabytes are free of how many. It is judged by absolute free
+space rather than by the percentage, because what is being asked is whether the
+next stretch of releases and dumps will fit — under 15 GB is tight, under 5 GB
+is critical.
+
+The owner cleared the backlog by hand while this was being written, which took
+the disk from 92% to 50%. The rules above are what stop it returning.
+
 # The backup now saves the credentials too — September 19, 2026
 
 Losing the machine would have cost the credentials even though the money's

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { memoryDatabase, migrate } from '../src/database.js';
@@ -399,8 +399,9 @@ test('the next attempt is recorded and reaches both the imports screen and the p
   }
 });
 
-test('the scheduler announces the wait it enforces, and keeps deferring without touching the bank', async () => {
+test('the scheduler announces the wait it enforces, and keeps deferring without touching the bank', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'pf-runs-schedule-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const announced: { retryAfter: Date | null; reason: string | null }[] = [];
   let invocations = 0;
   const options = {
@@ -451,8 +452,9 @@ test('the scheduler announces the wait it enforces, and keeps deferring without 
   );
 });
 
-test('a wait set by an older release still reaches the screen, with no reason to give', async () => {
+test('a wait set by an older release still reaches the screen, with no reason to give', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'pf-runs-legacy-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const instance = 'enablebanking-rodion-swedbank';
   const until = Date.now() + 7200000;
   // What the server actually held: a retry-after file and no reason beside it.
@@ -474,8 +476,9 @@ test('a wait set by an older release still reaches the screen, with no reason to
   assert.deepEqual(announced, [null]);
 });
 
-test('announcing cannot stop a bank from waiting', async () => {
+test('announcing cannot stop a bank from waiting', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'pf-runs-announce-fails-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   assert.equal(
     await runScheduledSync({
       instance: 'monobank-rodion',

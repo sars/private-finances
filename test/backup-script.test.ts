@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -164,7 +170,7 @@ exit ${stubs.psqlExits ?? 0}`,
   } catch {
     resticCalls = [];
   }
-  return {
+  const run = {
     status: result.status ?? -1,
     stdout: result.stdout,
     stderr: result.stderr,
@@ -175,6 +181,13 @@ exit ${stubs.psqlExits ?? 0}`,
     uploaded: exists(uploaded),
     configUploaded: exists(configUploaded),
   };
+  // Everything this helper reports has now been read out of the sandbox, so the
+  // sandbox itself is finished with. It used to be left behind: these tests run
+  // on the server during every deployment, and 73 abandoned `pf-backup-`
+  // directories had collected in its /tmp by 19 September 2026. Small, but they
+  // accumulate for as long as the project keeps releasing.
+  rmSync(home, { recursive: true, force: true });
+  return run;
 }
 
 test('a successful backup uploads once and records the snapshot it made', () => {

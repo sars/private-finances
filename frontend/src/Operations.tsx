@@ -6,6 +6,7 @@ import {
   CircleAlert,
   Database,
   DatabaseBackup,
+  HardDrive,
   KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CredentialHealth } from '../../src/credential-health';
 import { backupSummary, type BackupHealth } from '../../src/backup-health';
+import { storageDetail, type StorageHealth } from '../../src/storage-health';
 
 type Workflow = {
   availability: 'available' | 'unavailable';
@@ -44,6 +46,7 @@ type Health = {
   lastSuccessAt: string | null;
   jobs: Array<{ state: string; count: number }>;
   backup?: BackupHealth;
+  storage?: StorageHealth | null;
   bankConnections: Array<{
     connection: string;
     state: string;
@@ -92,6 +95,44 @@ function date(value: string) {
  * would look identical to a healthy one. The wording itself is shared with the
  * plain page so the two cannot drift.
  */
+/**
+ * The disk, in the same shape as the cards beside it: the figure loudest, one
+ * line of detail under it. A disk that fills stops the database and the
+ * imports, and until this card existed the only way to know was an SSH session.
+ */
+function Storage({ storage }: { storage?: StorageHealth | null }) {
+  if (!storage) return null;
+  const tone =
+    storage.state === 'critical'
+      ? 'text-negative'
+      : storage.state === 'tight'
+        ? 'text-warning'
+        : 'text-muted-foreground';
+  return (
+    <Card className="gap-3 shadow-xs">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <HardDrive className="size-4 text-primary" />
+          Disk
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p
+          className={`text-xl font-semibold tabular-nums ${storage.state === 'ample' ? '' : tone}`}
+        >
+          {Math.round(storage.usedRatio * 100)}%
+        </p>
+        <p
+          role={storage.state === 'ample' ? undefined : 'status'}
+          className={`mt-1 text-xs ${tone}`}
+        >
+          {storageDetail(storage)}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Backup({ backup }: { backup?: BackupHealth }) {
   const { headline, detail } = backupSummary(backup, date);
   const tone =
@@ -227,7 +268,10 @@ export default function Operations() {
             <p className="text-xs text-muted-foreground">
               Checked {date(checkedAt)}. Refresh to check for changes.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Four now that the disk is among them, so the row stays one row
+                on a desktop rather than leaving a single card stranded under
+                the other three. */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card className="gap-3 shadow-xs">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-sm">
@@ -266,6 +310,7 @@ export default function Operations() {
                 </CardContent>
               </Card>
               <Backup backup={health.backup} />
+              <Storage storage={health.storage} />
             </div>
             <section className="space-y-3" aria-label="Workflow activity">
               <h2 className="text-base font-semibold">Workflow activity</h2>
