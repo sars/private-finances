@@ -153,29 +153,42 @@ is an operator development credential, so it is not copied into the application'
 runtime environment. Replace it before expiry and revoke old/exposed tokens in
 GitHub settings.
 
-## Amazon S3 and restic: deferred, not configured
+## Amazon S3 and restic: configured 19 September 2026
 
-S3 setup is deferred by the owner. Local verified recovery does not establish
-an off-server encrypted backup. When resumed, use the owner's AWS account to create
-or select a private backup bucket and a workload identity restricted to that
-bucket/prefix. Prefer an IAM role with temporary credentials where the VPS can
-support it; otherwise use a dedicated least-privilege IAM identity, never root
-access keys. See [AWS IAM recommendations](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html).
+Two credentials, and they are not alike — one is replaceable and one is not.
 
-The policy must support the intended restic backup/restore/locking operations;
-review deletion permissions separately against the retention plan. Configure
-`RESTIC_REPOSITORY`, `RESTIC_PASSWORD_FILE` and the selected AWS credential mechanism
-in `/etc/private-finances/backup.env`. Long-lived credentials, if used, are
-`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`; temporary credentials also require
-their session token and a working renewal mechanism.
+**The AWS access key** belongs to a dedicated IAM user with no console access and
+a single inline policy scoped to one bucket: `ListBucket` and `GetBucketLocation`
+on the bucket, and `GetObject`, `PutObject`, `DeleteObject`,
+`AbortMultipartUpload` and `ListMultipartUploadParts` on its contents. Never a
+root access key, and never a managed policy. `DeleteObject` is required because
+restic removes its own lock file at the end of every run; bucket versioning plus
+a rule expiring noncurrent versions after 30 days is what makes granting it safe,
+so a deletion becomes a recoverable delete marker rather than destruction. This
+key is **replaceable at any time**: delete it in IAM, create another, rewrite
+`backup.env`. Rotate it if it is ever exposed. It reaches the server as
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in
+`/etc/private-finances/backup.env`, root-owned mode 600, which systemd injects
+into `private-finances-backup.service` alone.
 
-Generate a separate restic encryption/recovery password. Keep its runtime copy in
-a restricted server secret file and a recoverable copy in the owner's password
-manager; losing it can make the repository unrecoverable. Follow the
-[restic S3 setup guide](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html#amazon-s3)
-and [project backup procedure](backups.md). Test restore into a disposable database
-before marking off-server recovery verified. Rotate AWS credentials without deleting
-the encrypted repository or losing the restic recovery password.
+**The restic repository password** is the encryption key for every snapshot and
+**cannot be replaced or recovered**. AWS has no copy and nothing on the server
+can reconstruct it; losing it destroys every backup in the bucket however healthy
+the bucket looks. It is held in the owner's password manager and, for the service
+to use, in the file named by `RESTIC_PASSWORD_FILE` — owned by the service user
+`private-finances` at mode 400, not root-only, because the service must read it.
+On its own it opens nothing: reaching the bucket also needs the AWS key.
+
+Rotating AWS credentials never touches the encrypted repository. Rotating the
+restic password is a different operation entirely (`restic key`), and must never
+be done by editing the file. The bucket name, region and IAM user are recorded
+outside Git in `~/.config/private-finances/aws-backup.md`, together with the
+commands to recover from the bucket on a machine that is not the server.
+
+See the [restic S3 setup guide](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html#amazon-s3),
+[AWS IAM recommendations](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
+and the [project backup procedure](backups.md), which records the restore proved
+into a disposable database on 19 September 2026.
 
 ## Installation, renewal and cleanup
 
