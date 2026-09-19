@@ -231,6 +231,12 @@ and `bank_import_windows` (+3, with `completed_at` after the dump, from the
 worker resuming). The disposable database and the restored file were destroyed
 afterwards.
 
+**The configuration snapshot was proved the same day.** Snapshot `446ae16a`,
+77 files, restored into a temporary directory; `diff -rq` against the live
+`/etc/private-finances`, `/etc/caddy` and `/etc/postgresql` reported no
+difference in any of them. What it does not restore is bank access: consents
+expire every few days and are re-approved through the dashboard regardless.
+
 Repeat after migration changes and periodically thereafter. One caution learned
 here: write the comparison so that it is capable of failing. The first attempt
 reported all fifty tables identical while in fact returning empty rows on both
