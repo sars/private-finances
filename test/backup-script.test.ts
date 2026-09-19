@@ -24,6 +24,8 @@ type Run = {
   sql: string[];
   /** restic's argv, one entry per invocation. */
   resticCalls: string[];
+  /** Octal mode of the working directory when pg_dump was invoked. */
+  workMode: string;
   uploaded: boolean;
   configUploaded: boolean;
 };
@@ -45,6 +47,7 @@ function runBackup(stubs: {
   const uploaded = join(home, 'uploaded');
   const configUploaded = join(home, 'config-uploaded');
   const resticLog = join(home, 'restic.log');
+  const workModeLog = join(home, 'work-mode.log');
   const stub = (name: string, body: string) => {
     const path = join(bin, name);
     writeFileSync(path, `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
@@ -55,6 +58,8 @@ function runBackup(stubs: {
     'pg_dump',
     `set -e
 for arg in "$@"; do case "$arg" in --file=*) target="\${arg#--file=}";; esac; done
+work_dir="$(dirname "$(dirname "$target")")"
+{ stat -c %a "$work_dir" 2>/dev/null || stat -f %Lp "$work_dir" 2>/dev/null || echo unknown; } >> ${JSON.stringify(workModeLog)}
 if [ "${stubs.dumpExits ?? 0}" != "0" ]; then echo 'connection refused' >&2; exit ${stubs.dumpExits ?? 0}; fi
 head -c ${dumpBytes} /dev/zero > "$target"`,
   );
@@ -137,6 +142,12 @@ exit ${stubs.psqlExits ?? 0}`,
   } catch {
     sql = [];
   }
+  let workMode = '';
+  try {
+    workMode = readFileSync(workModeLog, 'utf8').trim().split('\n')[0] ?? '';
+  } catch {
+    workMode = '';
+  }
   const exists = (path: string) => {
     try {
       readFileSync(path);
@@ -160,6 +171,7 @@ exit ${stubs.psqlExits ?? 0}`,
     recorded,
     sql,
     resticCalls,
+    workMode,
     uploaded: exists(uploaded),
     configUploaded: exists(configUploaded),
   };
@@ -254,6 +266,24 @@ test('an upload with no summary is still a backup, recorded without a snapshot i
   assert.equal(run.uploaded, true);
   assert.match(run.recorded[0]!, /outcome=succeeded/);
   assert.match(run.recorded[0]!, /snapshot=\x00/);
+});
+
+test('the service user can reach the directory it must write the dump into', () => {
+  // On the server the script runs as root and pg_dump runs as the service user,
+  // so the working directory has to be crossable by somebody other than its
+  // owner. `mktemp -d` makes it 0700, and the first real run failed with
+  // "could not open output file … Permission denied" even though the dump's own
+  // subdirectory was owned by the right user: a directory you cannot enter is a
+  // directory you cannot write into. These stubs all run as one user and cannot
+  // reproduce that, so the invariant is asserted directly.
+  const run = runBackup({});
+  assert.match(
+    run.workMode,
+    /^0?7[0-9][1357]$/,
+    `work dir was ${run.workMode}`,
+  );
+  // Crossable, but never listable: the error and result files sit beside it.
+  assert.doesNotMatch(run.workMode, /[4567]$/);
 });
 
 test('one run uploads the database and the server configuration', () => {
