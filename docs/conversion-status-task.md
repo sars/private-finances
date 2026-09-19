@@ -57,52 +57,107 @@ GET https://api.privatbank.ua/p24api/exchange_rates?json&date=27.10.2025 -> full
 it. The sync retries unstored dates on every run, so eleven months of nightly
 attempts have already failed against an empty archive. Retrying will not fix it.
 
-## Part 1 — a second rate source for days the first one lacks
+## Part 1 — filling the gap without inventing a rate
 
-The owner asked: *"can we just add rate from another source?"* Yes. The National
-Bank of Ukraine publishes that day.
+The National Bank's published rate was considered and **rejected by the owner**:
+it is an administrative reference, not a price anyone trades at. Monobank was
+suggested instead. Two findings follow, and neither one fixes 26 October 2025.
+
+### Monobank publishes no history
 
 ```
-GET https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?date=20251026&json
-  EUR 48.5502   USD 41.897   GBP 55.8822   (exchangedate 26.10.2025)
+GET https://api.monobank.ua/bank/currency
+  {"currencyCodeA":978,"currencyCodeB":980,"rateBuy":51.07,"rateSell":51.7706,...}
 ```
 
-For scale, the PrivatBank commercial midpoint was 48.90 on the 25th and 48.85 on
-the 27th, so the NBU official rate sits roughly 0.7% below the commercial
-midpoint. The owner has explicitly said this order of difference does not matter
-to them. An official rate published for that exact date is preferable to
-carrying a neighbouring day's commercial rate, because it keeps a real source
-and date on the record rather than inventing a value for a day that has none.
+Real commercial buy and sell rates for 107 pairs, free, unauthenticated, in the
+same buy/sell shape the PrivatBank archive already uses, rate-limited to one
+request per five minutes. But the endpoint takes no date parameter and carries
+only a current timestamp. There is no archive to query, so it cannot answer for
+October 2025.
+
+It is still worth storing **from now on**, as an independent second commercial
+source recorded daily. That protects future days against another empty
+PrivatBank response, and gives a genuine cross-check on the source already in
+use. It does nothing for the existing gap.
+
+### Monobank's real rates are already inside our own data
+
+Every Monobank foreign purchase carries `amount` in the account currency
+alongside `operationAmount` and `currencyCode`, and that pair is Monobank's own
+commercial rate at the moment of the purchase. The ledger already holds a great
+many of them:
+
+| Pair | Days with a derivable rate | Payments |
+| --- | ---: | ---: |
+| EUR / UAH | 291 | 1,432 |
+| USD / UAH | 176 | 238 |
+| GBP / UAH | 15 | 82 |
+| PLN / UAH | 14 | 41 |
+| Others | 17 | 22 |
+
+325 of the 372 needed days carry at least one derivable Monobank rate. This is a
+real commercial rate from a bank the household actually uses, already in the
+database, needing no new external dependency.
+
+### But not on the day that needs it
+
+On 26 October 2025 all six Monobank transactions are domestic UAH purchases
+(currency code 980). Not one is cross-currency, so no rate can be derived. The
+surrounding days 24–28 October carry no cross-currency Monobank payment either.
+
+So for that specific date: PrivatBank published nothing, Monobank has no archive
+to ask, and our own data holds no rate to derive. Every real source is empty.
+
+### Recommendation: carry the last published commercial rate forward
+
+A published rate does not stop existing when the bank takes a day off — it stays
+in force until a new one supersedes it. On 26 October 2025 the rate in force was
+the one PrivatBank published on the 25th: 48.90 UAH per EUR. The 27th published
+48.85, so the day's true value sits inside a 0.1% band either way.
+
+This is deliberately **forward-carry only**, never backward. A rate published on
+the 25th was genuinely in force on the 26th; the 27th's rate did not yet exist
+and must never be applied to an earlier day.
+
+Note that this contradicts a standing project rule — `docs/fx-policy.md` states
+"there is no NBU or nearest-date fallback". That rule exists to prevent a
+*silent* substitution. A carry-forward that keeps the originating date in its
+provenance and renders as its own state on the status page is not silent. If the
+owner prefers the stricter rule, the alternative is to leave the six payments
+permanently unconverted and show them as "empty at source", which the page
+already supports.
 
 ### Rules
 
-1. NBU is a **fallback**, never a replacement. Fetch and store an NBU quote only
-   for a date where the PrivatBank commercial response carried no usable
-   commercial pair. Where PrivatBank has data, nothing changes.
-2. Store it in `daily_fx_rates` under its own source string, for example
-   `NBU official rate`, with the same provenance discipline as the existing
-   source: request URL, as-of date, retrieval timestamp, immutable version,
-   corrections appended as new versions.
-3. **Make source precedence explicit.** Today `FxRates.list` orders by
+1. Carry forward only when **every** source is empty for that date, and only
+   from the most recent earlier date that has a usable commercial rate. Never
+   interpolate, never average, never reach backward from a later day.
+2. Store the carried quote with provenance naming both dates — the date it
+   applies to and the date it was published — so the record never claims
+   PrivatBank published something on a day it did not.
+3. Never carry forward across an unbounded gap. Cap it at a small number of days
+   (three is ample for a weekend or holiday); beyond that the date stays missing
+   rather than inheriting a stale rate.
+4. Add Monobank's live endpoint as a second daily commercial source, stored
+   under its own source string with full provenance, so future empty days have
+   somewhere real to fall back to.
+5. **Make source precedence explicit.** Today `FxRates.list` orders by
    `as_of, source, base, target` and `latest()` re-sorts by source string, so
-   selection is alphabetical by accident. `NBU official rate` sorts *before*
-   `PrivatBank commercial midpoint`, which would silently promote the fallback
-   everywhere it existed. Add a declared precedence list — PrivatBank
-   commercial midpoint first, NBU official second — and select on that instead
-   of on the alphabet. Cover it with a test that stores both sources for one
-   date and asserts the commercial rate wins.
-4. Keep the existing refusals intact: no nearest-date fallback, no fabricated
-   rate, no silent substitution. A date neither source publishes stays missing.
-5. Both the CLI and the nightly timer use the fallback, so the backlog and new
-   days are treated the same way.
-6. `docs/fx-policy.md` currently states "NBU-only entries remain unavailable;
-   there is no NBU or nearest-date fallback". That sentence is now wrong and
-   must be rewritten, not appended to.
-7. `docs/server-requirements.md` must record the new outbound dependency on
-   `bank.gov.ua`, alongside the existing one on `api.privatbank.ua`.
+   selection is alphabetical by accident. Any second source name that sorts
+   before `PrivatBank commercial midpoint` would silently displace it. Declare
+   the order — PrivatBank commercial midpoint, then Monobank, then a carried
+   rate last — and select on that list rather than on the alphabet. Prove it
+   with a test that stores two sources for one date and asserts the winner.
+6. Keep every other refusal intact: no fabricated rate, no interpolation, no
+   silent substitution. A date with nothing to carry from stays missing.
+7. `docs/fx-policy.md` must be rewritten where it forbids any fallback, not
+   appended to.
+8. `docs/server-requirements.md` must record the outbound dependency on
+   `api.monobank.ua` alongside the existing `api.privatbank.ua`.
 
-Applying this should convert the six payments of 26 October 2025 and take the
-ledger to full coverage.
+Applying this converts the six payments of 26 October 2025 and takes the ledger
+to full coverage.
 
 ## Part 2 — the page
 
@@ -135,7 +190,8 @@ today, wrapping with light month markers. Three states:
 | State | Meaning | Treatment |
 | --- | --- | --- |
 | Covered | A usable quote is stored | Solid, unremarkable |
-| Empty at source | Every source published nothing for that day | Neutral grey, stated, not an alarm |
+| Carried | No source published; the previous day's rate is in force | Lighter than covered, stated plainly |
+| Empty at source | Nothing published and nothing to carry from | Neutral grey, stated, not an alarm |
 | Not fetched | The sync has not reached this day yet | Amber, actionable |
 
 The two missing states must be distinguished. A day the bank never published is
@@ -220,10 +276,13 @@ come from the global setting.
 
 ## Acceptance
 
-- With the NBU fallback applied, the ledger reports zero unconverted
+- With the carry-forward applied, the ledger reports zero unconverted
   transactions and the strip shows 372 of 372 days.
-- Storing both sources for one date selects the PrivatBank commercial midpoint,
-  proven by a test rather than by reading the code.
+- Storing two sources for one date selects the PrivatBank commercial midpoint,
+  proven by a test rather than by reading the code, and a carried rate never
+  displaces a published one.
+- A carried rate states both dates in its provenance, and a gap longer than the
+  cap stays missing rather than inheriting a stale rate.
 - A date neither source publishes still renders as missing, with its rows listed
   and excluded from every total, never counted as zero.
 - The page holds no filters, no totals, no monthly table and no owner split.
