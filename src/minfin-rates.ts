@@ -42,7 +42,8 @@ function validDate(date: string): boolean {
 /** The published archive starts in 2006; earlier dates are not a gap to fill. */
 export const MINFIN_ARCHIVE_START = '2006-01-04';
 export function validateMinfinDate(date: string, now = new Date()): void {
-  if (!Number.isFinite(now.getTime())) throw new MinfinRateError('invalid_date');
+  if (!Number.isFinite(now.getTime()))
+    throw new MinfinRateError('invalid_date');
   if (
     !validDate(date) ||
     date < MINFIN_ARCHIVE_START ||
@@ -113,7 +114,8 @@ export function parseMinfinRate(
     /<input[^>]*value="(\d{4}-\d{2}-\d{2})"[^>]*name="currency-datepicker"/.exec(
       html,
     );
-  if (!picker || picker[1] !== date) throw new MinfinRateError('invalid_response');
+  if (!picker || picker[1] !== date)
+    throw new MinfinRateError('invalid_response');
   const heading = html.indexOf('Середній курс в банках');
   if (heading === -1) throw new MinfinRateError('invalid_response');
   const end = html.indexOf('</table>', heading);
