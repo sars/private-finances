@@ -9,10 +9,24 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**bed64285794193da9ebf72ae89cd6543cae4b90e**, live since September 19, 2026 at
-schema version 61, deployed with `deploy/release.sh`: both services active,
-schema 61, 4,189 transactions, the import timers and the Telegram worker
-resumed afterwards. It carries PR #107 and adds no migration.
+**5e69cba61bd20400fa2ec1ea03ae5c8bafae2606**, live since September 19, 2026 at
+schema version 62, deployed with `deploy/release.sh`: both services active,
+schema 62, 4,189 transactions, the import timers and the Telegram worker
+resumed afterwards. It carries PR #109 and adds migration 62,
+`daily_fx_absences`. Both retention rules reported on the switch:
+`predeploy_pruned` removed one dump and `releases_pruned` one release tree.
+
+**The 26 October 2025 gap is closed on real data.** The FX sync was run after
+the switch and reported
+`{"dates":372,"fetched":1,"stored":3,"skipped":371,"unavailable":0}` — 371 days
+already held a rate and were not asked about again, one day was fetched, and it
+was filled by the secondary source: `fx_day_stored_secondary` for 2025-10-26,
+three pairs. The six UAH payments booked that Sunday now convert at Minfin's
+published average bank midpoint for the day. Nothing was carried forward and no
+NBU rate was read.
+
+The release it replaced, **bed64285794193da9ebf72ae89cd6543cae4b90e**, was live
+from earlier the same day at schema 61 and carried PR #107.
 
 Both retention rules reported on this switch: `releases_pruned` removed one
 release tree and `predeploy_pruned` one dump. The release left nothing of its
