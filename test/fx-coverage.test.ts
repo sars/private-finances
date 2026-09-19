@@ -6,6 +6,7 @@ import {
   eachDate,
   fxCoverage,
   initializeFxCoverage,
+  provenEmptyDates,
   recordFxAbsence,
 } from '../src/fx-coverage.js';
 import { MINFIN_SOURCE, PRIVATBANK_SOURCE } from '../src/fx-sources.js';
@@ -117,4 +118,32 @@ test('a reason is a sentence, and one nobody wrote a sentence for stays itself',
     'Changed while loading — reload',
   );
   assert.equal(missingReasonSentence('something_new'), 'something_new');
+});
+
+test('a day both sources have settled is not asked about again', async () => {
+  const db = memoryDatabase();
+  try {
+    await initializeFxRates(db);
+    await initializeFxCoverage(db);
+    // Only the primary has answered: the day is still outstanding.
+    await recordFxAbsence(
+      db,
+      PRIVATBANK_SOURCE,
+      '2025-10-28',
+      '2025-10-29T00:00:00Z',
+      'nothing published',
+    );
+    assert.deepEqual([...(await provenEmptyDates(db))], []);
+    for (const source of [PRIVATBANK_SOURCE, MINFIN_SOURCE])
+      await recordFxAbsence(
+        db,
+        source,
+        '2025-10-26',
+        '2025-10-27T00:00:00Z',
+        'nothing published',
+      );
+    assert.deepEqual([...(await provenEmptyDates(db))], ['2025-10-26']);
+  } finally {
+    await db.close();
+  }
 });

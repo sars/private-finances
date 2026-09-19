@@ -58,6 +58,27 @@ export async function recordFxAbsence(
   );
 }
 
+/**
+ * Dates every source has already answered "nothing" to.
+ *
+ * These are closed facts. A Sunday in 2025 that neither provider published will
+ * not start publishing, so asking both of them about it again every night is a
+ * nightly request to two services for an answer that cannot change. The sync
+ * skips them; `--refresh` still asks.
+ */
+export async function provenEmptyDates(db: Database): Promise<Set<string>> {
+  return new Set(
+    (
+      await db.query(
+        `SELECT to_char(as_of,'YYYY-MM-DD') AS day FROM daily_fx_absences
+         WHERE source=ANY($1::text[])
+         GROUP BY as_of HAVING count(DISTINCT source)=$2`,
+        [[...FX_ARCHIVE_SOURCES], FX_ARCHIVE_SOURCES.length],
+      )
+    ).rows.map((row) => String(row.day)),
+  );
+}
+
 export function eachDate(from: string, to: string): string[] {
   if (!dateValid(from) || !dateValid(to) || from > to)
     throw new Error('invalid_fx_rate_range');

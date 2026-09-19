@@ -17,7 +17,7 @@ import {
   storeMinfinRates,
 } from './minfin-rates.js';
 import { MINFIN_SOURCE } from './fx-sources.js';
-import { recordFxAbsence } from './fx-coverage.js';
+import { provenEmptyDates, recordFxAbsence } from './fx-coverage.js';
 
 /** Inclusive daily range, or distinct imported transaction dates within the provider archive. */
 export function planFxSyncDates(
@@ -83,12 +83,16 @@ async function main() {
         )
       ).rows.map((row) => String(row.day)),
     );
+    // A day both sources have already answered "nothing" to cannot change, so
+    // it is settled rather than retried. Before this, an empty Sunday was asked
+    // about on every run for as long as it stayed empty.
+    const settled = refresh ? new Set<string>() : await provenEmptyDates(db);
     let fetched = 0,
       stored = 0,
       skipped = 0,
       unavailable = 0;
     for (const date of dates) {
-      if (!refresh && existing.has(date)) {
+      if (!refresh && (existing.has(date) || settled.has(date))) {
         skipped++;
         log({ event: 'fx_day_skipped', date, count: 0 });
         continue;
