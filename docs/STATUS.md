@@ -9,11 +9,23 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**8abc3ce061079243bc63c07c322bb2a42cd6e3ff**, live since September 19, 2026 at
+**38c8c902b8315eb3ffa8a93a4b1a1df4fe56e39d**, live since September 20, 2026 at
 schema version 62, deployed with `deploy/release.sh`: both services active,
 schema 62, 4,194 transactions, the import timers and the Telegram worker
-resumed afterwards. It carries PR #109, #111, #112 and #114, and adds migration
-62, `daily_fx_absences`. Both retention rules reported on each switch.
+resumed afterwards. It carries PR #109, #111, #112, #114 and #116, and adds
+migration 62, `daily_fx_absences`. Both retention rules reported on each switch.
+
+**The coverage strip can no longer contradict the card above it.** A day counted
+as covered whenever any rate was stored for it, not when every rate that day's
+payments needed was stored — so a sterling purchase on a day the secondary
+source filled, with euro and dollar rates present and sterling absent, drew as a
+perfect day while the card reported the payment unconverted. A day now counts as
+covered only when everything paid on it could be priced, and a day that has
+rates but could not price its own payments is its own state, drawn in the
+negative tone rather than the amber one. The two are different faults: amber
+means the nightly sync has not run and a run would fix it, negative means the
+rate does not exist anywhere and the payment is listed above. Found while
+answering what would happen if the sterling account received a transaction.
 
 **Conversion status no longer depends on the display currency.** It was computed
 for whichever currency the header was showing, which is not a status: conversion
