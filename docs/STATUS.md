@@ -9,11 +9,29 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**cf6fa3d160ebdf8abdd2a9ffaab0d8f5fab7efa4**, live since September 19, 2026 at
+**8abc3ce061079243bc63c07c322bb2a42cd6e3ff**, live since September 19, 2026 at
 schema version 62, deployed with `deploy/release.sh`: both services active,
 schema 62, 4,194 transactions, the import timers and the Telegram worker
-resumed afterwards. It carries PR #109, #111 and #112, and adds migration 62,
-`daily_fx_absences`. Both retention rules reported on each switch.
+resumed afterwards. It carries PR #109, #111, #112 and #114, and adds migration
+62, `daily_fx_absences`. Both retention rules reported on each switch.
+
+**Conversion status no longer depends on the display currency.** It was computed
+for whichever currency the header was showing, which is not a status: conversion
+really is per-target — a hryvnia payment is already in hryvnia but needs a rate
+to become euro — so the page could read green in one currency while the ledger
+was unconvertible in another, with nothing on screen to say so. The endpoint
+takes no display currency at all now; it answers for hryvnia, euro and dollars
+together, worst first, and each unconverted payment names the currencies it
+cannot reach. A test holds the case: a ledger with euro rates and no dollar
+rates reads complete in euro and hryvnia, and the page leads with the dollar
+failure.
+
+The page also lists the rates themselves. Every covered day carries the figures
+a conversion on it would use, shown newest first, thirty at a time, with the
+source that won each day — so the coverage claim above can be checked rather
+than taken on trust. The coverage strip stays for spotting where a gap falls at
+a glance. `Updating payments…` is gone from Transactions and Review, where the
+pull-to-refresh indicator already said it.
 
 The secondary FX source no longer parses HTML. Minfin's advertised API needs a
 paid key, so the first version scraped the rendered page; the endpoint that page
