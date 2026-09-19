@@ -23,6 +23,7 @@ Open http://127.0.0.1:3300. Import the examples, refresh, and classify an outflo
 - [Receipt photos](docs/receipts.md)
 - [Credential sources, storage and renewal](docs/credentials.md)
 - [Telegram setup](docs/telegram-setup.md)
+- [Bringing it up: laptop, release, and rebuilding from nothing](docs/running.md)
 - [Development and tests](docs/development.md)
 - [Application architecture and limitations](docs/adr/0002-synthetic-application.md)
 - [Agent working agreement](AGENTS.md)
