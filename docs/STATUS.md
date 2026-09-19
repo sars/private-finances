@@ -9,11 +9,17 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**6e200f74c6ae7ea18b82e6d94a987a79cc89956a**, live since September 19, 2026 at
+**aa398fdc414eecdf06f357500a8fed6a5af5a923**, live since September 19, 2026 at
 schema version 61, deployed with `deploy/release.sh`: both services active,
-schema 61, 4,189 transactions. It carries PR #98, a one-line fix to the backup
-script, and adds no migration. The release before it, `47fdec7d`, carries PR #96
-and migration 61.
+schema 61, 4,189 transactions, all seven import timers armed afterwards. It
+carries PR #100 and adds no migration.
+
+It is the last of four releases that afternoon. `7d8642d9` (PR #95) added the
+import-run record and migration 60; `47fdec7d` (PR #96) added migration 61 and
+the configuration backup; `6e200f74` (PR #98) was a one-line fix to the backup
+script; `bcd5d0dc` (PR #97) and `aa398fdc` (PR #100) are three corrections to
+the run record, each found by watching it run on the server rather than by
+reading the code — see the entry below.
 
 Off-server backup is live and covers both halves of a rebuild. Each daily run
 uploads two snapshots — the database, and the server configuration: the bank
@@ -975,10 +981,43 @@ absolute time, so halving the constant to twelve hours on September 18 did not
 shorten the twenty-four-hour mark its predecessor had already written for
 Swedbank. That is now written down in `docs/scheduling.md`.
 
-Checked: 11 new tests in `test/import-runs.test.ts` and the 40 in the bank-sync,
-schedule and problems suites pass; both type checks, `scripts/check_frontend.py`
-and `scripts/check_repository.py` are clean; both screens were rendered at 390
-and 1280 px and looked at. Not deployed at the time of writing.
+Checked: 15 tests in `test/import-runs.test.ts` and the suites for bank-sync,
+schedule, problems and import-status pass; both type checks,
+`scripts/check_frontend.py` and `scripts/check_repository.py` are clean; both
+screens were rendered at 390 and 1280 px and looked at. Deployed as
+`aa398fdc`.
+
+## Three things the live system said that the tests did not
+
+Worth recording as a pattern, not three incidents: each was found by watching
+the feature run on the server after release, and each was invisible to a green
+test suite.
+
+**A healthy run recorded no requests at all.** The observer was wired into the
+requester's refusal branch only, so a successful request — the overwhelming
+majority — reported nothing. The first real import wrote its stages and no
+requests. Both observer tests had asserted on a *refused* request, which is
+exactly the path that worked. Every request reports now, with its status, byte
+size and duration, and a request that never produced a response at all reports
+with no status, which is the failure nothing else records. Fixed in PR #97.
+
+**A run killed mid-flight would have claimed to be running forever.** Watching
+attempts land showed the `running` state, correct while it lasts and permanent
+if the process dies between opening its row and closing it — an out-of-memory,
+or a restart during a release. Such a row is read as `abandoned` past
+forty-five minutes, derived when read rather than swept by a timer. Also PR #97.
+
+**A wait nobody could explain was announced as trouble.** LHV carried a
+next-attempt time with no reason beside it, an ordinary six-hour cooldown from
+before that record existed, and the card said "Resting until 13:53" in warning
+ink about a connection importing perfectly well. Only a wait the bank itself
+imposed is coloured now; where the reason is missing the connection's own last
+error decides, which keeps Swedbank's rate limit reading as a rest. PR #100.
+
+Also verified on production rather than assumed: every request path stored
+across both providers is a shape and nothing more — `/sessions/…`,
+`/accounts/…/transactions`, and Monobank's statement URL, which embeds the
+account id and both timestamps, as `/personal/statement/…/…/…`.
 
 # The first real backup, and the bug only a real run could find — September 19, 2026
 
