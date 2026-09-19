@@ -111,7 +111,12 @@ for candidate in "${candidates[@]}"; do
 done
 
 # The dump is written by the service user, so it gets a directory of its own
-# that the service user owns; root reads it back regardless.
+# that the service user owns; root reads it back regardless. The parent has to
+# become traversable for that to be reachable at all — `mktemp -d` makes it
+# 0700 root, and a directory the service user cannot enter is a directory it
+# cannot write into, whoever owns what is inside. 0711 grants the crossing and
+# not the listing, so the error and result files beside it stay unreadable.
+chmod 0711 "$backup_work"
 install -d -o "$dump_user" -g "$dump_user" -m 700 "$backup_work/dump"
 
 # Diagnostics stay private: pg_dump/restic errors may contain connection details.
