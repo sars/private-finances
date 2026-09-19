@@ -9,19 +9,23 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**6dbefae121394e9b86d70fecb9635dcf4643da08**, live since September 19, 2026 at
+**bed64285794193da9ebf72ae89cd6543cae4b90e**, live since September 19, 2026 at
 schema version 61, deployed with `deploy/release.sh`: both services active,
 schema 61, 4,189 transactions, the import timers and the Telegram worker
-resumed afterwards. Every gate passed on the first attempt — 650 application
-tests on the server, and a rehearsal on a restored copy that reached schema 61
-in 25 milliseconds with 4,189 transactions, 141 active refund links, no expense
-without a category and nothing filed on a heading. It carries PR #104 and PR
-#102 and adds no migration.
+resumed afterwards. It carries PR #107 and adds no migration.
 
-It replaced `babc698c` (PR #101), the retention rule for pre-deployment dumps,
-which this section had not named: that release went out earlier the same day
-and the record here still said `aa398fdc`. The rule worked on its first real
-occasion — the switch reported `predeploy_pruned` with one dump removed.
+Both retention rules reported on this switch: `releases_pruned` removed one
+release tree and `predeploy_pruned` one dump. The release left nothing of its
+own in `/tmp` — the build tree, the archive and the rehearsal's dump and
+restored database were all gone when the script exited — and the full test suite
+it runs on the server added one file where it used to leave fourteen
+directories. The server's disk stands at 50%, 49 GB free of 96.
+
+Two releases preceded it that afternoon and this section had not named either.
+`07ef2b7c` (PR #106) was a status record; `4842f6e5` (PR #105) is the release
+retention rule itself, which is why it had not yet taken effect when the disk
+was found at 92%. `6dbefae1` (PR #104 and PR #102) came before them, and
+`babc698c` (PR #101) added the pre-deployment dump retention.
 
 Before those, four releases that afternoon. `7d8642d9` (PR #95) added the
 import-run record and migration 60; `47fdec7d` (PR #96) added migration 61 and
