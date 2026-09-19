@@ -233,6 +233,39 @@ test('a cursor that is not a cursor returns the first page instead of failing', 
   }
 });
 
+test('a run killed before it could finish stops claiming to be running', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    // What a killed process leaves: an opened row nothing will ever close,
+    // because its only writer was the process that died.
+    const recorder = new AttemptRecorder(
+      db,
+      'monobank:rodion',
+      new Date('2026-09-01'),
+      new Date('2026-09-02'),
+    );
+    await recorder.open();
+
+    // Fresh, it is genuinely running and must be left alone.
+    assert.equal((await importRuns(db)).runs[0]!.outcome, 'running');
+
+    // Past the window the importer's own unit gives up in, nobody believes it.
+    await db.query(
+      "UPDATE bank_sync_attempts SET started_at = now() - interval '2 hours'",
+    );
+    const stale = (await importRuns(db)).runs[0]!;
+    assert.equal(stale.outcome, 'failed');
+    assert.equal(stale.errorCode, 'abandoned');
+    // The detail view must agree with the list, or the badge changes on click.
+    const detail = await importRun(db, stale.id);
+    assert.equal(detail!.outcome, 'failed');
+    assert.equal(detail!.errorCode, 'abandoned');
+  } finally {
+    await db.close();
+  }
+});
+
 test('a request path is reduced to its shape, never its identifiers', () => {
   // These two carry a consent session and a provider account id. Neither may
   // reach a stored step, and the shape that remains is what explains a failure.

@@ -39,6 +39,14 @@ error code, how many accounts it reached, how many payments it wrote, and a
 Attempts are kept for `ATTEMPT_RETENTION_DAYS` (120) and pruned by the next
 write, so the table stays bounded without a timer of its own.
 
+An attempt whose process was killed between opening its row and closing it —
+an out-of-memory, a restart during a release — leaves a row nothing will ever
+close, because its only writer was the process that died. Such a row is read as
+`failed` with the code `abandoned` once it is older than 45 minutes, which is
+past the importer's own 40-minute unit timeout. It is **derived when read, not
+swept by a timer**: a sweeper would be a second mechanism to keep in step with
+the first, and would still be wrong for as long as it had not run.
+
 Recording is strictly subordinate to importing. Every write in the recorder is
 wrapped, a failure to record is swallowed, and `syncBank` takes the recorder as
 an optional argument — an import must never fail because the account of it
