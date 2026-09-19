@@ -58,6 +58,8 @@ export type AttemptStep = {
   /** A request path with every variable segment replaced; see `sanitizePath`. */
   path?: string;
   status?: number;
+  /** Bytes a bank answered a request with; never any of those bytes. */
+  size?: number;
   /** Items the stage handled: accounts listed, payments fetched, rows written. */
   count?: number;
   /** A `ConnectorError` code, or the stage's own word for what went wrong. */
@@ -295,11 +297,28 @@ function decodeCursor(
   return { startedAt, id };
 }
 
-function attemptFrom(row: Record<string, unknown>): ImportAttempt {
+/**
+ * How long an attempt may say it is running before nobody believes it.
+ *
+ * The importer's own unit gives up at forty minutes and its lease renews every
+ * minute, so a row still claiming to run well past that is not running: the
+ * process was killed — an out-of-memory, a restart during a release — between
+ * opening its row and completing it. Nothing else will ever close that row,
+ * because the only writer for it is the process that died.
+ */
+const ABANDONED_MS = 45 * 60000;
+
+function attemptFrom(row: Record<string, unknown>, now: number): ImportAttempt {
   const connection = String(row.connection);
   const described = describeConnection(connection);
   const started = new Date(row.started_at as string);
   const finished = row.finished_at ? new Date(row.finished_at as string) : null;
+  // Derived when read rather than swept by a timer. A sweeper would be a second
+  // mechanism to keep in step with the first, and it would still be wrong for
+  // exactly as long as it had not run; this is right the moment it is asked,
+  // and it never rewrites a row whose real fate might yet be written.
+  const abandoned =
+    row.outcome === 'running' && now - started.getTime() > ABANDONED_MS;
   return {
     id: String(row.id),
     connection,
@@ -311,8 +330,12 @@ function attemptFrom(row: Record<string, unknown>): ImportAttempt {
     finishedAt: finished ? finished.toISOString() : null,
     from: new Date(row.from_at as string).toISOString(),
     to: new Date(row.to_at as string).toISOString(),
-    outcome: row.outcome as ImportAttempt['outcome'],
-    errorCode: row.error_code ? String(row.error_code) : null,
+    outcome: abandoned ? 'failed' : (row.outcome as ImportAttempt['outcome']),
+    errorCode: abandoned
+      ? 'abandoned'
+      : row.error_code
+        ? String(row.error_code)
+        : null,
     accounts: Number(row.accounts),
     changed: Number(row.changed),
     ms: finished ? finished.getTime() - started.getTime() : null,
@@ -368,7 +391,10 @@ export async function importRuns(
      ORDER BY started_at DESC, id DESC LIMIT $${paged.length}`,
     paged,
   );
-  const page = rows.rows.slice(0, limit).map(attemptFrom);
+  // One clock for the whole page, so two rows a millisecond apart cannot
+  // disagree about whether they have been abandoned.
+  const now = Date.now();
+  const page = rows.rows.slice(0, limit).map((row) => attemptFrom(row, now));
   const last = page[page.length - 1];
   return {
     runs: page,
@@ -404,7 +430,7 @@ export async function importRun(
     [String(row.connection), row.started_at, row.finished_at],
   );
   return {
-    ...attemptFrom(row),
+    ...attemptFrom(row, Date.now()),
     steps: Array.isArray(row.steps) ? (row.steps as AttemptStep[]) : [],
     windows: windows.rows.map((w) => ({
       accountId: String(w.account_id),

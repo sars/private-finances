@@ -117,6 +117,7 @@ async function main() {
         path: sanitizePath(event.path),
         ms: event.ms,
         ...(event.status === undefined ? {} : { status: event.status }),
+        ...(event.size === undefined ? {} : { size: event.size }),
         ...(event.code === undefined ? {} : { code: event.code }),
         ...(event.retryAfterMs === undefined
           ? {}

@@ -63,6 +63,9 @@ export const meaning: Record<string, string> = {
   sync_failed: 'It stopped for a reason it could not classify',
   sync_lease_lost: 'Another run took the connection over',
   sync_already_running: 'A run was already in progress',
+  // Never written to the row: derived when read, for an attempt that opened
+  // and was killed before it could close itself.
+  abandoned: 'It was stopped before it could finish — most likely a restart',
 };
 
 export function OutcomeBadge({ run }: { run: ImportAttempt }) {

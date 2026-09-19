@@ -13,6 +13,8 @@ export type RequestObserver = (event: {
   path: string;
   status?: number;
   ms: number;
+  /** Bytes the bank answered with; absent when it never answered. */
+  size?: number;
   code?: string;
   retryAfterMs?: number;
 }) => void;
@@ -101,11 +103,22 @@ export function requester(
           }
           chunks.push(value);
         }
+        // A request that worked is reported too. Only the refusals were, at
+        // first, which made a healthy run look as though it had asked the bank
+        // for nothing at all — and "what did it request" is most of what the
+        // run screen is for. The size is the response's length in bytes, which
+        // says whether a bank answered thinly without saying what it answered.
+        report({ path, status: response.status, ms: Date.now() - began, size });
         return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
       } catch (error) {
         if (error instanceof ConnectorError) throw error;
-        if (error instanceof SyntaxError) throw new ConnectorError('schema');
-        throw new ConnectorError('transient');
+        // Everything else is a connection that never produced a response: a
+        // timeout, a refused socket, a body that stopped early. It has no
+        // status, and it is the failure most worth seeing on the run screen
+        // because nothing else records it anywhere.
+        const code = error instanceof SyntaxError ? 'schema' : 'transient';
+        report({ path, ms: Date.now() - began, code });
+        throw new ConnectorError(code);
       }
     });
     queue = request.catch(() => undefined);

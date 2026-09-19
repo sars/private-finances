@@ -39,6 +39,14 @@ error code, how many accounts it reached, how many payments it wrote, and a
 Attempts are kept for `ATTEMPT_RETENTION_DAYS` (120) and pruned by the next
 write, so the table stays bounded without a timer of its own.
 
+An attempt whose process was killed between opening its row and closing it —
+an out-of-memory, a restart during a release — leaves a row nothing will ever
+close, because its only writer was the process that died. Such a row is read as
+`failed` with the code `abandoned` once it is older than 45 minutes, which is
+past the importer's own 40-minute unit timeout. It is **derived when read, not
+swept by a timer**: a sweeper would be a second mechanism to keep in step with
+the first, and would still be wrong for as long as it had not run.
+
 Recording is strictly subordinate to importing. Every write in the recorder is
 wrapped, a failure to record is swallowed, and `syncBank` takes the recorder as
 an optional argument — an import must never fail because the account of it
@@ -49,7 +57,15 @@ pointed at a database that refuses every write.
 
 A step is a stage, an offset from the start, a duration, and whatever that
 stage knows: the account (by the application's own identifier), a request path,
-an HTTP status, a count, an error code, and the wait a bank asked for.
+an HTTP status, the size in bytes of what came back, a count, an error code, and
+the wait a bank asked for.
+
+Every request is reported, not only the refused ones. The first version of this
+reported failures alone, which made a healthy run look as though it had asked
+the bank for nothing at all — caught on the first real import after release,
+because the production step log held stages and no requests. A request that
+never produced a response at all (a timeout, a refused socket) is reported with
+no status, and is the failure most worth seeing, since nothing else records it.
 
 A step must **never** carry a payload, an amount, a description, a merchant, a
 counterparty, a token, a session identifier or a provider account id. Enable

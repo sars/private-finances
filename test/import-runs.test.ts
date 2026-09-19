@@ -233,6 +233,39 @@ test('a cursor that is not a cursor returns the first page instead of failing', 
   }
 });
 
+test('a run killed before it could finish stops claiming to be running', async () => {
+  const db = memoryDatabase();
+  try {
+    await migrate(db);
+    // What a killed process leaves: an opened row nothing will ever close,
+    // because its only writer was the process that died.
+    const recorder = new AttemptRecorder(
+      db,
+      'monobank:rodion',
+      new Date('2026-09-01'),
+      new Date('2026-09-02'),
+    );
+    await recorder.open();
+
+    // Fresh, it is genuinely running and must be left alone.
+    assert.equal((await importRuns(db)).runs[0]!.outcome, 'running');
+
+    // Past the window the importer's own unit gives up in, nobody believes it.
+    await db.query(
+      "UPDATE bank_sync_attempts SET started_at = now() - interval '2 hours'",
+    );
+    const stale = (await importRuns(db)).runs[0]!;
+    assert.equal(stale.outcome, 'failed');
+    assert.equal(stale.errorCode, 'abandoned');
+    // The detail view must agree with the list, or the badge changes on click.
+    const detail = await importRun(db, stale.id);
+    assert.equal(detail!.outcome, 'failed');
+    assert.equal(detail!.errorCode, 'abandoned');
+  } finally {
+    await db.close();
+  }
+});
+
 test('a request path is reduced to its shape, never its identifiers', () => {
   // These two carry a consent session and a provider account id. Neither may
   // reach a stored step, and the shape that remains is what explains a failure.
@@ -269,6 +302,46 @@ test('a refused request reaches the observer with its status and the wait the ba
   assert.equal(seen[0]!.retryAfterMs, 600000);
   // The raw path reaches the observer; reducing it is the recorder's job.
   assert.equal(sanitizePath(seen[0]!.path), '/accounts/…/transactions');
+});
+
+test('a request that worked is reported too, not only the refusals', async () => {
+  // The first version of this reported only failures, so a healthy run showed
+  // no requests at all — and what was asked of the bank is most of what the
+  // run screen exists to show. Caught on the first real import after release.
+  const seen: {
+    path: string;
+    status?: number;
+    size?: number;
+    code?: string;
+  }[] = [];
+  const body = JSON.stringify({ accounts: [] });
+  const ask = requester(
+    'https://api.enablebanking.com',
+    0,
+    async () => new Response(body, { status: 200 }),
+    (event) => seen.push(event),
+  );
+  await ask('/sessions/abc', {});
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.status, 200);
+  assert.equal(seen[0]!.size, Buffer.byteLength(body));
+  assert.equal(seen[0]!.code, undefined);
+});
+
+test('a request that never got an answer is reported with no status', async () => {
+  const seen: { path: string; status?: number; code?: string }[] = [];
+  const ask = requester(
+    'https://api.monobank.ua',
+    0,
+    async () => {
+      throw new Error('socket hang up');
+    },
+    (event) => seen.push(event),
+  );
+  await assert.rejects(ask('/personal/client-info', {}));
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.status, undefined);
+  assert.equal(seen[0]!.code, 'transient');
 });
 
 test('an observer that throws cannot break an import', async () => {
