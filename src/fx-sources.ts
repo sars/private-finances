@@ -30,6 +30,14 @@ export function fxSourceRank(source: string): number {
   return index === -1 ? FX_SOURCE_PRECEDENCE.length : index;
 }
 
+/** The short name a screen shows. The stored string names the method too, which
+ * belongs in provenance rather than in a table the owner reads at a glance. */
+export function fxSourceLabel(source: string): string {
+  if (source === PRIVATBANK_SOURCE) return 'PrivatBank';
+  if (source === MINFIN_SOURCE) return 'Minfin bank average';
+  return source;
+}
+
 /** Ranked first, then by name, so two unranked sources still order stably. */
 export function compareFxSources(a: string, b: string): number {
   return fxSourceRank(a) - fxSourceRank(b) || (a < b ? -1 : a > b ? 1 : 0);

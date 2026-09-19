@@ -6,6 +6,7 @@ import { CircleAlert } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccountBadge, PageHeader, RefreshButton } from '@/components/finance';
+import { fxSourceLabel as sourceLabel } from '../../src/fx-sources';
 import type { FxConversionStatus } from '../../src/fx-status';
 import type { FxDay, FxDayState } from '../../src/fx-coverage';
 
@@ -33,23 +34,24 @@ const monthFormat = new Intl.DateTimeFormat('en-GB', {
 });
 const day = (date: string) => dayFormat.format(new Date(`${date}T00:00:00Z`));
 
-/** The three things a calendar day can be, and what each one means. */
+/** The four things a calendar day can be, and what each one means. */
 const states: Record<FxDayState, { name: string; tone: string }> = {
-  // A day nobody published is a closed fact, not a fault, so it is grey and
-  // quiet. A day the sync has not reached is amber, because it is the one of
-  // the three the owner can actually do something about.
+  // Only one of these is a fault. A day nobody published is a closed fact and a
+  // day with no payment on it needs nothing, so both stay quiet; a day the sync
+  // has not reached is amber, because it is the one the owner can act on.
   covered: { name: 'Covered', tone: 'bg-primary' },
   empty_at_source: {
     name: 'Empty at source',
     tone: 'bg-muted-foreground/35',
   },
   not_fetched: { name: 'Not fetched', tone: 'bg-warning' },
+  not_needed: { name: 'No payments', tone: 'bg-muted-foreground/15' },
 };
 
 /**
  * One cell per day, wrapping, with a light marker where a month starts.
  *
- * Deliberately not a chart: there is no magnitude here, only three states, and
+ * Deliberately not a chart: there is no magnitude here, only four states, and
  * the thing worth seeing is where a gap falls in the calendar. A cell carries
  * its date and state as its accessible name, so the strip reads as a list of
  * days rather than as decoration a screen reader has to skip.
@@ -283,6 +285,44 @@ export default function Fx() {
                   {tally(status.rates.needed)} days
                 </span>
               </p>
+              {/* The rate itself. A page about rates that never showed one made
+                  the owner take the coverage claim on trust; this is the number
+                  a conversion on that day would actually use, chosen by the
+                  same source precedence the conversion applies. */}
+              {status.rates.latest.length > 0 && (
+                <ul className="divide-border divide-y">
+                  {status.rates.latest.map((quote) => (
+                    <li
+                      key={`${quote.base}/${quote.target}`}
+                      className="flex min-h-11 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2"
+                    >
+                      <span className="text-sm tabular-nums">
+                        1 {quote.base} ={' '}
+                        <span className="font-medium">
+                          {quote.rate} {quote.target}
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {sourceLabel(quote.source)} · {day(quote.asOf)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {status.rates.sources.length > 0 && (
+                <p className="text-muted-foreground text-sm">
+                  {status.rates.sources.map((entry, index) => (
+                    <span key={entry.source}>
+                      {index > 0 && ' · '}
+                      <span className="text-foreground tabular-nums">
+                        {tally(entry.days)}
+                      </span>{' '}
+                      {entry.days === 1 ? 'day' : 'days'} from{' '}
+                      {sourceLabel(entry.source)}
+                    </span>
+                  ))}
+                </p>
+              )}
               <CoverageStrip days={status.rates.days} />
               <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 {present.map((state) => (

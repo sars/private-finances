@@ -102,6 +102,12 @@ recorded for it and the next run asks again.
 A date already filled by either source is skipped on later runs, so neither
 provider is asked nightly about a date that can no longer change.
 
+The sync asks only about days that carry a payment, plus today. The status page
+uses the same definition, so a calendar day with no payment on it is drawn as
+needing nothing and left out of the coverage count. Counting those days against
+the sync put two permanently amber cells on the page with nothing able to clear
+them — the exact failure the two missing states exist to avoid.
+
 ## Sources
 
 [PrivatBank/LiqPay archive documentation](https://www.liqpay.ua/en/doc/api/public/archive?tab=0),

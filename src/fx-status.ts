@@ -2,6 +2,7 @@ import type { Repository, Transaction } from './repository.js';
 import { convertedSpending } from './analytics.js';
 import { accountDisplayName } from './account-names.js';
 import { fxCoverage, type FxDay } from './fx-coverage.js';
+import { compareFxSources } from './fx-sources.js';
 
 /**
  * What the conversion status page asks for, and nothing else.
@@ -17,10 +18,23 @@ export interface FxConversionStatus {
     to: string;
     /** One entry per calendar day in the range, for the coverage strip. */
     days: FxDay[];
+    /** Days that need a rate, and how many of them have one. Days with no
+     * payment on them are in neither figure: they need nothing. */
     covered: number;
     needed: number;
     /** The most recent day with a stored quote, or null when none exists. */
     current: string | null;
+    /** How many days each source accounts for, most trusted source first. */
+    sources: { source: string; days: number }[];
+    /** The newest stored quote for each pair: the rate itself, and where it
+     * came from. Without this the page talks about rates without showing one. */
+    latest: {
+      base: string;
+      target: string;
+      rate: string;
+      source: string;
+      asOf: string;
+    }[];
   };
   conversions: {
     total: number;
@@ -116,9 +130,56 @@ export async function fxConversionStatus(
   const latest = dates.at(-1) ?? today;
   const from = earliest < today ? earliest : today;
   const to = latest > today ? latest : today;
-  const days = await fxCoverage(repo.db, from, to);
+  // The days a rate is actually wanted for: the ones carrying a payment, plus
+  // today, which is exactly the set the nightly sync asks about. Keeping the two
+  // definitions identical is what stops the page reporting a gap the sync was
+  // never going to fill.
+  const needed = new Set([...dates, today]);
+  const days = await fxCoverage(repo.db, from, to, needed);
   const current =
     [...days].reverse().find((day) => day.state === 'covered')?.date ?? null;
+  const sources = (
+    await repo.db.query(
+      'SELECT source,count(DISTINCT as_of)::int AS days FROM daily_fx_rates WHERE as_of>=$1 AND as_of<=$2 GROUP BY source',
+      [from, to],
+    )
+  ).rows
+    .map((row) => ({ source: String(row.source), days: Number(row.days) }))
+    .sort((a, b) => compareFxSources(a.source, b.source));
+  // The newest day each pair has a quote for, then the most trusted source that
+  // published on that day — the same precedence a conversion uses, so the rate
+  // shown is the rate that would be applied.
+  const newest = new Map<
+    string,
+    FxConversionStatus['rates']['latest'][number] & { version: number }
+  >();
+  for (const row of (
+    await repo.db.query(
+      `SELECT base,target,rate,source,version,to_char(as_of,'YYYY-MM-DD') AS day
+       FROM daily_fx_rates WHERE (base,target,as_of) IN
+       (SELECT base,target,max(as_of) FROM daily_fx_rates GROUP BY base,target)`,
+    )
+  ).rows) {
+    const quote = {
+      base: String(row.base),
+      target: String(row.target),
+      rate: String(row.rate),
+      source: String(row.source),
+      asOf: String(row.day),
+      version: Number(row.version),
+    };
+    const key = `${quote.base}/${quote.target}`;
+    const held = newest.get(key);
+    if (
+      !held ||
+      compareFxSources(quote.source, held.source) < 0 ||
+      (quote.source === held.source && quote.version > held.version)
+    )
+      newest.set(key, quote);
+  }
+  const latestQuotes = [...newest.values()]
+    .sort((a, b) => (a.base < b.base ? -1 : a.base > b.base ? 1 : 0))
+    .map(({ version: _version, ...quote }) => quote);
   const accounts = new Map(
     (
       await repo.db.query(
@@ -137,8 +198,10 @@ export async function fxConversionStatus(
       to,
       days,
       covered: days.filter((day) => day.state === 'covered').length,
-      needed: days.length,
+      needed: days.filter((day) => day.state !== 'not_needed').length,
       current,
+      sources,
+      latest: latestQuotes,
     },
     conversions: {
       total: spending.rows.length,
