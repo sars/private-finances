@@ -11,7 +11,7 @@
  * them with Playwright, which the project already carries for screenshots, so
  * no photograph of the household's own shopping is ever committed.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Database } from './database.js';
 
@@ -219,11 +219,15 @@ export async function seedShowcaseReceipts(
         (item) => `${item.name} — ${(item.minor / 100).toFixed(2)}`,
       ),
     };
+    // The digest is what the application matches a second copy of the same
+    // photograph against, so a seeded receipt carries one exactly as an
+    // ingested one does.
+    const digest = createHash('sha256').update(image).digest('hex');
     await db.query(
       `INSERT INTO receipt_jobs
-         (id,owner,chat_id,message_id,file_id,state,image,mime,extraction,
-          transaction_id,created_at,updated_at)
-       VALUES($1,$2,$3,$4,$5,'matched',$6,'image/jpeg',$7,$8,$9,$9)`,
+         (id,owner,chat_id,message_id,file_id,state,image,mime,image_sha256,
+          extraction,transaction_id,created_at,updated_at)
+       VALUES($1,$2,$3,$4,$5,'matched',$6,'image/jpeg',$7,$8,$9,$10,$10)`,
       [
         randomUUID(),
         receipt.owner,
@@ -231,6 +235,7 @@ export async function seedShowcaseReceipts(
         1000 + index,
         `showcase-${receipt.file}`,
         image,
+        digest,
         JSON.stringify(extraction),
         payment.id,
         bought.toISOString(),
