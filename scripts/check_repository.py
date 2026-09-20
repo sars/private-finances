@@ -64,6 +64,14 @@ def main():
                 continue
             if re.fullmatch(r"frontend/public/icon-\d+\.png", name):
                 continue
+            # The showcase receipts, rendered from the list in
+            # src/showcase-receipts.ts by scripts/make-receipt-images.mjs:
+            # till slips from shops nobody visited, so the Receipts screen can
+            # be photographed for a public article without a picture of the
+            # household's own shopping. No photograph anybody took belongs
+            # here, and nothing here may be replaced by one.
+            if re.fullmatch(r"showcase/receipts/[a-z0-9-]+\.jpg", name):
+                continue
             errors.append(f"Binary file requires an explicit review policy: {name}")
             continue
         if any(pattern.search(content) for pattern in secret_patterns):
