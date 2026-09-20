@@ -54,12 +54,15 @@ LimitNOFILE=2048
 # PostgreSQL compiled to WebAssembly inside its own process, so the database's
 # peak is the service's peak.
 #
-# This ceiling is for that first boot. Once the workspace is seeded, read
-# MemoryPeak back and trim this to roughly half again as much; a limit set
-# well above what the service uses is a limit that will not catch a leak.
-# Whatever it becomes, keep one: a cgroup OOM kills only this service, which
-# is what kept the real application untouched while this was being sized.
-MemoryMax=2G
+# On a seeded workspace it peaked at 859M and settled at 405M, so 1280M leaves
+# about half again as much headroom as it has ever needed. Keep the ceiling
+# somewhere near what it actually uses: one set far above that would never
+# catch a leak, and a cgroup OOM kills only this service — which is what kept
+# the real application untouched while this was being sized.
+#
+# Reseeding runs in a process of its own, outside this cgroup, so it is not
+# bounded by this figure.
+MemoryMax=1280M
 
 [Install]
 WantedBy=multi-user.target
