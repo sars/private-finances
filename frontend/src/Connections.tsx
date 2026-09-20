@@ -3,7 +3,7 @@ import {
   observeSession,
   useRefreshSignal,
 } from './lib/query';
-import { owners } from './lib/account-visuals';
+import { owners, type Owner } from './lib/account-visuals';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowUpRight, CircleAlert, Landmark, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,8 @@ type Connection = {
   status: string;
 };
 type Session = {
-  actor: string;
+  /** Which member is signed in; the names they are shown by live in one map. */
+  actor: Owner;
   csrf: string;
   features: { consent: boolean; monobankJarsExcluded: boolean };
   /** The provider's name, sent back on the form, the name the owner reads,
