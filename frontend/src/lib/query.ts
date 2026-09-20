@@ -1,6 +1,6 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
-import { setOwnerNames } from './account-visuals';
+import { setOwnerNames } from './account-visuals.ts';
 export type Session = {
   actor: 'rodion' | 'katya';
   csrf: string;
