@@ -102,3 +102,59 @@ It looks like the application, deliberately: an article needs to show the thing
 itself, not a sample of it. One quiet **Demo mode** label sits at the left of
 the header. That is enough to keep a reader honest, and enough to stop the
 owner mistaking it for the real workspace now that the two look alike.
+
+## Bringing the demo instance up on the server
+
+These are yours to run: they need the server, the tailnet and root. The unit
+file is `deploy/private-finances-showcase.service`.
+
+1. **Check the port is free.** The real application holds 3300; the showcase
+   wants 3301.
+
+   ```sh
+   ssh radar "sudo ss -lntp | grep -E ':(3300|3301)'"
+   ```
+
+   Only 3300 should answer. If something else already holds 3301, pick another
+   port and change `PORT` in the unit before installing it.
+
+2. **Write the origin file.** It carries the tailnet hostname the showcase will
+   be served on, and nothing else — no database URL, no credential.
+
+   ```sh
+   ssh radar "sudo install -m 0640 -o root -g private-finances /dev/null /etc/private-finances/showcase.env"
+   ssh radar "echo 'PUBLIC_ORIGIN=https://<showcase-hostname>' | sudo tee /etc/private-finances/showcase.env"
+   ```
+
+3. **Install and start the unit.**
+
+   ```sh
+   scp deploy/private-finances-showcase.service radar:/tmp/
+   ssh radar "sudo mv /tmp/private-finances-showcase.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now private-finances-showcase"
+   ```
+
+4. **Point Tailscale at it.** The application listens on loopback only, exactly
+   as the real one does, so Tailscale terminates HTTPS in front of it. HTTPS is
+   what makes the installable app possible, which is the whole reason the
+   showcase runs on the server rather than on the laptop.
+
+   ```sh
+   ssh radar "sudo tailscale serve --bg --https 443 --set-path / http://127.0.0.1:3301"
+   ```
+
+   **Do not use `tailscale funnel`.** Funnel puts it on the public internet,
+   and the showcase has no login.
+
+5. **Fill it.**
+
+   ```sh
+   ssh radar "cd /opt/private-finances/current && sudo -u private-finances DEMO_DATA_DIR=/var/lib/private-finances-showcase/demo node scripts/seed-showcase.mjs"
+   ssh radar "sudo systemctl restart private-finances-showcase"
+   ```
+
+   Re-run both before a session of screenshots: the dates are generated
+   relative to the day it is seeded.
+
+6. **Check it.** Open the hostname on your phone, install it, and confirm the
+   header says **Demo mode** and the people are Alex and Sam. If it says
+   anything else, stop and do not photograph it.
