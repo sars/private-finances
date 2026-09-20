@@ -1,4 +1,5 @@
 import {
+import { owners } from './lib/account-visuals';
   invalidateFinancialData,
   observeSession,
   useRefreshSignal,
@@ -199,7 +200,7 @@ export default function Connections() {
               <div>
                 <p className="text-sm font-medium">
                   Signed in as{' '}
-                  <span className="capitalize">{session.actor}</span>
+                  <span>{owners[session.actor].name}</span>
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   Approve only your own bank accounts. Approval does not

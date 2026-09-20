@@ -103,6 +103,15 @@ test('a seeded workspace has the money the screens need to show', async () => {
     );
     assert.equal(Number(slips.rows[0]!.n), result.receipts);
 
+    // Balances are stored bank evidence, never summed from payments: an
+    // unseeded workspace shows zeroes however many payments it holds, which
+    // is exactly what the first seeded instance did.
+    const balances = await db.query<{ n: string; total: string }>(
+      'SELECT count(*) AS n, sum(abs(amount_minor)) AS total FROM account_balances',
+    );
+    assert.equal(Number(balances.rows[0]!.n), 9, 'one row per account');
+    assert.ok(BigInt(balances.rows[0]!.total) > 0n, 'and none of them zero');
+
     const connections = await db.query<{ n: string }>(
       "SELECT count(*) AS n FROM bank_sync_runs WHERE state='succeeded'",
     );

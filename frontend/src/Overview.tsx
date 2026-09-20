@@ -1,4 +1,5 @@
 import {
+import { owners } from './lib/account-visuals';
   invalidateFinancialData,
   useRefreshSignal,
   useSession,
@@ -408,8 +409,8 @@ export default function Overview() {
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                       {othersUnresolved} of them{' '}
                       {othersUnresolved === 1 ? 'belongs' : 'belong'} to{' '}
-                      <span className="capitalize">
-                        {actor === 'rodion' ? 'katya' : 'rodion'}
+                      <span>
+                        {owners[actor === 'rodion' ? 'katya' : 'rodion'].name}
                       </span>{' '}
                       and can only be decided from that sign-in.
                     </p>

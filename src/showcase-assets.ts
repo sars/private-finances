@@ -17,6 +17,7 @@
 import { randomUUID } from 'node:crypto';
 import { isMemoryDatabase, type Database } from './database.js';
 import { Holdings } from './holdings.js';
+import { AccountBalances } from './account-balances.js';
 import { FxRates } from './fx-rates.js';
 import { PRIVATBANK_SOURCE } from './fx-sources.js';
 
@@ -431,6 +432,101 @@ export async function seedShowcaseImports(
   return written;
 }
 
+
+/**
+ * What each bank last reported the accounts held.
+ *
+ * The balances screen shows stored evidence, never arithmetic over payments:
+ * no opening figure exists to sum from, so an unseeded workspace shows zeroes
+ * however many payments it holds. They are therefore written here as a
+ * connector would have written them, one row per account per currency.
+ *
+ * These are of the same household as the holdings, but they are not the same
+ * reading and are not meant to reconcile to the penny: a balance is what a
+ * bank said this morning, a holding is what somebody wrote down on the first
+ * of the month. That difference is true of the real workspace too.
+ */
+const SHOWCASE_BALANCES: ReadonlyArray<{
+  source: string;
+  accountId: string;
+  currency: string;
+  amountMinor: string;
+}> = [
+  {
+    source: 'monobank',
+    accountId: 'mono-alex-black',
+    currency: 'UAH',
+    amountMinor: '4812300',
+  },
+  {
+    source: 'monobank',
+    accountId: 'mono-alex-iron',
+    currency: 'UAH',
+    amountMinor: '12648000',
+  },
+  {
+    source: 'monobank',
+    accountId: 'mono-alex-fop',
+    currency: 'UAH',
+    amountMinor: '31204500',
+  },
+  {
+    source: 'enablebanking',
+    accountId: 'wise-alex-eur',
+    currency: 'EUR',
+    amountMinor: '243800',
+  },
+  {
+    source: 'enablebanking',
+    accountId: 'revolut-alex-eur',
+    currency: 'EUR',
+    amountMinor: '86450',
+  },
+  {
+    source: 'enablebanking',
+    accountId: 'lhv-alex-eur',
+    currency: 'EUR',
+    amountMinor: '181200',
+  },
+  {
+    source: 'monobank',
+    accountId: 'mono-sam-white',
+    currency: 'UAH',
+    amountMinor: '6237400',
+  },
+  {
+    source: 'enablebanking',
+    accountId: 'wise-sam-eur',
+    currency: 'EUR',
+    amountMinor: '115900',
+  },
+  {
+    source: 'enablebanking',
+    accountId: 'swedbank-sam-eur',
+    currency: 'EUR',
+    amountMinor: '310600',
+  },
+];
+
+/** Write the balances a connector would have reported, observed this morning. */
+export async function seedShowcaseBalances(
+  db: Database,
+  now: Date,
+): Promise<number> {
+  const balances = new AccountBalances(db);
+  // Observed a few hours ago, so the screen's freshness note reads like a
+  // bank answered today rather than like a fixture written at midnight.
+  const observed = new Date(now.getTime() - 3 * 3600000);
+  let written = 0;
+  for (const row of SHOWCASE_BALANCES)
+    written += await balances.record(
+      { source: row.source, accountId: row.accountId },
+      [{ currency: row.currency, amountMinor: row.amountMinor }],
+      observed,
+    );
+  return written;
+}
+
 /** Everything above, for a workspace that is about to be photographed. */
 export async function seedShowcaseAssets(
   db: Database,
@@ -444,5 +540,6 @@ export async function seedShowcaseAssets(
   const rates = await seedShowcaseRates(db, now, months);
   const savings = await seedShowcaseHoldings(db, now, months);
   await seedShowcaseImports(db, now);
+  await seedShowcaseBalances(db, now);
   return { ...savings, rates };
 }

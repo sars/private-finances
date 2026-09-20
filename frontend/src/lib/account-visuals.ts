@@ -196,6 +196,25 @@ export const owners: Record<
  * of them without threading a name down the tree. The colours belong to the
  * theme and never change; the initial follows the new name.
  */
+/**
+ * A connection identifier as a person reads it: "Monobank · Alex · Wise".
+ *
+ * The identifier carries the member it belongs to — `monobank:rodion` — so
+ * printing it raw puts the ledger's own name for somebody on the screen, which
+ * the demo workspace exists to avoid. Only the member's segment is translated;
+ * the bank and the product are what the connector called them.
+ */
+export function connectionLabel(connection: string): string {
+  return connection
+    .split(':')
+    .map((part) =>
+      part === 'rodion' || part === 'katya'
+        ? owners[part].name
+        : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join(' · ');
+}
+
 export function setOwnerNames(names: Partial<Record<Owner, string>>): void {
   for (const [owner, name] of Object.entries(names)) {
     const entry = owners[owner as Owner];

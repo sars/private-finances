@@ -24,6 +24,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { CircleHelp, LogOut, Monitor, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { owners } from '@/lib/account-visuals';
 import {
   SidebarInset,
   SidebarProvider,
@@ -237,11 +238,11 @@ function App() {
             <ThemeControl theme={theme} setTheme={setTheme} />
             <div className="flex items-center gap-3 border-t pt-3">
               <span className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase">
-                {identity?.actor.slice(0, 1) ?? '—'}
+                {identity ? owners[identity.actor].initial : '—'}
               </span>
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium capitalize">
-                  {identity?.actor ?? 'Connecting…'}
+                <div className="truncate text-sm font-medium">
+                  {identity ? owners[identity.actor].name : 'Connecting…'}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {identity?.mode === 'demo'
