@@ -74,6 +74,36 @@ Home screen is always the current one. **Reseed before taking screenshots** —
 that is the only thing that keeps the workspace from slowly emptying out as
 time passes. There is no timer, because it is only wanted before a photograph.
 
+## Changing what it holds
+
+Every figure comes from three files, and the fast way to judge a change is to
+make it, reseed locally and look — seconds per turn, rather than a release.
+
+```sh
+pnpm demo:seed && pnpm demo
+```
+
+| What | Where |
+| --- | --- |
+| How much is spent, and how often | `SPENDING` in `src/showcase.ts` |
+| Rent, salary, bills, the business invoice | `RECURRING` in `src/showcase.ts` |
+| Savings, their groups and what they hold | `SHOWCASE_HOLDINGS` in `src/showcase-assets.ts` |
+| What each bank reports as a balance | `SHOWCASE_BALANCES`, same file |
+| Prices and exchange rates | `PRICES` and `FX`, same file |
+| The receipts | `SHOWCASE_RECEIPTS` in `src/showcase-receipts.ts` |
+
+**Density** is the knob most likely to be wanted. Each `SPENDING` entry carries
+a `monthly` count, and they sum to about eighty payments a month; doubling them
+doubles how busy every screen looks. `min` and `max` are minor units, so
+`24000` is 240 UAH.
+
+Two things that must stay true. A receipt's items are what the slip in the
+photograph adds up to, so changing them means running `pnpm demo:receipts`
+again — otherwise the picture and the payment disagree, which is the first
+thing a reader notices. And a holding group that is not in `SHOWCASE_HOLDINGS`
+simply does not exist: that is why the totals still add up, where deleting rows
+from a copy of the real workspace would leave them short.
+
 ## It cannot reach the household's own data
 
 Four independent things have to be true at once, and each is enough on its own:

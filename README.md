@@ -12,10 +12,13 @@ and a health/freshness page. No bank credentials are needed for this flow.
 ```sh
 pnpm install --frozen-lockfile
 pnpm check
+pnpm demo:seed
 pnpm demo
 ```
 
-Open http://127.0.0.1:3300. Import the examples, refresh, and classify an outflow.
+Open http://127.0.0.1:3300. The workspace holds an invented household — sixteen
+months of it, nobody's real money — so classify an outflow, drill into a total,
+open a receipt. See [the showcase](docs/showcase.md).
 
 ## Documentation
 

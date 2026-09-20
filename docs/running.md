@@ -11,11 +11,13 @@ done recently when it is needed.
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm demo:seed
 pnpm demo
 ```
 
-Open <http://127.0.0.1:3300>. This is a synthetic workspace: it imports example
-transactions, and it never touches a bank, the household's data or the server.
+Open <http://127.0.0.1:3300>. This is a synthetic workspace holding an invented
+household, and it never touches a bank, the household's data or the server. See
+[the showcase](showcase.md).
 [Local development](development.md) covers the rest — an isolated PostgreSQL,
 screenshots, the checks.
 
