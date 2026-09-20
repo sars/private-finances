@@ -7,7 +7,8 @@ import { Repository } from './repository.js';
 import { web } from './web.js';
 import { synthetic } from './synthetic.js';
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { setOwnerNames } from './account-names.js';
 import { TelegramClarifications, telegramTransport } from './telegram.js';
 import { Classifier } from './classifier.js';
 import {
@@ -51,10 +52,27 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error('Invalid PORT');
 if (mode === 'postgres' && !process.env.DATABASE_URL)
   throw new Error('DATABASE_URL is required');
-if (mode === 'demo') await mkdir('data', { recursive: true, mode: 0o700 });
+/**
+ * Where the demo workspace keeps its database.
+ *
+ * `data/demo` under the working directory is what `pnpm demo` uses on a
+ * laptop. A demo instance on the server must set `DEMO_DATA_DIR` to a
+ * directory of its own: the working directory there is inside the release, so
+ * the default would write the database into a release and lose it at the next
+ * switch. Demo mode never opens `DATABASE_URL` — the branch below is the only
+ * place either database is chosen, and the two cannot both be reached.
+ */
+const demoDataDirectory = process.env.DEMO_DATA_DIR ?? 'data/demo';
+if (mode === 'demo') {
+  await mkdir(dirname(demoDataDirectory), { recursive: true, mode: 0o700 });
+  // The demo exists to be photographed for a public article, so the household
+  // is renamed before anything is served. Only the label changes; every
+  // payment is still owned by `rodion` or `katya` underneath.
+  setOwnerNames({ rodion: 'Alex', katya: 'Sam' });
+}
 const db =
   mode === 'demo'
-    ? memoryDatabase('data/demo')
+    ? memoryDatabase(demoDataDirectory)
     : postgresDatabase(process.env.DATABASE_URL!);
 await migrate(db);
 const repo = new Repository(db);

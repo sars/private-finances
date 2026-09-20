@@ -284,25 +284,25 @@ function App() {
               button; a second trigger here would be a website's duplicate
               nav control, not a native app's. */}
           <SidebarTrigger className="-ml-1 hidden md:inline-flex" />
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            Household workspace · Europe/Riga
-          </span>
+          {/* The demo is photographed for a public article, so it has to look
+              like the application rather than like a sample of it. One quiet
+              label says which workspace this is — enough to keep a reader
+              honest, and enough to stop the owner mistaking it for the real
+              one, since the two now look alike. */}
+          {identity?.mode === 'demo' ? (
+            <span className="rounded-full border border-dashed px-2 py-0.5 text-xs text-muted-foreground">
+              Demo mode
+            </span>
+          ) : (
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              Household workspace · Europe/Riga
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-1.5">
             <CurrencyControl />
           </div>
         </header>
         <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
-          {identity?.mode === 'demo' && (
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
-              <span>Demo workspace · synthetic examples only</span>
-              <form action="/import" method="post">
-                <input type="hidden" name="csrf" value={identity.csrf} />
-                <Button type="submit" size="sm" variant="outline">
-                  Import example transactions
-                </Button>
-              </form>
-            </div>
-          )}
           <Suspense
             fallback={
               <div

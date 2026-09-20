@@ -1,0 +1,53 @@
+# The showcase: the same release, serving an invented household.
+#
+# It exists so the installed app, the phone layouts and the pull-to-refresh
+# gesture can be photographed for a public article. A laptop cannot show those:
+# a phone cannot reach localhost, and a LAN address is not a secure origin, so
+# there is no service worker and no install.
+#
+# It runs the same code as the real application from the same release
+# directory, so it never falls behind a change to the interface. Only the mode
+# differs, and the mode is what decides the database.
+#
+# Read docs/showcase.md before enabling this. The rule that matters: demo mode
+# has no login — it signs itself in, because there is nobody to authenticate
+# and nothing real behind it — so this instance must never be reachable from
+# outside the tailnet.
+[Unit]
+Description=Private Finances showcase (invented household, for screenshots)
+After=network.target
+
+[Service]
+Type=simple
+User=private-finances
+Group=private-finances
+WorkingDirectory=/opt/private-finances/current
+Environment=APP_MODE=demo
+Environment=PORT=3301
+# Not under the working directory: that is inside a release, and the database
+# would be lost at the next switch. StateDirectory below creates the parent.
+Environment=DEMO_DATA_DIR=/var/lib/private-finances-showcase/demo
+# Only the public origin, so the host check accepts the tailnet hostname. This
+# file must not carry a database URL or any credential: demo mode cannot open
+# either, and keeping the file bare makes that visible to whoever reads it.
+EnvironmentFile=-/etc/private-finances/showcase.env
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+UMask=0077
+StateDirectory=private-finances-showcase
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LimitNOFILE=2048
+MemoryMax=384M
+
+[Install]
+WantedBy=multi-user.target

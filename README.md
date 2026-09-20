@@ -25,6 +25,7 @@ Open http://127.0.0.1:3300. Import the examples, refresh, and classify an outflo
 - [Telegram setup](docs/telegram-setup.md)
 - [Bringing it up: laptop, release, and rebuilding from nothing](docs/running.md)
 - [Development and tests](docs/development.md)
+- [The showcase workspace](docs/showcase.md)
 - [Application architecture and limitations](docs/adr/0002-synthetic-application.md)
 - [Agent working agreement](AGENTS.md)
 - [How agents work on this project](docs/agent-development-model.md)

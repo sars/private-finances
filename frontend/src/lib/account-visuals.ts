@@ -187,6 +187,24 @@ export const owners: Record<
   katya: { name: 'Katya', initial: 'K', color: 'var(--chart-3)' },
 };
 
+/**
+ * Call the members whatever the server calls them.
+ *
+ * The demo workspace renames the household so a screenshot can be published,
+ * and the server states the names in the bootstrap payload. Every consumer
+ * reads `owners` as it renders, so replacing the fields in place reaches all
+ * of them without threading a name down the tree. The colours belong to the
+ * theme and never change; the initial follows the new name.
+ */
+export function setOwnerNames(names: Partial<Record<Owner, string>>): void {
+  for (const [owner, name] of Object.entries(names)) {
+    const entry = owners[owner as Owner];
+    if (!entry || !name) continue;
+    entry.name = name;
+    entry.initial = name.slice(0, 1).toLocaleUpperCase();
+  }
+}
+
 /** Which bank an account is with, read from the connector and the owner's own name for it. */
 export function bankFor(
   source: string | undefined,

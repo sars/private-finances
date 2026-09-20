@@ -1,10 +1,13 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
+import { setOwnerNames } from './account-visuals.ts';
 export type Session = {
   actor: 'rodion' | 'katya';
   csrf: string;
   mode: string;
   isAdmin?: boolean;
+  /** What to call each member; the demo workspace renames the household. */
+  ownerNames?: Partial<Record<'rodion' | 'katya', string>>;
   /** The commit the server is running; the app compares its own against it. */
   release?: string;
   features: { ai: boolean; telegram: boolean };
@@ -53,6 +56,9 @@ export function observeSession(value: unknown): void {
       predicate: (q) => q.queryKey[0] !== 'session',
     });
   }
+  // The names arrive with the session because the server decides them, and
+  // every screen reads them from one map as it renders.
+  if (next.ownerNames) setOwnerNames(next.ownerNames);
   authorizationLost = false;
   queryClient.setQueryData(['session'], next);
 }
