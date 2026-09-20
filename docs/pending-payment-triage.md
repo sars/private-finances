@@ -142,3 +142,14 @@ liquid across one counter — the rule is retired and the payment goes back to
 being asked about. Each change is a new edition of the rule with its reason in
 `classification_rule_audit`, and the payments already stranded are moved to
 `uncertain` so they are asked rather than left.
+
+Migration 65 carries the two corrections the owner made after reading what the
+repair had done. Three more merchants were the same kind of variety chemist as
+the one already named, so their rules are retired too and those payments are
+asked about. And the one rule the repair could only leave on a branch's own
+catch-all, because that is where the member had filed the payments themselves,
+is moved onto the leaf the owner named: a catch-all is not a category, so
+without it those payments would have been asked about for ever instead of
+filed. Retired means deactivated, not deleted. The rule, its history and its
+reasons stay, and either member can switch one back on under Categories &
+rules.

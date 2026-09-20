@@ -247,3 +247,69 @@ test('the repair restores what the household decided and retires what it did not
     await db.close();
   }
 });
+
+test('the corrections the owner made after seeing the repair', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  try {
+    const categories = new Categories(db);
+    const cosmetics = await nodeBySlug(categories, 'beauty.cosmetics');
+    const familyCatchAll = await nodeBySlug(categories, 'family.unspecified');
+    const support = await nodeBySlug(categories, 'family.parents_support');
+    // The id the migration names. Its meaning is the household's; the test only
+    // needs a rule to exist under it.
+    const placed = '4574db2f-d0c9-43aa-8148-0792c5491854';
+
+    const rules: [string, string, string][] = [
+      [randomUUID(), 'EVA', cosmetics.id],
+      [randomUUID(), 'DROGAS 2007', cosmetics.id],
+      // Begins with an ambiguous name and is not one: a bare prefix would take
+      // it, and the household never said anything about this shop.
+      [randomUUID(), 'EVANS', cosmetics.id],
+      [placed, 'A recurring transfer', familyCatchAll.id],
+    ];
+    for (const [id, value, category] of rules)
+      await db.query(
+        `INSERT INTO classification_rules(id,owner,version,match_field,match_value,kind,category_id,active)
+         VALUES($1,'rodion',1,'description',$2,'personal_expense',$3,true)`,
+        [id, value, category],
+      );
+
+    await db.query('DELETE FROM schema_versions WHERE version=65');
+    await migrate(db);
+
+    const after = new Map(
+      (
+        await db.query(
+          'SELECT match_value, active, category_id, version FROM classification_rules',
+        )
+      ).rows.map((r) => [String(r.match_value), r]),
+    );
+    assert.equal(after.get('EVA')!.active, false);
+    assert.equal(after.get('DROGAS 2007')!.active, false);
+    assert.equal(after.get('EVANS')!.active, true);
+    assert.equal(after.get('EVANS')!.category_id, cosmetics.id);
+    assert.equal(after.get('A recurring transfer')!.active, true);
+    assert.equal(after.get('A recurring transfer')!.category_id, support.id);
+
+    // Every change is a new edition carrying why it changed.
+    const reasons = (
+      await db.query(
+        'SELECT reason FROM classification_rule_audit WHERE version=2 ORDER BY reason',
+      )
+    ).rows.map((r) => String(r.reason));
+    assert.equal(reasons.length, 3);
+
+    // Idempotent: nothing is left for a second run to match.
+    await db.query('DELETE FROM schema_versions WHERE version=65');
+    await migrate(db);
+    const versions = (
+      await db.query(
+        'SELECT version FROM classification_rules ORDER BY match_value',
+      )
+    ).rows.map((r) => Number(r.version));
+    assert.deepEqual(versions, [2, 2, 2, 1]);
+  } finally {
+    await db.close();
+  }
+});
