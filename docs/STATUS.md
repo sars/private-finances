@@ -9,11 +9,66 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**8c952494199249f8ab8098b685505d5d28cce23d**, live since September 20, 2026 at
-schema version 63, deployed with `deploy/release.sh`: both services active,
-schema 63, 4,201 transactions, 684 server tests passed and 4 skipped, the import
-timers and the Telegram worker resumed afterwards. It carries PR #122 and adds
-migration 63.
+**5136504c88278c14fa02b431392e6efd0767e484**, live since September 20, 2026 at
+schema version 65, deployed with `deploy/release.sh`: both services active,
+schema 65, 4,201 transactions, 689 server tests passed and 4 skipped, the import
+timers and the Telegram worker resumed afterwards. It carries PR #127 and adds
+migration 65.
+
+**Three releases in one evening, all from one question the owner asked.** They
+had made a payment and no Telegram question came. The chain behind that is
+recorded in the entries below; what is live now is the end of it.
+
+**The two corrections the owner made after reading the repair.** Three more
+merchants were the same kind of variety chemist as the one they had already
+named, so their rules are retired and those payments are asked about rather
+than filed under cosmetics on the strength of a few past baskets. Retired means
+deactivated: the rule, its history and its reasons stay, and either member can
+switch one back on. The descriptor test stopped being a bare prefix at the same
+time, so a three-letter name can no longer take every merchant that merely
+begins with it.
+
+And one rule the repair could only leave on a branch's own catch-all, because
+that is where the member had filed those payments themselves, now points at the
+leaf the owner named. A catch-all is not a category, so under the triage fix
+those payments would have been asked about for ever instead of filed. It is
+keyed by rule id alone, with no descriptor in the source: what a household rule
+matches is the household's business and this repository is public.
+
+## Previous release
+
+**514dbbcb488ed894c231412ca2be63e5349329b4**, superseded September 20, 2026, at
+schema version 64, deployed with `deploy/release.sh`: both services active,
+schema 64, 4,201 transactions, 688 server tests passed, the import timers and
+the Telegram worker resumed afterwards. It carried PR #125.
+
+**A guess too weak to file is asked about.** Whether to ask kept its own
+confidence threshold, 0.9, while the automatic write kept another: 0.95, or 0.9
+with the bank's merchant code corroborating it, and never where a signal
+contradicts the decision. A model decision between the two, or one at any
+confidence carrying a contradictory signal, was stored `ready` with no question
+text and then not written, and the question lane cannot see such a row. Asking
+now consults the write's own test rather than a threshold of its own. The 0.9
+floor stays, so it only ever adds a question. With
+`AUTO_CATEGORIZE_CLEAR_EXPENSES` off nothing is written at all and a decision
+that would have been filed stays `ready` without a question; that is the
+setting's meaning rather than a fault, and tying the two together would make
+switching automatic categorization off send more messages than leaving it on.
+
+**Before it, 205c059c917fc17f3a257c1facaa6e0a0a66423c** was live at schema 64
+and carried PR #123 and #124, adding migration 64. A photo sent as a reply to
+one of the bot's payment questions is now an answer about that payment: the
+reply names it, so `receipt_jobs.answers_transaction_id` records it and the
+matcher attaches there instead of running the date, amount, currency and
+merchant search. That search refuses to choose between two candidates on
+purpose, so two payments of the same amount on the same day used to leave a
+receipt unmatched however obvious it was to the person who sent it. The
+attachment is recorded as that member's own, and only their own question
+counts.
+
+**And before that, 8c952494199249f8ab8098b685505d5d28cce23d** was live at schema
+63, carrying PR #122 and adding migration 63. It is the release the whole
+evening started from, and its story follows.
 
 **A decision that cannot be written is now a question rather than a silence.**
 The owner asked why a payment they had just made produced no Telegram question.
@@ -41,8 +96,6 @@ liquid across one counter. Each change is a new edition of the rule with its
 reason recorded. Three payments already stranded were moved to `uncertain`, and
 the payment the owner asked about now carries a sent question. Verified on the
 server after the switch: no active rule points at the root catch-all.
-
-## Previous release
 
 **437fe5558453ebe576e438bc1ae543a57460626b**, superseded September 20, 2026, at
 schema version 62, deployed with `deploy/release.sh`: both services active,
@@ -1085,6 +1138,81 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# The corrections the owner made after reading the repair — September 20, 2026
+
+Shown what migration 63 had done, the owner named two more things. Three
+merchants were the same kind of variety chemist as the one they had already
+named: the rules filed them under cosmetics on a handful of past baskets, and
+the owner would rather be asked than have cleaning liquid counted as cosmetics.
+Those rules are retired, which means deactivated — the rule, its history and its
+reasons stay, and either member can switch one back on under Categories & rules.
+
+The descriptor test stopped being a bare prefix at the same time. It matches a
+rule carrying the name exactly, or the name followed by a store number, which is
+how a chain writes its branches. A bare prefix would have taken every merchant
+whose name merely begins with a three-letter one, and a test holds that case.
+
+And one rule the repair could only leave on a branch's own catch-all, because
+that is where the member had filed those payments themselves, now points at the
+leaf the owner named. A catch-all is not a category, so under the triage fix
+those payments would have been asked about for ever instead of filed. It is
+keyed by rule id alone, with no descriptor in the source: what a household rule
+matches is the household's business and this repository is public.
+
+Checked on the server after the switch: the three rules are inactive with their
+categories and history intact, the fourth is active on its new leaf, and all
+four are at version 3. Nine rules are now retired and 515 active.
+
+# A guess too weak to file is asked about — September 20, 2026
+
+The same silence as the entry below, reached through a number rather than a lost
+category. Whether to ask kept its own confidence threshold, 0.9, while the
+automatic write kept another: 0.95, or 0.9 with the bank's merchant code
+corroborating it, and never where a signal contradicts the decision. A model
+decision between the two, or one at any confidence carrying a contradictory
+signal, was stored `ready` with no question text and then not written — and the
+question lane only sees `ready` rows that carry their own question, so the
+payment reached nobody.
+
+Asking now consults the write's own test rather than a threshold of its own. The
+0.9 floor stays, so this only ever adds a question and never removes one, and a
+confirmed rule is unaffected. The test that asserted such a payment "stays
+reviewable" now also asserts it carries a question: it passed before this change
+while the payment was reaching nobody.
+
+One case is left deliberately and is written down in the triage document. With
+`AUTO_CATEGORIZE_CLEAR_EXPENSES` off nothing is written at all, and a decision
+that would otherwise have been filed stays `ready` without a question. That is
+the setting's meaning rather than a fault — turning those into questions would
+make switching automatic categorization off send more Telegram messages than
+leaving it on.
+
+# A receipt can answer the question it was asked for — September 20, 2026
+
+A photo replying to one of the bot's payment questions is an answer about that
+payment. It used to be swallowed as an ordinary receipt, with nothing linking it
+to the payment the member had just been asked about, so it could only arrive
+through the date, amount, currency and merchant search.
+
+That search is least able to help exactly there. It refuses to choose between
+two candidates on purpose, so two payments of the same amount on the same day
+leave a receipt unmatched however obvious it is to the person who sent it — and
+that person had already said which one they meant. The column
+`receipt_jobs.answers_transaction_id` (schema 64) records the payment the reply
+points at, resolved from the outbox row by chat and replied-to message id, and
+the matcher
+attaches there through the same path a deliberate link in the app uses: the
+receipt category on that payment is invalidated so the next categorization pass
+re-reads it, and the attachment event names the member as the actor.
+
+Only the member's own question counts. A reply to the question addressed to the
+other member says nothing about what this member meant, so it is stored and
+matched the ordinary way, as is a photo replying to nothing.
+
+The other half of this was already working and needed nothing: a matched receipt
+has fed the payment's category since `receipt_categories:v2`, reading the line
+items, and it has applied on real data.
+
 # App health named one key twice and never named the household's real deadline — September 20, 2026
 
 The owner opened App health and found two credential cards both headed "OpenAI
@@ -1164,11 +1292,12 @@ Checked on the server after the switch: no active rule points at the root
 catch-all, six are retired, and the payment the owner asked about carries a sent
 question.
 
-One hole of the same shape is still open and was raised in review rather than
-fixed here. `questionFor` returns no question text for any personal expense at
-0.9 confidence or above, while the automatic write needs 0.95, or 0.9 with
-supported consumer evidence. A model decision in that band without corroboration
-is `ready`, unwritten and unasked. No payment has landed there yet.
+One hole of the same shape was still open when this was written, raised in
+review rather than fixed here: `questionFor` returned no question text for any
+personal expense at 0.9 confidence or above, while the automatic write needs
+0.95, or 0.9 with supported consumer evidence. A model decision in that band
+without corroboration was `ready`, unwritten and unasked. No payment had landed
+there. It was closed the same evening — see the entry above.
 
 # The application can be photographed without the household in it — September 20, 2026
 
