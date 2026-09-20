@@ -194,10 +194,20 @@ file is `deploy/private-finances-showcase.service`.
 
 5. **Fill it.**
 
+   **Stop the service first.** PGlite allows one process per data directory,
+   and the running service is holding it: seeding underneath it would write
+   into a database somebody else has open. The seeder takes a few minutes, and
+   it runs outside the service's cgroup so `MemoryMax` does not apply to it.
+
    ```sh
-   ssh radar "cd /opt/private-finances/current && sudo -u private-finances DEMO_DATA_DIR=/var/lib/private-finances-showcase/demo node scripts/seed-showcase.mjs"
-   ssh radar "sudo systemctl restart private-finances-showcase"
+   ssh radar "sudo systemctl stop private-finances-showcase"
+   ssh radar "cd /opt/private-finances/current && sudo -u private-finances env DEMO_DATA_DIR=/var/lib/private-finances-showcase/demo /usr/bin/node scripts/seed-showcase.mjs"
+   ssh radar "sudo systemctl start private-finances-showcase"
    ```
+
+   `env` is not decoration: `sudo` clears the environment, so
+   `sudo -u private-finances DEMO_DATA_DIR=… node …` would seed the default
+   directory inside the release instead of the one the service reads.
 
    Re-run both before a session of screenshots: the dates are generated
    relative to the day it is seeded.
