@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Executor } from './database.js';
+import type { Executor, Row } from './database.js';
 import { readMcc } from './mcc.js';
 import { isSettlementOnly } from './domain.js';
 import type { ClassificationSource } from './resting-place.js';
@@ -1010,10 +1010,45 @@ export async function fileDeliveryPlatformsAsDelivery(
  * Descriptors the owner has said a purpose cannot be read from. A variety
  * chemist sells cosmetics and cleaning liquid across one counter, so the shop's
  * name settles nothing about the basket, however many times a previous basket
- * there was the same. Prefix, because the chain writes a store number into
- * every descriptor and each store is its own rule.
+ * there was the same. The owner named these four.
+ *
+ * A descriptor matches a rule that carries it exactly, or one that carries it
+ * followed by a store number: a chain writes the branch into the descriptor and
+ * each branch is its own rule. It is deliberately not a bare prefix, or a
+ * three-letter name would take every merchant that happens to begin with it.
  */
-const AMBIGUOUS_DESCRIPTORS: readonly string[] = ['DROGAS'];
+const AMBIGUOUS_DESCRIPTORS: readonly string[] = [
+  'DROGAS',
+  'EVA',
+  'PROSTOR',
+  'Watsons',
+];
+
+function ambiguousDescriptor(value: string): boolean {
+  const seen = value.trim().toUpperCase();
+  return AMBIGUOUS_DESCRIPTORS.some((name) => {
+    const named = name.toUpperCase();
+    return seen === named || seen.startsWith(`${named} `);
+  });
+}
+
+/**
+ * Rules the owner placed by hand after the repair, identified by rule id alone.
+ *
+ * The repair could only restore the leaf a member had filed the merchant under
+ * themselves, and for one rule that leaf was a branch's own catch-all. A
+ * catch-all is not a category, so the payment would be asked about for ever
+ * instead of being filed. The owner named the specific leaf it belongs on.
+ *
+ * The id carries no meaning to a reader, which is the point: what a household
+ * rule matches is the household's business and this repository is public.
+ */
+const OWNER_PLACED_RULES: readonly { id: string; slug: string }[] = [
+  {
+    id: '4574db2f-d0c9-43aa-8148-0792c5491854',
+    slug: 'family.parents_support',
+  },
+];
 
 export type RuleCategoryRepair = {
   restored: number;
@@ -1079,9 +1114,7 @@ export async function restoreRuleCategoriesLostToTheTree(
         [rule.owner, rule.match_field, rule.match_value, catchAll],
       )
     ).rows;
-    const ambiguous = AMBIGUOUS_DESCRIPTORS.some((name) =>
-      String(rule.match_value).toUpperCase().startsWith(name),
-    );
+    const ambiguous = ambiguousDescriptor(String(rule.match_value));
     const target = !ambiguous && decided.length === 1 ? decided[0]! : null;
     const version = Number(rule.version) + 1;
     await tx.query(
@@ -1136,4 +1169,102 @@ export async function restoreRuleCategoriesLostToTheTree(
   );
   report.requeued = requeued.rows.length;
   return report;
+}
+
+/**
+ * The two corrections the owner made after seeing what the repair had done.
+ *
+ * Three more merchants turned out to be the same kind of variety chemist as the
+ * one they had already named: the rules filed them under cosmetics on a handful
+ * of past baskets, and the owner would rather be asked than have cleaning
+ * liquid counted as cosmetics. Retired rather than deleted, so the decision and
+ * its history stay and either member can switch one back on.
+ *
+ * And one rule that the repair could only leave on a branch's catch-all is
+ * moved onto the leaf the owner named, so those payments are filed instead of
+ * asked about every time.
+ *
+ * Idempotent: a retired rule is no longer active and a placed rule already
+ * points at its leaf, so a second run matches neither.
+ */
+export async function applyOwnerRuleCorrections(tx: Executor): Promise<{
+  retired: number;
+  placed: number;
+}> {
+  const ids = await slugIds(tx);
+  const report = { retired: 0, placed: 0 };
+  const active = (
+    await tx.query(
+      'SELECT id, owner, version, match_field, match_value, kind, category_id FROM classification_rules WHERE active',
+    )
+  ).rows;
+  for (const rule of active) {
+    if (!ambiguousDescriptor(String(rule.match_value))) continue;
+    await editRule(
+      tx,
+      rule,
+      String(rule.category_id),
+      false,
+      'The owner says this shop sells across too many purposes for its name to file a payment, so the payment is asked about instead.',
+    );
+    report.retired++;
+  }
+  for (const placement of OWNER_PLACED_RULES) {
+    const target = ids.get(placement.slug);
+    if (!target) throw new Error(`category_not_found:${placement.slug}`);
+    const rule = (
+      await tx.query(
+        'SELECT id, owner, version, match_field, match_value, kind, category_id FROM classification_rules WHERE id=$1 AND active AND category_id<>$2',
+        [placement.id, target],
+      )
+    ).rows[0];
+    if (!rule) continue;
+    await editRule(
+      tx,
+      rule,
+      target,
+      true,
+      'The repair could only restore a branch catch-all here, which is not a category. The owner named the leaf these payments belong on.',
+    );
+    report.placed++;
+  }
+  return report;
+}
+
+/** One new edition of a rule, with the reason it changed, as the app writes it. */
+async function editRule(
+  tx: Executor,
+  rule: Row,
+  categoryId: string,
+  active: boolean,
+  reason: string,
+): Promise<void> {
+  const version = Number(rule.version) + 1;
+  await tx.query(
+    'UPDATE classification_rules SET version=$2, category_id=$3, active=$4 WHERE id=$1',
+    [String(rule.id), version, categoryId, active],
+  );
+  await tx.query(
+    `INSERT INTO classification_rule_audit(id,owner,rule_id,version,definition,reason)
+     VALUES($1,$2,$3,$4,$5,$6)`,
+    [
+      randomUUID(),
+      String(rule.owner),
+      String(rule.id),
+      version,
+      JSON.stringify({
+        id: String(rule.id),
+        kind: String(rule.kind),
+        owner: String(rule.owner),
+        active,
+        matcher: {
+          field: String(rule.match_field),
+          value: String(rule.match_value),
+        },
+        version,
+        categoryId,
+      }),
+      reason,
+    ],
+  );
 }

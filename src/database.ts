@@ -54,6 +54,7 @@ import {
   restoreSettlementInvalidatedDecisions,
   fileDeliveryPlatformsAsDelivery,
   restoreRuleCategoriesLostToTheTree,
+  applyOwnerRuleCorrections,
 } from './category-migration.js';
 import { createRuleMatchFunction } from './categories.js';
 import { initializeTelegram } from './telegram.js';
@@ -1048,6 +1049,16 @@ async function applyMigrations(db: Database): Promise<void> {
       // the date and merchant search can work out.
       await upgradeReceiptAnswers(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (64)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=65'))
+        .rows.length
+    ) {
+      // What the owner said after reading what the repair had done: three more
+      // shops whose name cannot file a payment, and one rule the repair could
+      // only leave on a branch catch-all.
+      await applyOwnerRuleCorrections(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (65)');
     }
   });
 }
