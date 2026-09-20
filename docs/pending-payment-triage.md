@@ -107,6 +107,22 @@ The two halves now share one test — a category whose leaf is `Unspecified` —
 they cannot drift apart. A decision the write would refuse finishes `uncertain`
 instead, and the member is asked. `ready` means the decision was written.
 
+A second route to the same silence ran through confidence rather than category.
+Whether to ask kept its own threshold, 0.9, while the write kept another: 0.95,
+or 0.9 with the bank's merchant code corroborating it, and never where a signal
+contradicts the decision. A model decision between the two thresholds, or one at
+any confidence carrying a contradictory signal, was stored `ready` with no
+question text and then not written. Asking now consults the write's own test
+instead of a number of its own. The 0.9 floor stays, so the change only ever
+adds a question and never removes one.
+
+One case is left deliberately. When `AUTO_CATEGORIZE_CLEAR_EXPENSES` is off no
+decision is written at all, and a decision that would otherwise have been filed
+stays `ready` without a question. That is the setting's meaning rather than a
+fault: with automatic categorization off, a clear payment waits in the review
+queue instead of becoming a message. Turning those into questions would make
+switching the setting off send more Telegram messages than leaving it on.
+
 ### How a confirmed rule came to have no category
 
 The route in was the category-tree migration. It moved every confirmed rule's
