@@ -27,6 +27,7 @@ import {
 } from '@/components/finance';
 import { apiGet } from '@/lib/query';
 import type { Owner } from '@/lib/account-visuals';
+import { connectionLabel } from '@/lib/account-visuals';
 import type {
   ImportConnection,
   ImportRun,
@@ -305,7 +306,8 @@ function ConnectionCard({
 
 function RunsTable({ runs, now }: { runs: ImportRun[]; now: number }) {
   const label = (run: ImportRun) =>
-    run.label ?? run.connection.split(':').slice(0, 2).join(' · ');
+    run.label ??
+    connectionLabel(run.connection.split(':').slice(0, 2).join(':'));
   return (
     <>
       <ul className="divide-y rounded-lg border sm:hidden">

@@ -9,6 +9,34 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
+**2a52c70b9a9f36d43781656dca535bf2ef87f7a0**, live since September 20, 2026 at
+schema version 62, deployed with `deploy/release.sh`: both services active,
+schema 62, 4,198 transactions, 681 server tests passed, the import timers and
+the Telegram worker resumed afterwards. It carries PR #118.
+
+**The application can now be photographed without the household in it.** An
+article needs screenshots and short screencasts, and the pictures are
+permanent. Masking the real figures was rejected: a screenshot can be zoomed
+and kept, a screencast is not reviewed frame by frame, an article of
+blanked-out numbers shows nothing, and masking fails silently where a missed
+figure looks exactly like a scaled one. Removing unwanted holdings from real
+data also breaks the sums, which is where a careful reader looks. So the demo
+workspace holds an invented household instead — sixteen months of it, from a
+fixed seed so a reseed does not rewrite the article beneath its own
+screenshots, dated relative to the day it is seeded so "this month" is never
+empty. Real: the category tree, the banks this public repository already
+names, the currencies, the dates. Invented: every amount, every merchant, both
+members, every holding. See [the showcase](showcase.md).
+
+Nothing of this reaches production. Demo mode never opens `DATABASE_URL`; the
+seeder asks how the database was constructed rather than reading a variable
+that could be wrong, and refuses anything but a local PGlite one; the script
+refuses to start with `DATABASE_URL` present; and demo mode already runs with
+no bank, Telegram or AI credentials. `/showcase/reseed` does not exist outside
+demo mode, and the seeder behind it would refuse in any case.
+
+## Previous release
+
 **38c8c902b8315eb3ffa8a93a4b1a1df4fe56e39d**, live since September 20, 2026 at
 schema version 62, deployed with `deploy/release.sh`: both services active,
 schema 62, 4,194 transactions, the import timers and the Telegram worker

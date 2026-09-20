@@ -135,10 +135,30 @@ file is `deploy/private-finances-showcase.service`.
 2. **Write the origin file.** It carries the tailnet hostname the showcase will
    be served on, and nothing else — no database URL, no credential.
 
+   Read the hostname rather than typing it, and keep it in a variable so the
+   placeholder cannot survive into the file:
+
    ```sh
    ssh radar "sudo install -m 0640 -o root -g private-finances /dev/null /etc/private-finances/showcase.env"
-   ssh radar "echo 'PUBLIC_ORIGIN=https://<showcase-hostname>' | sudo tee /etc/private-finances/showcase.env"
+   host=$(ssh radar "sudo tailscale status --json" | sed -n 's/.*"DNSName": "\([^"]*\)\.".*/\1/p' | head -1)
+   echo "$host"   # sanity: a *.ts.net name, not empty and not a placeholder
+   ssh radar "echo 'PUBLIC_ORIGIN=https://$host:10000' | sudo tee /etc/private-finances/showcase.env"
    ```
+
+   Then assert the file says what it must. A wrong origin starts the service
+   and refuses every request with `invalid_host`, which is a confusing way to
+   find out.
+
+   ```sh
+   ssh radar "sudo grep -cE '^PUBLIC_ORIGIN=https://[a-z0-9.-]+\.ts\.net:10000\$' /etc/private-finances/showcase.env"
+   ```
+
+   It must print `1`. The check is written as a positive assertion, and with
+   `sudo`, for a reason worth keeping: the file is `0640 root:private-finances`,
+   so a plain `grep` cannot read it, and a check phrased as "no placeholder
+   found" would take the failure branch and report success precisely when it
+   could not see the file at all. Assert what must be true, never the absence
+   of what must not.
 
 3. **Install and start the unit.**
 
@@ -153,18 +173,41 @@ file is `deploy/private-finances-showcase.service`.
    showcase runs on the server rather than on the laptop.
 
    ```sh
-   ssh radar "sudo tailscale serve --bg --https 443 --set-path / http://127.0.0.1:3301"
+   ssh radar "sudo tailscale serve status"
+   ssh radar "sudo tailscale serve --bg --https 10000 http://127.0.0.1:3301"
    ```
 
-   **Do not use `tailscale funnel`.** Funnel puts it on the public internet,
-   and the showcase has no login.
+   **Read the status first, and give the showcase a port nothing else holds.**
+   The real application is already served on **8443**, and pointing a second
+   backend at a port already in the serve configuration would send the
+   household's own URL to the demo. A path prefix is not an option either: the application serves
+   absolute routes (`/api/…`, `/assets/…`), so it has to own the root of
+   whatever origin it is on. `https://<host>:10000` is still a secure origin, so
+   the installable app works.
+
+   **Never `tailscale funnel`.** Funnel puts it on the public internet, and the
+   showcase has no login.
+
+   The origin file in step 2 must match this exactly, port included:
+   `PUBLIC_ORIGIN=https://<showcase-hostname>:10000`. The application compares
+   the `Host` header against it and refuses anything else.
 
 5. **Fill it.**
 
+   **Stop the service first.** PGlite allows one process per data directory,
+   and the running service is holding it: seeding underneath it would write
+   into a database somebody else has open. The seeder takes a few minutes, and
+   it runs outside the service's cgroup so `MemoryMax` does not apply to it.
+
    ```sh
-   ssh radar "cd /opt/private-finances/current && sudo -u private-finances DEMO_DATA_DIR=/var/lib/private-finances-showcase/demo node scripts/seed-showcase.mjs"
-   ssh radar "sudo systemctl restart private-finances-showcase"
+   ssh radar "sudo systemctl stop private-finances-showcase"
+   ssh radar "cd /opt/private-finances/current && sudo -u private-finances env DEMO_DATA_DIR=/var/lib/private-finances-showcase/demo /usr/bin/node scripts/seed-showcase.mjs"
+   ssh radar "sudo systemctl start private-finances-showcase"
    ```
+
+   `env` is not decoration: `sudo` clears the environment, so
+   `sudo -u private-finances DEMO_DATA_DIR=… node …` would seed the default
+   directory inside the release instead of the one the service reads.
 
    Re-run both before a session of screenshots: the dates are generated
    relative to the day it is seeded.

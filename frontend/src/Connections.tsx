@@ -3,6 +3,7 @@ import {
   observeSession,
   useRefreshSignal,
 } from './lib/query';
+import { owners, type Owner } from './lib/account-visuals';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowUpRight, CircleAlert, Landmark, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,8 @@ type Connection = {
   status: string;
 };
 type Session = {
-  actor: string;
+  /** Which member is signed in; the names they are shown by live in one map. */
+  actor: Owner;
   csrf: string;
   features: { consent: boolean; monobankJarsExcluded: boolean };
   /** The provider's name, sent back on the form, the name the owner reads,
@@ -198,8 +200,7 @@ export default function Connections() {
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
               <div>
                 <p className="text-sm font-medium">
-                  Signed in as{' '}
-                  <span className="capitalize">{session.actor}</span>
+                  Signed in as {owners[session.actor].name}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   Approve only your own bank accounts. Approval does not

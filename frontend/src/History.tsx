@@ -1,4 +1,5 @@
 import { useRouterState } from '@tanstack/react-router';
+import { owners } from './lib/account-visuals';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, History as HistoryIcon, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -117,7 +118,9 @@ export default function History() {
                         {show(entry.event)}
                       </span>
                       <Badge variant="secondary" className="capitalize">
-                        {entry.actor}
+                        {entry.actor === 'rodion' || entry.actor === 'katya'
+                          ? owners[entry.actor].name
+                          : entry.actor}
                       </Badge>
                     </div>
                     <time

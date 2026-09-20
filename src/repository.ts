@@ -234,6 +234,36 @@ export class Repository {
     return this.select('($1::text IS NULL OR t.owner=$1)', [owner ?? null]);
   }
   /**
+   * The payments inside a window of calendar days, as the screens ask for them.
+   *
+   * Every screen that shows a period already sends the period, and the server
+   * used to read the whole ledger and then drop what fell outside it. That
+   * costs the same whether a screen asks for two days or a year, and it grows
+   * with the household's history for ever: the enrichment below runs for every
+   * payment loaded, not for every payment returned.
+   *
+   * The bounds are calendar days in Riga, because that is what the filters
+   * they come from mean by a day (`filterTransactions`) — so they are turned
+   * into instants the same way a cash purchase's day is, and the upper bound
+   * is the start of the day after. Comparing the stored instant against a bare
+   * date would take the wrong side of midnight for eleven months of the year,
+   * and a different wrong side across the October clock change.
+   */
+  async listWindow(
+    owner?: Owner,
+    from?: string,
+    to?: string,
+  ): Promise<Transaction[]> {
+    return this.select(
+      `($1::text IS NULL OR t.owner=$1)
+       AND ($2::text IS NULL OR
+            t.booked_at >= (($2::date + time '00:00') AT TIME ZONE 'Europe/Riga'))
+       AND ($3::text IS NULL OR
+            t.booked_at < (($3::date + interval '1 day') AT TIME ZONE 'Europe/Riga'))`,
+      [owner ?? null, from ?? null, to ?? null],
+    );
+  }
+  /**
    * The payments a WHERE clause selects, newest first, enriched exactly as
    * `list` enriches them. The clause is written against `t` (the payment) and
    * `sp` (its spending pattern) with `$n` placeholders into `params`; a limit

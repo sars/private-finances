@@ -1,4 +1,5 @@
 import LlmBudget from './LlmBudget';
+import { connectionLabel } from './lib/account-visuals';
 import { useEffect, useState } from 'react';
 import {
   Activity,
@@ -399,8 +400,8 @@ export default function Operations() {
                       >
                         <CardHeader>
                           <div className="flex flex-wrap items-start justify-between gap-2">
-                            <CardTitle className="break-words text-sm capitalize">
-                              {connection.connection.replaceAll(':', ' · ')}
+                            <CardTitle className="break-words text-sm">
+                              {connectionLabel(connection.connection)}
                             </CardTitle>
                             <Badge
                               variant="outline"

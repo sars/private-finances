@@ -1842,8 +1842,16 @@ export function web(
       if (owner && owner !== 'rodion' && owner !== 'katya')
         throw new Error('invalid_owner');
       const filters = parseFilters(url.searchParams);
+      // The window goes to the database; everything else is decided here, on a
+      // set that is already a period rather than a lifetime. The same filter
+      // still runs over the result, so the two can only ever agree: if the
+      // clause below were ever wrong, this would still return the right rows.
       const rows = filterTransactions(
-        await repo.list(owner as Owner | undefined),
+        await repo.listWindow(
+          owner as Owner | undefined,
+          filters.from,
+          filters.to,
+        ),
         filters,
       );
       if (route === '/api/analytics') {

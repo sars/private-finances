@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { owners as household } from './lib/account-visuals';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Check, GripVertical, Wallet } from 'lucide-react';
 import { apiGet, useSession, queryClient } from './lib/query';
@@ -477,7 +478,7 @@ export default function Balances() {
         <TabsList variant="line" className="h-auto gap-1">
           {owners.map((owner) => (
             <TabsTrigger key={owner} value={owner} className="min-h-10 px-3">
-              <span className="capitalize">{owner}</span>
+              <span>{household[owner].name}</span>
               {owner === actor && (
                 <span className="ml-1 text-xs opacity-60">(me)</span>
               )}
