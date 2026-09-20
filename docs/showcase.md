@@ -137,7 +137,7 @@ file is `deploy/private-finances-showcase.service`.
 
    ```sh
    ssh radar "sudo install -m 0640 -o root -g private-finances /dev/null /etc/private-finances/showcase.env"
-   ssh radar "echo 'PUBLIC_ORIGIN=https://<showcase-hostname>' | sudo tee /etc/private-finances/showcase.env"
+   ssh radar "echo 'PUBLIC_ORIGIN=https://<showcase-hostname>:10000' | sudo tee /etc/private-finances/showcase.env"
    ```
 
 3. **Install and start the unit.**
@@ -153,11 +153,24 @@ file is `deploy/private-finances-showcase.service`.
    showcase runs on the server rather than on the laptop.
 
    ```sh
-   ssh radar "sudo tailscale serve --bg --https 443 --set-path / http://127.0.0.1:3301"
+   ssh radar "sudo tailscale serve status"
+   ssh radar "sudo tailscale serve --bg --https 10000 http://127.0.0.1:3301"
    ```
 
-   **Do not use `tailscale funnel`.** Funnel puts it on the public internet,
-   and the showcase has no login.
+   **Read the status first, and give the showcase a port nothing else holds.**
+   The real application is already served on **8443**, and pointing a second
+   backend at a port already in the serve configuration would send the
+   household's own URL to the demo. A path prefix is not an option either: the application serves
+   absolute routes (`/api/…`, `/assets/…`), so it has to own the root of
+   whatever origin it is on. `https://<host>:10000` is still a secure origin, so
+   the installable app works.
+
+   **Never `tailscale funnel`.** Funnel puts it on the public internet, and the
+   showcase has no login.
+
+   The origin file in step 2 must match this exactly, port included:
+   `PUBLIC_ORIGIN=https://<showcase-hostname>:10000`. The application compares
+   the `Host` header against it and refuses anything else.
 
 5. **Fill it.**
 
