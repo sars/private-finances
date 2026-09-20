@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryDatabase, migrate, postgresDatabase } from '../src/database.js';
 import { seedShowcase, showcaseTransactions } from '../src/showcase.js';
+import { Repository } from '../src/repository.js';
+import { web } from '../src/web.js';
+import { seedTestOwners, signInAs } from './sign-in.js';
 import {
   accountDisplayName,
   ownerNames,
@@ -121,5 +124,43 @@ test('the demo renames the household without touching the ledger identity', () =
     );
   } finally {
     setOwnerNames(before);
+  }
+});
+
+test('the reseed page exists only in the demo workspace', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  await seedTestOwners(db);
+  const server = web(new Repository(db), {
+    port: 3399,
+    mode: 'postgres',
+    release: 'showcase-test',
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(3399, '127.0.0.1', resolve),
+  );
+  const base = 'http://127.0.0.1:3399';
+  try {
+    // Signed in as the owner, which is the dangerous case: outside the demo
+    // the route must not merely refuse, it must not be there. What is behind
+    // it empties a ledger, and the household's own workspace is the one place
+    // that must never reach it.
+    const cookie = await signInAs(base, 'rodion');
+    const page = await fetch(base + '/showcase/reseed', {
+      headers: { cookie },
+    });
+    assert.equal(page.status, 404);
+    const post = await fetch(base + '/showcase/reseed', {
+      method: 'POST',
+      headers: {
+        cookie,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ csrf: 'whatever' }).toString(),
+    });
+    assert.ok(post.status === 403 || post.status === 404);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await db.close();
   }
 });
