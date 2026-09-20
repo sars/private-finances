@@ -47,12 +47,19 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LimitNOFILE=2048
-# Higher than the real application's 512M, not lower. The real one talks to
-# PostgreSQL over a socket; this one runs PGlite, a PostgreSQL compiled to
-# WebAssembly and held inside the process, so the database's memory is this
-# service's memory. Sixteen months of a household is not large, but the engine
-# under it is. Check what it actually settles at before trimming this.
-MemoryMax=640M
+# Measured, not guessed. 384M and then 640M were both killed about a second
+# in, during PGlite's initdb — the step src/database.ts already warns costs an
+# order of magnitude more than anything after it. The real application needs
+# only 512M because it talks to PostgreSQL over a socket; this one runs
+# PostgreSQL compiled to WebAssembly inside its own process, so the database's
+# peak is the service's peak.
+#
+# This ceiling is for that first boot. Once the workspace is seeded, read
+# MemoryPeak back and trim this to roughly half again as much; a limit set
+# well above what the service uses is a limit that will not catch a leak.
+# Whatever it becomes, keep one: a cgroup OOM kills only this service, which
+# is what kept the real application untouched while this was being sized.
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target
