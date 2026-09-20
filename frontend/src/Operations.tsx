@@ -1,5 +1,5 @@
 import LlmBudget from './LlmBudget';
-import { connectionLabel } from './lib/account-visuals';
+import { connectionLabel, owners } from './lib/account-visuals';
 import { useEffect, useState } from 'react';
 import {
   Activity,
@@ -9,6 +9,7 @@ import {
   DatabaseBackup,
   HardDrive,
   KeyRound,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { invalidateFinancialData, useRefreshSignal } from './lib/query';
@@ -17,7 +18,10 @@ import { DecisionCoverage } from '@/components/decision-coverage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { CredentialHealth } from '../../src/credential-health';
+import type {
+  BankConsentNotice,
+  CredentialHealth,
+} from '../../src/credential-health';
 import { backupSummary, type BackupHealth } from '../../src/backup-health';
 import { storageDetail, type StorageHealth } from '../../src/storage-health';
 
@@ -55,6 +59,7 @@ type Health = {
     error_code: string | null;
   }>;
   credentials: CredentialHealth[];
+  bankConsents?: BankConsentNotice[];
 };
 const advice: Record<string, string> = {
   auth: 'Reconnect this bank before retrying.',
@@ -78,6 +83,26 @@ const labels: Record<string, string> = {
   expires_today: 'Expires today',
   expired: 'Configured expiry passed',
 };
+/**
+ * How long an approval has left, in the words the owner would use.
+ *
+ * A bank approval is granted for days, so the count is the headline and the
+ * date is the detail. "Expired" and "Expires today" are said outright: both
+ * mean nothing is importing from that bank at this moment, which is not the
+ * same kind of news as four days' notice.
+ */
+function consentState(notice: BankConsentNotice): {
+  text: string;
+  urgent: boolean;
+} {
+  if (notice.expired) return { text: 'Expired', urgent: true };
+  if (notice.daysRemaining === 0)
+    return { text: 'Expires today', urgent: true };
+  return {
+    text: `${notice.daysRemaining} day${notice.daysRemaining === 1 ? '' : 's'} left`,
+    urgent: notice.daysRemaining <= 1,
+  };
+}
 function date(value: string) {
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime())
@@ -468,7 +493,7 @@ export default function Operations() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-sm">
                         <KeyRound className="size-4 text-primary" />
-                        OpenAI API key
+                        {credential.label}
                       </CardTitle>
                       <Badge variant="outline" className="w-fit">
                         {labels[credential.state] ?? credential.state}
@@ -503,6 +528,59 @@ export default function Operations() {
                   No credential expiry metadata is available in this workspace.
                 </p>
               )}
+            </section>
+            <section className="space-y-3">
+              <h2 className="text-base font-semibold">Bank approvals</h2>
+              {health.bankConsents?.length ? (
+                health.bankConsents.map((consent) => {
+                  const state = consentState(consent);
+                  // Never the raw identifier: the demo workspace renames the
+                  // household so a screenshot can be published, and `owners`
+                  // is where that rename lands.
+                  const holder =
+                    owners[consent.owner as keyof typeof owners]?.name ??
+                    consent.owner;
+                  return (
+                    <Card
+                      key={`${consent.owner}:${consent.bank}`}
+                      className="gap-3 shadow-xs"
+                    >
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <ShieldCheck className="size-4 text-primary" />
+                          {consent.bank} ({consent.country}) · {holder}
+                        </CardTitle>
+                        <Badge
+                          variant="outline"
+                          className={
+                            state.urgent ? 'w-fit text-warning' : 'w-fit'
+                          }
+                        >
+                          {state.text}
+                        </Badge>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <p>Valid until {date(consent.expiresAt)}</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {consent.expired
+                            ? `Nothing imports from this bank until ${holder} approves it again on Bank connections.`
+                            : `${holder} renews this on Bank connections. One member's approval never covers the other's accounts.`}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  No bank approval is live. Nothing imports from a bank until
+                  one is approved on Bank connections.
+                </p>
+              )}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Both members' approvals, because an approval that lapses stops
+                the household's imports whoever it belongs to. Telegram warns 5,
+                2 and 1 days before, and on the day itself.
+              </p>
             </section>
             <details className="rounded-lg border bg-card p-4">
               <summary className="cursor-pointer text-sm font-medium">

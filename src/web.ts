@@ -16,7 +16,10 @@ import { SpendingPatterns } from './spending-pattern.js';
 import { TransactionTriage } from './transaction-triage.js';
 import { llmBudgetSummary } from './llm-budget.js';
 import { systemProblems } from './problems.js';
-import type { CredentialHealth } from './credential-health.js';
+import type {
+  BankConsentNotice,
+  CredentialHealth,
+} from './credential-health.js';
 import { backupSummary, type BackupHealth } from './backup-health.js';
 import { storageDetail } from './storage-health.js';
 import { readStorage } from './storage.js';
@@ -155,6 +158,31 @@ export type WebConfig = {
   };
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/**
+ * One approval, said the way the owner reads it: whose it is, which bank, and
+ * how long is left. "expired" and "expires today" end the sentence early,
+ * because both mean nothing is importing from that bank right now.
+ *
+ * The member is named through `ownerNames()`, never by capitalizing the
+ * identifier: the demo workspace renames the household so a screenshot can be
+ * published, and the raw id would put the ledger's own name on the page.
+ */
+function consentSummary(notice: BankConsentNotice): {
+  label: string;
+  state: string;
+} {
+  const names = ownerNames();
+  const holder = names[notice.owner as keyof typeof names] ?? notice.owner;
+  return {
+    label: `${notice.bank} (${notice.country}) \u00b7 ${holder}`,
+    state: notice.expired
+      ? 'expired'
+      : notice.daysRemaining === 0
+        ? 'expires today'
+        : `${notice.daysRemaining} day(s) left`,
+  };
+}
+
 /** "Wise, Revolut, Swedbank and LHV" — the heading of the provider section. */
 function bankListSentence(): string {
   const labels = BANKS.map((b) => b.label);
@@ -1154,13 +1182,23 @@ export function web(
           sync_failed:
             'Import needs review. Previously completed account windows remain saved.',
         };
+        const consents = (health.bankConsents ?? []) as BankConsentNotice[];
         const backup = backupSummary(health.backup as BackupHealth | undefined);
         const storage = await readStorage();
         const storageTile = storage
           ? `<section class="total"><span class="muted">Disk</span><div class="number">${Math.round(storage.usedRatio * 100)}%</div><p>${escape(storageDetail(storage))}</p></section>`
           : '';
         html(
-          `<h1>System health</h1>${(config.credentialHealth?.() ?? []).map((credential) => `<section class="total"><h2>${escape(credential.label)}</h2><p>${escape(credential.state.replaceAll('_', ' '))} · Expires ${escape(credential.expiresOn ?? credential.expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>`).join('')}<div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section><section class="total"><span class="muted">Off-server backup</span><div class="number">${escape(backup.headline)}</div><p>${escape(backup.detail)}</p></section>${storageTile}</div><h2>Bank imports</h2>${
+          `<h1>System health</h1>${(config.credentialHealth?.() ?? []).map((credential) => `<section class="total"><h2>${escape(credential.label)}</h2><p>${escape(credential.state.replaceAll('_', ' '))} · Expires ${escape(credential.expiresOn ?? credential.expiresAt ?? 'date not configured')}</p><p>Replacement reminders: 5, 2 and 1 calendar days before expiry (Europe/Riga).</p></section>`).join('')}<h2>Bank approvals</h2>${
+            consents.length
+              ? consents
+                  .map((c) => {
+                    const summary = consentSummary(c);
+                    return `<section class="total"><h2>${escape(summary.label)}</h2><p${c.expired || c.daysRemaining === 0 ? ' class="warning"' : ''}>${escape(summary.state)} \u00b7 Valid until ${escape(c.expiresAt)}</p></section>`;
+                  })
+                  .join('')
+              : '<p>No bank approval is live. Nothing is importing from a bank until one is approved on Bank connections.</p>'
+          }<p>Both members' approvals. Each is renewed by the member it belongs to, on Bank connections.</p><div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section><section class="total"><span class="muted">Off-server backup</span><div class="number">${escape(backup.headline)}</div><p>${escape(backup.detail)}</p></section>${storageTile}</div><h2>Bank imports</h2>${
             connections.length
               ? connections
                   .map((c) => {
