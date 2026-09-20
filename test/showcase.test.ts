@@ -145,6 +145,46 @@ test('the demo renames the household without touching the ledger identity', () =
   }
 });
 
+test('the demo names the members on App health approvals too', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  await seedTestOwners(db);
+  await db.query(
+    `INSERT INTO bank_consents(owner,bank,country,state_hash,state_expires_at,expires_at,status)
+     VALUES('katya','Wise','LV','showcase-consent',now()+interval '15 minutes',now()+interval '4 days','authorized')`,
+  );
+  const before = ownerNames();
+  setOwnerNames({ rodion: 'Alex', katya: 'Sam' });
+  const server = web(new Repository(db), {
+    port: 3400,
+    mode: 'postgres',
+    release: 'showcase-test',
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(3400, '127.0.0.1', resolve),
+  );
+  const base = 'http://127.0.0.1:3400';
+  try {
+    const cookie = await signInAs(base, 'rodion');
+    const page = await (
+      await fetch(base + '/ops', { headers: { cookie } })
+    ).text();
+    // The approvals arrived on this page after every other owner-bearing
+    // string on it had been renamed, and were the one place still printing
+    // the identifier. A screenshot of the demo is published; the ledger's own
+    // name for somebody must not be in it.
+    assert.match(page, /Wise \(LV\) · Sam/);
+    assert.ok(
+      !page.includes('Katya') && !page.includes('Rodion'),
+      'the demo must not print the household identities on App health',
+    );
+  } finally {
+    setOwnerNames(before);
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await db.close();
+  }
+});
+
 test('the reseed page exists only in the demo workspace', async () => {
   const db = memoryDatabase();
   await migrate(db);

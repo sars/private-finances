@@ -158,17 +158,21 @@ export type WebConfig = {
   };
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-/** "Wise, Revolut, Swedbank and LHV" — the heading of the provider section. */
 /**
  * One approval, said the way the owner reads it: whose it is, which bank, and
  * how long is left. "expired" and "expires today" end the sentence early,
  * because both mean nothing is importing from that bank right now.
+ *
+ * The member is named through `ownerNames()`, never by capitalizing the
+ * identifier: the demo workspace renames the household so a screenshot can be
+ * published, and the raw id would put the ledger's own name on the page.
  */
 function consentSummary(notice: BankConsentNotice): {
   label: string;
   state: string;
 } {
-  const holder = notice.owner.charAt(0).toUpperCase() + notice.owner.slice(1);
+  const names = ownerNames();
+  const holder = names[notice.owner as keyof typeof names] ?? notice.owner;
   return {
     label: `${notice.bank} (${notice.country}) \u00b7 ${holder}`,
     state: notice.expired
@@ -179,6 +183,7 @@ function consentSummary(notice: BankConsentNotice): {
   };
 }
 
+/** "Wise, Revolut, Swedbank and LHV" — the heading of the provider section. */
 function bankListSentence(): string {
   const labels = BANKS.map((b) => b.label);
   return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;

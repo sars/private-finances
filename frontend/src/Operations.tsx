@@ -1,5 +1,5 @@
 import LlmBudget from './LlmBudget';
-import { connectionLabel } from './lib/account-visuals';
+import { connectionLabel, owners } from './lib/account-visuals';
 import { useEffect, useState } from 'react';
 import {
   Activity,
@@ -534,9 +534,12 @@ export default function Operations() {
               {health.bankConsents?.length ? (
                 health.bankConsents.map((consent) => {
                   const state = consentState(consent);
+                  // Never the raw identifier: the demo workspace renames the
+                  // household so a screenshot can be published, and `owners`
+                  // is where that rename lands.
                   const holder =
-                    consent.owner.charAt(0).toUpperCase() +
-                    consent.owner.slice(1);
+                    owners[consent.owner as keyof typeof owners]?.name ??
+                    consent.owner;
                   return (
                     <Card
                       key={`${consent.owner}:${consent.bank}`}
