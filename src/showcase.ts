@@ -686,18 +686,18 @@ export async function seedShowcase(
   );
   const bySourceId = new Map(rows.rows.map((r) => [r.source_id, r.id]));
 
-  const nodes = await categories.listNodes();
-  const nodeByPath = new Map(
-    nodes.map((n) => [String((n as { path?: string }).path ?? ''), n.id]),
-  );
+  // The tree is asked once per category rather than once per payment: the
+  // household spends in about two dozen of them and makes thousands of
+  // payments.
+  const categoryIds = new Map<string, string | null>();
+  for (const path of new Set(planned.map((p) => p.category)))
+    if (path) categoryIds.set(path, await categories.resolve(path));
 
   for (const plan of planned) {
     const id = bySourceId.get(plan.input.sourceId);
     if (!id) continue;
     const categoryId = plan.category
-      ? (await categories.resolve(plan.category)) ??
-        nodeByPath.get(plan.category) ??
-        null
+      ? (categoryIds.get(plan.category) ?? null)
       : null;
     await db.query(
       `UPDATE transactions SET kind=$1, category_id=$2, provisional=false,

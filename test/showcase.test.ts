@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  memoryDatabase,
-  migrate,
-  postgresDatabase,
-} from '../src/database.js';
+import { memoryDatabase, migrate, postgresDatabase } from '../src/database.js';
 import { seedShowcase, showcaseTransactions } from '../src/showcase.js';
 import {
   accountDisplayName,
