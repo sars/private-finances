@@ -361,8 +361,7 @@ export async function seedShowcaseHoldings(
     }
 
     for (const { id, shape } of created) {
-      const value =
-        shape.base + shape.drift * elapsed * (0.7 + random() * 0.6);
+      const value = shape.base + shape.drift * elapsed * (0.7 + random() * 0.6);
       await holdings.recordSnapshot('rodion', {
         holdingId: id,
         asOf,
