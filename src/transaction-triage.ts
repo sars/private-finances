@@ -160,10 +160,26 @@ export function sufficientAutomaticConfidence(
   );
 }
 
-function questionFor(decision: TriageDecision): string | null {
+/**
+ * The question to put to the member, or nothing when the decision speaks for
+ * itself.
+ *
+ * Nothing is earned only by a decision the automatic write will actually take.
+ * This used to keep its own confidence number, 0.9, while the write kept
+ * another, 0.95 unless the merchant code corroborates it — so a model decision
+ * between the two, or one at any confidence that the write refuses for a
+ * contradictory signal, came out `ready` with no question text and nothing
+ * written. The question lane cannot see such a row, and the payment was neither
+ * classified nor asked about. Consulting the write's own test removes the
+ * disagreement; the 0.9 floor stays, so this only ever adds a question and
+ * never takes one away.
+ */
+function questionFor(row: Row, decision: TriageDecision): string | null {
   if (
     decision.source === 'confirmed_rule' ||
-    (decision.kind === 'personal_expense' && decision.confidence >= 0.9)
+    (decision.kind === 'personal_expense' &&
+      decision.confidence >= 0.9 &&
+      sufficientAutomaticConfidence(row, decision))
   )
     return null;
   if (decision.kind === 'personal_expense')
@@ -428,7 +444,7 @@ export class TransactionTriage {
         row,
         'ready',
         decision,
-        question === undefined ? questionFor(decision) : question,
+        question === undefined ? questionFor(row, decision) : question,
       );
     } catch {
       // No provider or financial text belongs in worker logs. Inspection failure is visible and bounded.

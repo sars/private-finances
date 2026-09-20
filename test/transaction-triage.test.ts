@@ -966,12 +966,21 @@ test('moderate confidence needs supported consumer evidence; rejected ready cand
       );
       if (scenario === 'business')
         assert.deepEqual(await triage.list('rodion'), []);
-      else
+      else {
+        const row = (await triage.list('rodion'))[0]!;
         assert.equal(
-          (await triage.list('rodion'))[0]!.state,
+          row.state,
           'ready',
           'rejected automatic decision stays reviewable',
         );
+        // Reviewable has to mean a person is actually asked. The question lane
+        // cannot see a ready row with no question text, so a decision the
+        // automatic write refuses used to end here and be seen by nobody.
+        assert.ok(
+          row.question,
+          `a decision the write refuses carries a question (${scenario})`,
+        );
+      }
       assert.equal(
         (
           await db.query(
@@ -1657,6 +1666,76 @@ test('pending consumer merchant uses the same model threshold and MCC corroborat
     assert.equal(row.status, 'pending');
     assert.equal(calls, 1);
     assert.equal(await triage.processOne(), false);
+  } finally {
+    await db.close();
+  }
+});
+
+test('a decision too weak for the automatic write is asked about, not left silent', async () => {
+  const { db, repo } = await setup();
+  try {
+    // 0.93 is above the threshold that used to withhold the question, and
+    // below the one the automatic write needs without a supporting merchant
+    // code. 6012 is financial, so nothing corroborates it.
+    await repo.importBatch([
+      {
+        ...base,
+        sourceId: 'between-the-thresholds',
+        description: 'Synthetic unsupported merchant',
+        sourceDetails: { mcc: 6012 },
+      },
+    ]);
+    const factory: TriageClassifierFactory = () => ({
+      async propose() {
+        return {
+          status: 'proposed',
+          id: 'synthetic',
+          proposal: {
+            kind: 'personal_expense',
+            category: 'Utilities / Mobile phone',
+            confidence: 0.93,
+            explanation: 'Synthetic medium-confidence context',
+          },
+        };
+      },
+    });
+    await new TransactionTriage(db, factory).processOne();
+    const triage = new TransactionTriage(db, factory, undefined, {
+      autoCategorizeClearExpenses: true,
+    });
+    await triage.processOne();
+
+    const row = (await triage.list('rodion'))[0]!;
+    assert.equal(row.state, 'ready');
+    assert.ok(
+      row.question,
+      'the decision the write refuses carries a question',
+    );
+    assert.equal((await repo.list())[0]!.kind, 'unresolved');
+
+    // The daily lane selects ready rows that carry their own question, so this
+    // payment reaches a person rather than resting where nothing looks at it.
+    const queued = await queueDailyClarifications(
+      db,
+      (d) =>
+        new TelegramClarifications(
+          d,
+          { chatId: '-123', userIds: { rodion: '101', katya: '102' } },
+          {
+            async send() {
+              throw new Error('no sends');
+            },
+            async react() {
+              throw new Error('unexpected_react');
+            },
+            async reply() {
+              throw new Error('unexpected_reply');
+            },
+          },
+        ),
+      new Date('2026-09-11T12:00:00Z'),
+    );
+    assert.deepEqual(queued, { rodion: 1, katya: 0 });
   } finally {
     await db.close();
   }
