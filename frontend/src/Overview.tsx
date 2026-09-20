@@ -300,6 +300,8 @@ export default function Overview() {
   const othersUnresolved = actor
     ? reviewable.filter((r) => r.owner !== actor).length
     : 0;
+  // Whoever is not signed in, by the name this workspace calls them.
+  const otherMember = owners[actor === 'rodion' ? 'katya' : 'rodion'].name;
   const confirmed = useMemo(() => {
     // The amount after refunds, which is what the headline total and the month
     // table already report. Taking the amount before them made a charge that
@@ -409,9 +411,7 @@ export default function Overview() {
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                       {othersUnresolved} of them{' '}
                       {othersUnresolved === 1 ? 'belongs' : 'belong'} to{' '}
-                      <span>
-                        {owners[actor === 'rodion' ? 'katya' : 'rodion'].name}
-                      </span>{' '}
+                      {otherMember}{' '}
                       and can only be decided from that sign-in.
                     </p>
                   )}

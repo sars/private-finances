@@ -199,8 +199,7 @@ export default function Connections() {
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
               <div>
                 <p className="text-sm font-medium">
-                  Signed in as{' '}
-                  <span>{owners[session.actor].name}</span>
+                  Signed in as {owners[session.actor].name}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   Approve only your own bank accounts. Approval does not
