@@ -12,6 +12,21 @@ import {
   type HistoricalKnowledge,
 } from './historical-knowledge.js';
 
+/**
+ * The leaf the automatic write refuses. A catch-all is where a payment rests
+ * when nothing could place it, so it is a placement and never a decision, and
+ * the same test has to answer for both halves of `finish`: the state it stores
+ * and the classification it writes. They used to be two copies of this
+ * expression, and while only the write knew about it a payment could come out
+ * `ready` — decided, nothing to ask — with nothing written and no question
+ * queued, because the question lane only ever sees `ready` rows that carry
+ * their own question text. An owner-confirmed rule that had lost its category
+ * to the tree migration landed exactly there and went silent.
+ */
+function unspecified(category: string | null | undefined): boolean {
+  return category?.split(' / ').at(-1)?.toLowerCase() === 'unspecified';
+}
+
 export type TriageDecision = ClassificationProposal & {
   source:
     | 'confirmed_rule'
@@ -543,6 +558,10 @@ export class TransactionTriage {
         !nodes.some((n) => n.assignable && n.path === decision!.category)
       )
         state = 'uncertain';
+      // `ready` has to mean the decision was written. A category the write
+      // below refuses is not one, so it becomes a question instead of a
+      // silence.
+      if (unspecified(decision?.category)) state = 'uncertain';
       if (
         state === 'ready' &&
         decision &&
@@ -612,8 +631,7 @@ export class TransactionTriage {
             ))
         ) ||
         !sufficientAutomaticConfidence(row, decision) ||
-        decision.category?.split(' / ').at(-1)?.toLowerCase() ===
-          'unspecified' ||
+        unspecified(decision.category) ||
         !['model', 'model_cache', 'phone_signal', 'confirmed_rule'].includes(
           decision.source,
         ) ||

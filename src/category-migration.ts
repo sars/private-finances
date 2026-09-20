@@ -1005,3 +1005,135 @@ export async function fileDeliveryPlatformsAsDelivery(
   }
   return moved.rows.length;
 }
+
+/**
+ * Descriptors the owner has said a purpose cannot be read from. A variety
+ * chemist sells cosmetics and cleaning liquid across one counter, so the shop's
+ * name settles nothing about the basket, however many times a previous basket
+ * there was the same. Prefix, because the chain writes a store number into
+ * every descriptor and each store is its own rule.
+ */
+const AMBIGUOUS_DESCRIPTORS: readonly string[] = ['DROGAS'];
+
+export type RuleCategoryRepair = {
+  restored: number;
+  retired: number;
+  requeued: number;
+};
+
+/**
+ * Give back the category the tree migration took off a confirmed rule.
+ *
+ * `migrateClassificationRules` moved every rule's category onto the shared tree
+ * through an explicit map of legacy paths, and sent anything the map did not
+ * list to the root catch-all. Transactions got a fallback pass first; rules
+ * never did, and the household's whole legacy "Shopping" branch was not in the
+ * map — deliberately, because naming a shop says nothing about the purpose. So
+ * fifty-eight owner-confirmed rules came out of it still matching, still
+ * confirmed, and pointing at Unspecified.
+ *
+ * That is worse than losing them. Triage reads a confirmed rule as a decision
+ * and asks nobody, while the automatic write refuses to file anything under a
+ * catch-all — so the payment was neither classified nor asked about, and the
+ * only reason anyone noticed is that the owner went looking for a question that
+ * never came.
+ *
+ * The category each rule meant is not recoverable: the node it pointed at is
+ * gone with the table it lived in. What the household has instead is its own
+ * decisions, so that is the source used here. One leaf across every payment a
+ * member has classified by hand for that merchant is taken as their answer and
+ * put back. Anything else — no decision of their own, several different ones,
+ * or a merchant whose name the owner says settles nothing — retires the rule,
+ * and the payment goes back to being asked about, which is where a rule that
+ * cannot say what it means belongs.
+ *
+ * Idempotent: a restored rule no longer sits on the catch-all and a retired one
+ * is no longer active, so a second run has nothing to match.
+ */
+export async function restoreRuleCategoriesLostToTheTree(
+  tx: Executor,
+): Promise<RuleCategoryRepair> {
+  const ids = await slugIds(tx);
+  const catchAll = ids.get('unspecified');
+  if (!catchAll) throw new Error('rule_repair_catch_all_missing');
+  const report: RuleCategoryRepair = { restored: 0, retired: 0, requeued: 0 };
+  const broken = (
+    await tx.query(
+      `SELECT id, owner, version, match_field, match_value, kind
+       FROM classification_rules
+       WHERE active AND kind='personal_expense' AND category_id=$1
+       ORDER BY owner, match_value`,
+      [catchAll],
+    )
+  ).rows;
+  for (const rule of broken) {
+    // Only a person's own decision counts. A provisional resting place or a
+    // model's guess is the very thing the rule was supposed to replace.
+    const decided = (
+      await tx.query(
+        `SELECT DISTINCT t.category_id AS id, category_path(t.category_id) AS path
+         FROM transactions t
+         WHERE t.owner=$1 AND t.classification_source='human'
+           AND t.category_id IS NOT NULL AND t.category_id<>$4
+           AND rule_matches($2, $3, t.description, t.source_details->>'counterpartyIdentifier')`,
+        [rule.owner, rule.match_field, rule.match_value, catchAll],
+      )
+    ).rows;
+    const ambiguous = AMBIGUOUS_DESCRIPTORS.some((name) =>
+      String(rule.match_value).toUpperCase().startsWith(name),
+    );
+    const target = !ambiguous && decided.length === 1 ? decided[0]! : null;
+    const version = Number(rule.version) + 1;
+    await tx.query(
+      `UPDATE classification_rules SET version=$2, category_id=$3, active=$4 WHERE id=$1`,
+      [
+        String(rule.id),
+        version,
+        target ? String(target.id) : catchAll,
+        target !== null,
+      ],
+    );
+    await tx.query(
+      `INSERT INTO classification_rule_audit(id,owner,rule_id,version,definition,reason)
+       VALUES($1,$2,$3,$4,$5,$6)`,
+      [
+        randomUUID(),
+        String(rule.owner),
+        String(rule.id),
+        version,
+        JSON.stringify({
+          id: String(rule.id),
+          kind: String(rule.kind),
+          owner: String(rule.owner),
+          active: target !== null,
+          matcher: {
+            field: String(rule.match_field),
+            value: String(rule.match_value),
+          },
+          version,
+          categoryId: target ? String(target.id) : catchAll,
+        }),
+        target
+          ? 'The tree migration left this rule on the root catch-all. Restored to the one leaf this member has themselves filed the same merchant under.'
+          : 'The tree migration left this rule on the root catch-all, and the member’s own decisions do not settle on one leaf, so the payment is asked about rather than filed under a catch-all.',
+      ],
+    );
+    if (target) report.restored++;
+    else report.retired++;
+  }
+  // The payments already caught by this: triage called them ready, wrote
+  // nothing, and queued no question, so nothing would ever look at them again.
+  // A revision is not bumped here — the row is corrected, not re-decided.
+  const requeued = await tx.query(
+    `UPDATE transaction_triage q SET state='uncertain'
+     WHERE q.state='ready' AND q.question IS NULL AND q.decision IS NOT NULL
+       AND (lower(q.decision->>'category')='unspecified'
+            OR lower(q.decision->>'category') LIKE '% / unspecified')
+       AND EXISTS(SELECT 1 FROM transactions t
+                  WHERE t.id=q.transaction_id AND t.revision=q.revision
+                    AND (t.kind='unresolved' OR t.provisional))
+     RETURNING q.transaction_id`,
+  );
+  report.requeued = requeued.rows.length;
+  return report;
+}

@@ -52,6 +52,7 @@ import {
   placeRootCatchAllByMerchantCode,
   restoreSettlementInvalidatedDecisions,
   fileDeliveryPlatformsAsDelivery,
+  restoreRuleCategoriesLostToTheTree,
 } from './category-migration.js';
 import { createRuleMatchFunction } from './categories.js';
 import { initializeTelegram } from './telegram.js';
@@ -1024,6 +1025,18 @@ async function applyMigrations(db: Database): Promise<void> {
       // only it is something a provider actually told us.
       await initializeFxCoverage(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (62)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=63'))
+        .rows.length
+    ) {
+      // Confirmed rules the tree migration left pointing at the root catch-all.
+      // Triage read them as decisions and asked nobody; the automatic write
+      // refused to file anything under a catch-all. The payment came out
+      // neither classified nor asked about, which is the one outcome the
+      // review flow is supposed to make impossible.
+      await restoreRuleCategoriesLostToTheTree(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (63)');
     }
   });
 }
