@@ -24,8 +24,7 @@ try {
   // A phone-ish portrait frame, so the result looks photographed rather than
   // exported.
   const context = await browser.newContext({
-    viewport: { width: 420, height: 720 },
-    deviceScaleFactor: 2,
+    viewport: { width: 900, height: 900 },
   });
   for (const receipt of SHOWCASE_RECEIPTS) {
     const page = await context.newPage();

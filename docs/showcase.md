@@ -46,10 +46,22 @@ in the bootstrap payload so both sides agree.
 ## Using it
 
 ```sh
+pnpm demo:receipts # once, then commit: draws the five receipt pictures
 pnpm demo:seed     # wipe and refill the demo workspace
 pnpm demo          # the application, on http://127.0.0.1:3300
 pnpm shots         # screenshots, desktop and phone, light and dark
 ```
+
+`pnpm demo:receipts` is run once and its output committed. It renders five
+till slips that do not exist, using the Playwright the project already carries
+for screenshots, so no photograph of the household's own shopping is ever
+committed. Playwright is not on the server, so a workspace seeded there skips
+the receipts and says so; that is why they are committed rather than generated
+at seeding time.
+
+The workspace can also be refilled from the running application, at
+`/showcase/reseed`. It is a page of its own rather than a button in the
+interface, because a Refill button would appear in the article.
 
 The household is generated from a fixed seed, so reseeding produces the same
 people with the same spending: a figure quoted in the article's text still

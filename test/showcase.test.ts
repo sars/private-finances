@@ -94,6 +94,15 @@ test('a seeded workspace has the money the screens need to show', async () => {
     for (const absent of ['Startups', 'Military bonds', 'PrivatBank'])
       assert.ok(!names.includes(absent), `${absent} must not exist`);
 
+    // The pictures are drawn by a script that needs Playwright, which neither
+    // CI nor the server has. A workspace without them must still seed: the
+    // receipts are skipped and counted, never a failure.
+    assert.equal(typeof result.receipts, 'number');
+    const slips = await db.query<{ n: string }>(
+      'SELECT count(*) AS n FROM receipt_jobs',
+    );
+    assert.equal(Number(slips.rows[0]!.n), result.receipts);
+
     const connections = await db.query<{ n: string }>(
       "SELECT count(*) AS n FROM bank_sync_runs WHERE state='succeeded'",
     );

@@ -134,29 +134,30 @@ export function receiptHtml(receipt: ShowcaseReceipt, date: string): string {
     )
     .join('');
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-    body{margin:0;background:#8d8f8a;display:flex;justify-content:center;
-      padding:34px 0;font-family:"DejaVu Sans Mono",monospace}
-    .slip{background:#f7f6f1;width:320px;padding:22px 20px 30px;color:#20211f;
-      box-shadow:0 10px 28px rgba(0,0,0,.35);font-size:13px;line-height:1.55}
-    h1{font-size:17px;letter-spacing:.14em;text-align:center;margin:0 0 4px}
-    .sub{text-align:center;font-size:11px;color:#55564f;margin-bottom:16px}
+    html,body{margin:0;width:900px;height:900px}
+    body{background:#8d8f8a;display:flex;align-items:center;
+      justify-content:center;font-family:"Menlo","DejaVu Sans Mono",monospace}
+    .slip{background:#f7f6f1;width:560px;padding:40px 38px 52px;color:#20211f;
+      box-shadow:0 18px 44px rgba(0,0,0,.42);font-size:21px;line-height:1.62}
+    h1{font-size:30px;letter-spacing:.16em;text-align:center;margin:0 0 4px}
+    .sub{text-align:center;font-size:17px;color:#55564f;margin-bottom:26px}
     table{width:100%;border-collapse:collapse}
-    td{padding:3px 0;vertical-align:top}
+    td{padding:5px 0;vertical-align:top}
     .a{text-align:right;white-space:nowrap;padding-left:10px}
-    .rule{border-top:1px dashed #9a9b93;margin:12px 0}
-    .total{display:flex;justify-content:space-between;font-size:15px;
+    .rule{border-top:2px dashed #9a9b93;margin:20px 0}
+    .total{display:flex;justify-content:space-between;font-size:25px;
       font-weight:bold;letter-spacing:.04em}
-    .foot{text-align:center;font-size:10px;color:#6a6b63;margin-top:18px;
+    .foot{text-align:center;font-size:15px;color:#6a6b63;margin-top:28px;
       letter-spacing:.09em}
   </style></head><body><div class="slip">
     <h1>${escape(receipt.merchant.toUpperCase())}</h1>
-    <div class="sub">${escape(date)} &nbsp;·&nbsp; TERMINAL 04</div>
+    <div class="sub">${escape(date)} &nbsp;&#183;&nbsp; TERMINAL 04</div>
     <table>${lines}</table>
     <div class="rule"></div>
     <div class="total"><span>TOTAL</span>
       <span>${money(receiptTotalMinor(receipt))} ${escape(receipt.currency)}</span></div>
     <div class="rule"></div>
-    <div class="foot">THANK YOU · PLEASE KEEP THIS RECEIPT</div>
+    <div class="foot">THANK YOU &#183; PLEASE KEEP THIS RECEIPT</div>
   </div></body></html>`;
 }
 
