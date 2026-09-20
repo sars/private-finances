@@ -286,6 +286,41 @@ export function bankConsentNotice(
   return { ...consent, daysRemaining, warningDays, expired };
 }
 
+/**
+ * Every live bank approval and how long it has left, for operations UI.
+ *
+ * The approvals are the fastest-expiring thing the household depends on — the
+ * provider grants them for days, not months — and until now the only place
+ * that showed their dates was each member's own Bank connections page. One
+ * member could not see that the other's approval lapsed tomorrow, so the
+ * household's real deadline lived only in the Telegram group. This reads all
+ * of them, whoever they belong to, and returns no credential and no session.
+ *
+ * `status='authorized'` is the set with a live expiry to report. A lapsed one
+ * is still stored as authorized with a past date, so it comes back here as
+ * `expired`, which is the entry worth showing.
+ */
+export async function bankConsentsHealth(
+  db: Executor,
+  now = new Date(),
+): Promise<BankConsentNotice[]> {
+  const { rows } = await db.query(
+    `SELECT owner, bank, country, expires_at FROM bank_consents
+     WHERE status = 'authorized' ORDER BY expires_at, owner, bank`,
+  );
+  return rows.map((row) =>
+    bankConsentNotice(
+      {
+        owner: String(row.owner),
+        bank: String(row.bank),
+        country: String(row.country),
+        expiresAt: new Date(String(row.expires_at)).toISOString(),
+      },
+      now,
+    ),
+  );
+}
+
 function consentText(notice: BankConsentNotice): string {
   const when = new Date(notice.expiresAt)
     .toISOString()

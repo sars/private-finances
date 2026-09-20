@@ -4,6 +4,7 @@ import { memoryDatabase, migrate } from '../src/database.js';
 import {
   CredentialReminders,
   bankConsentNotice,
+  bankConsentsHealth,
   initializeCredentialHealth,
 } from '../src/credential-health.js';
 import type { TelegramTransport } from '../src/telegram.js';
@@ -62,6 +63,39 @@ test('the ladder runs from five days out to the day it lapses', () => {
     ).expired,
     true,
   );
+});
+
+test("App health lists both members' approvals, soonest first", async () => {
+  const db = await household([
+    ['rodion', 'Wise', '2026-12-01T09:00:00Z'],
+    ['katya', 'Revolut', '2026-09-18T09:00:00Z'],
+    ['katya', 'Swedbank', '2026-09-10T09:00:00Z'],
+  ]);
+  try {
+    const health = await bankConsentsHealth(db, NOW);
+    // Whoever it belongs to, and the nearest deadline at the top: the page
+    // exists to answer "what runs out next", not "what is mine".
+    assert.deepEqual(
+      health.map((c) => [c.owner, c.bank, c.daysRemaining, c.expired]),
+      [
+        ['katya', 'Swedbank', -6, true],
+        ['katya', 'Revolut', 2, false],
+        ['rodion', 'Wise', 76, false],
+      ],
+    );
+    // Expiry metadata only. No session, no state hash, no credential.
+    assert.deepEqual(Object.keys(health[0]!).sort(), [
+      'bank',
+      'country',
+      'daysRemaining',
+      'expired',
+      'expiresAt',
+      'owner',
+      'warningDays',
+    ]);
+  } finally {
+    await db.close();
+  }
 });
 
 test('an approval nearing its end is queued once and sent to Telegram', async () => {

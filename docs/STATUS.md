@@ -1085,6 +1085,47 @@ it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
 
+# App health named one key twice and never named the household's real deadline — September 20, 2026
+
+The owner opened App health and found two credential cards both headed "OpenAI
+API key". There is only one OpenAI key. The second card was the IBKR Flex
+token, wearing the wrong name since the day the token joined the watch list:
+that change made the tracked credentials a list, each carrying its own label,
+and updated `/api/ops`, the plain `/ops` page, the docs and the tests — but not
+the React page, which still printed the string "OpenAI API key" inside the loop
+over every credential. The two cards had always shown different dates, which is
+the only reason the mistake was visible at all rather than merely wrong.
+
+Fixing the label raised the better question the owner asked next: where does
+one see everything that expires? Nowhere. App health read two environment
+variables and stopped, while the thing that actually stops the imports — a bank
+approval, granted for days rather than months — appeared only on Bank
+connections, which lists the signed-in member's own approvals. Kate's approval
+lapsing tomorrow was invisible to Rodion on every screen in the application.
+The household's nearest deadline lived in the Telegram group and nowhere else.
+
+So App health now lists every live approval beside the credentials, both
+members', soonest first, each with the days remaining and the date. It is a
+listing and not a new alarm: the on-screen problems block keeps the owner's
+one-day threshold from 18 September, and Telegram keeps its 5, 2, 1 and 0. What
+was missing was not another warning but somewhere to look before one arrives.
+Nothing is renewed from this page — an approval is renewed by the member it
+belongs to, because one member's approval never covers the other's accounts.
+
+`bankConsentsHealth` returns expiry metadata only: owner, bank, country,
+expiry, days remaining, threshold, lapsed. No session, no state hash, no
+credential, and a test asserts the exact key set so nothing can be added to it
+by accident. The operator's GitHub token was considered for this page and
+deliberately left off: it never enters the application's runtime, so the
+application cannot read its expiry and has no business claiming to.
+
+Verified: the two cards render under their own names and four approvals across
+both members render with their dates, checked in a browser against the built
+bundle on a seeded database; `/api/ops` carries `bankConsents` and no state
+hash; 6 tests in `bank-consent-reminders`, the `frontend-api` suite, and
+`workflow-health`, `problems`, `repository`, `credential-health` all pass;
+`tsc` clean for both projects; `check_frontend.py` design rules hold.
+
 # A rule that had lost its category asked nobody — September 20, 2026
 
 The owner made a payment and no question came. It had matched a rule they had

@@ -5,7 +5,10 @@ Service token**. Both use the same ladder — reminders **5, 2 and 1 days
 before**, counted in Europe/Riga calendar dates — and both appear on `/ops` and
 in `/api/ops` under `credentials`, each with its state and expiry. A credential
 with no expiry setting is still listed, as `unknown_expiry`; it is not omitted,
-because a silent row would read as a healthy one.
+because a silent row would read as a healthy one. Each is shown under its own
+name: the React page hard-coded "OpenAI API key" for both from the day the Flex
+token joined it until 20 September 2026, so the page reported one credential
+twice and never named the other.
 
 ## The OpenAI API key
 
@@ -56,6 +59,28 @@ Configuration, save it to the server's credentials directory as
 stops the weekly holdings snapshot from reading the broker
 ([assets.md](assets.md)) and nothing else says so, which is why it is watched
 here. Never put the token value in either expiry setting.
+
+## Bank approvals on the same page
+
+A bank approval is the fastest-expiring thing the household depends on — the
+provider grants it for days, not months — and until now its date appeared only
+on **Bank connections**, which lists the signed-in member's approvals alone.
+One member could not see that the other's approval lapsed tomorrow, so the
+household's nearest deadline existed only in the Telegram group.
+
+`bankConsentsHealth(db, now)` reads every authorized approval, whoever it
+belongs to, and `repo.health()` carries the result as `bankConsents` into
+`/api/ops` and both renderings of `/ops`, soonest first. Each entry is the
+owner, the bank, the country, the expiry instant, the calendar days remaining,
+the warning threshold and whether it has lapsed — no session, no state hash, no
+credential. A lapsed approval is still stored as `authorized` with a past date,
+so it appears here as `expired`, which is the entry worth showing.
+
+This is a listing, not a warning. The on-screen problems block still announces
+an approval one calendar day before it lapses, which is the owner's threshold
+from 18 September 2026; Telegram still uses 5, 2, 1 and 0. Approvals are not
+renewed from this page — each is renewed by the member it belongs to, on Bank
+connections, because one member's approval never covers the other's accounts.
 
 ## The shared machinery
 

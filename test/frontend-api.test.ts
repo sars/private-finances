@@ -40,6 +40,17 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
   const db = memoryDatabase();
   await migrate(db);
   const repo = new Repository(db);
+  // Two members' approvals, so /api/ops can be held to reporting both. The
+  // consent stub below is owner-scoped on purpose; App health is not.
+  for (const [owner, bank, expiresAt] of [
+    ['rodion', 'Wise', '2026-12-20T09:00:00Z'],
+    ['katya', 'Revolut', '2026-12-08T09:00:00Z'],
+  ])
+    await db.query(
+      `INSERT INTO bank_consents(owner,bank,country,state_hash,state_expires_at,expires_at,status)
+       VALUES($1,$2,'LV',$3,now()+interval '15 minutes',$4,'authorized')`,
+      [owner, bank, `hash-${owner}-${bank}`, expiresAt],
+    );
   await repo.importBatch(
     synthetic.map((row) => ({
       ...row,
@@ -221,6 +232,23 @@ test('frontend shell and JSON APIs preserve authentication, owner scope, CSRF an
     assert.equal(ops.credentials[1].label, 'IBKR Flex token');
     assert.equal(ops.credentials[1].state, 'healthy');
     assert.equal(ops.credentials[1].expiresAt, '2027-08-19T18:14:23.000Z');
+    // Both members' approvals, soonest first. Rodion is signed in; Katya's
+    // deadline is the household's deadline too, and no screen used to say so.
+    assert.deepEqual(
+      ops.bankConsents.map((c: { owner: string; bank: string }) => [
+        c.owner,
+        c.bank,
+      ]),
+      [
+        ['katya', 'Revolut'],
+        ['rodion', 'Wise'],
+      ],
+    );
+    assert.equal(ops.bankConsents[0].expiresAt, '2026-12-08T09:00:00.000Z');
+    assert.ok(
+      !JSON.stringify(ops.bankConsents).includes('hash-'),
+      'no state hash or session may leave with the expiry metadata',
+    );
     const overview = await (await get('/api/overview?owner=katya')).json();
     assert.ok(
       overview.transactions.every(

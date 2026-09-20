@@ -10,6 +10,7 @@ import {
 } from './spending-pattern.js';
 import { Conflict } from './errors.js';
 import { backupHealth } from './backup-health.js';
+import { bankConsentsHealth } from './credential-health.js';
 import { rememberCounterparty } from './counterparty-identity.js';
 import { attachRefunds, type RefundAnnotation } from './refunds.js';
 import { isDeepStrictEqual } from 'node:util';
@@ -575,6 +576,9 @@ export class Repository {
           'SELECT connection,state,last_success_at,error_code FROM bank_sync_runs ORDER BY connection',
         )
       ).rows,
+      // Both members', not the reader's alone: an approval is a household
+      // deadline, and the screens that scope by owner hid half of it.
+      bankConsents: await bankConsentsHealth(this.db),
     };
   }
 }
