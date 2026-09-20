@@ -47,7 +47,12 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LimitNOFILE=2048
-MemoryMax=384M
+# Higher than the real application's 512M, not lower. The real one talks to
+# PostgreSQL over a socket; this one runs PGlite, a PostgreSQL compiled to
+# WebAssembly and held inside the process, so the database's memory is this
+# service's memory. Sixteen months of a household is not large, but the engine
+# under it is. Check what it actually settles at before trimming this.
+MemoryMax=640M
 
 [Install]
 WantedBy=multi-user.target

@@ -135,10 +135,30 @@ file is `deploy/private-finances-showcase.service`.
 2. **Write the origin file.** It carries the tailnet hostname the showcase will
    be served on, and nothing else — no database URL, no credential.
 
+   Read the hostname rather than typing it, and keep it in a variable so the
+   placeholder cannot survive into the file:
+
    ```sh
    ssh radar "sudo install -m 0640 -o root -g private-finances /dev/null /etc/private-finances/showcase.env"
-   ssh radar "echo 'PUBLIC_ORIGIN=https://<showcase-hostname>:10000' | sudo tee /etc/private-finances/showcase.env"
+   host=$(ssh radar "sudo tailscale status --json" | sed -n 's/.*"DNSName": "\([^"]*\)\.".*/\1/p' | head -1)
+   echo "$host"   # sanity: a *.ts.net name, not empty and not a placeholder
+   ssh radar "echo 'PUBLIC_ORIGIN=https://$host:10000' | sudo tee /etc/private-finances/showcase.env"
    ```
+
+   Then assert the file says what it must. A wrong origin starts the service
+   and refuses every request with `invalid_host`, which is a confusing way to
+   find out.
+
+   ```sh
+   ssh radar "sudo grep -cE '^PUBLIC_ORIGIN=https://[a-z0-9.-]+\.ts\.net:10000\$' /etc/private-finances/showcase.env"
+   ```
+
+   It must print `1`. The check is written as a positive assertion, and with
+   `sudo`, for a reason worth keeping: the file is `0640 root:private-finances`,
+   so a plain `grep` cannot read it, and a check phrased as "no placeholder
+   found" would take the failure branch and report success precisely when it
+   could not see the file at all. Assert what must be true, never the absence
+   of what must not.
 
 3. **Install and start the unit.**
 
