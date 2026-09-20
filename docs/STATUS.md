@@ -9,12 +9,29 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**16e3bf406bebe6f0e14fab738a8d79e8ced56f82**, live since September 20, 2026 at
+**e13c55f9771c10f5002341bc00f7330f66632d63**, live since September 20, 2026 at
 schema version 65, deployed with `deploy/release.sh`: both services active,
 schema 65, 4,201 transactions, 691 server tests passed and 4 skipped, the
-migration rehearsal on a restored copy reached schema 65 in 30 milliseconds, the
-import timers and the Telegram worker resumed afterwards. It carries PR #126 and
+migration rehearsal on a restored copy reached schema 65 in 32 milliseconds, the
+import timers and the Telegram worker resumed afterwards. It carries PR #130 and
 adds no migration.
+
+**System health stopped repeating the Bank imports page.** Every bank
+connection, its state, its last complete run and the advice for its error code
+were drawn twice: once on Bank imports, which exists to show exactly that and
+carries the run history besides, and again on System health, where they took
+more room than everything else on the page put together. The owner asked for
+the copy to go, and both renderings drop it.
+
+Nothing went with it. Bank imports is in the sidebar beside System health, so
+the page is not orphaned; a connection that has actually stopped is still
+reported on Home by the problems block, which reads the sync records directly;
+and the raw rows stay in the technical diagnostics for anyone debugging. The
+plain page keeps one line saying where the connections are, and the React
+page's description no longer opens with the section it no longer has.
+
+The release it replaces, described below, is the one that put the approvals
+there in the first place.
 
 **App health named one key twice, and never named the household's real
 deadline.** The owner opened the page and found two credential cards both headed
@@ -69,6 +86,13 @@ keyed by rule id alone, with no descriptor in the source: what a household rule
 matches is the household's business and this repository is public.
 
 ## Previous release
+
+**16e3bf406bebe6f0e14fab738a8d79e8ced56f82**, superseded September 20, 2026, at
+schema version 65: it carried PR #126, which gave each tracked credential its
+own name on App health — the page had headed two cards "OpenAI API key" when
+the second was the IBKR Flex token — and added the Bank approvals section, both
+members', so the household's fastest-moving deadline is somewhere to look
+before Telegram warns about it. The releases before it are described below.
 
 **5136504c88278c14fa02b431392e6efd0767e484**, superseded September 20, 2026, at
 schema version 65: it carried PR #127, the two corrections the owner made after
