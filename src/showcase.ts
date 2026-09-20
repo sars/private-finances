@@ -24,6 +24,7 @@ import { Repository } from './repository.js';
 import { Accounts } from './accounts.js';
 import { Categories, ensureStarterCategories } from './categories.js';
 import type { Kind, Owner, TransactionInput } from './domain.js';
+import { seedShowcaseAssets } from './showcase-assets.js';
 
 /**
  * A small deterministic generator, so the household is the same every time.
@@ -644,8 +645,15 @@ export function showcaseTransactions(now = new Date(), months = 16): Planned[] {
 export async function seedShowcase(
   db: Database,
   options: { now?: Date; months?: number } = {},
-): Promise<{ transactions: number; accounts: number }> {
+): Promise<{
+  transactions: number;
+  accounts: number;
+  holdings: number;
+  snapshots: number;
+  rates: number;
+}> {
   const now = options.now ?? new Date();
+  const months = options.months ?? 16;
   if (!isMemoryDatabase(db))
     throw new Error(
       'refusing to seed: the showcase may only be written to a local demo database',
@@ -676,7 +684,7 @@ export async function seedShowcase(
       account.owner,
     );
 
-  const planned = showcaseTransactions(now, options.months ?? 16);
+  const planned = showcaseTransactions(now, months);
   await repo.importBatch(planned.map((p) => p.input));
 
   // The ledger keys a payment by where it came from, so the generated ids map
@@ -725,5 +733,10 @@ export async function seedShowcase(
       );
   }
 
-  return { transactions: planned.length, accounts: SHOWCASE_ACCOUNTS.length };
+  const assets = await seedShowcaseAssets(db, now, months);
+  return {
+    transactions: planned.length,
+    accounts: SHOWCASE_ACCOUNTS.length,
+    ...assets,
+  };
 }

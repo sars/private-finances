@@ -72,6 +72,30 @@ test('a seeded workspace has the money the screens need to show', async () => {
     for (const row of descriptions.rows)
       assert.doesNotMatch(row.description, /rodion|katya/i);
 
+    // The savings, the rates and the import history are what the Assets,
+    // Currency and Connections screens have to show; without them the article
+    // photographs an empty state instead of a feature.
+    assert.ok(result.holdings >= 16, 'savings');
+    assert.ok(result.snapshots > 40, 'a reading per holding per month');
+    assert.ok(result.rates > 80, 'a rate for every day the article shows');
+
+    const groups = await db.query<{ group_name: string }>(
+      'SELECT DISTINCT group_name FROM holdings',
+    );
+    const names = groups.rows.map((r) => r.group_name);
+    // The owner went through these group by group. These may appear; the rest
+    // of the real workspace's groups are simply not in the invented one, and a
+    // generated household leaves no hole where they would have been.
+    for (const kept of ['Binance', 'Interactive Brokers', 'Real estate'])
+      assert.ok(names.includes(kept), `${kept} is shown`);
+    for (const absent of ['Startups', 'Military bonds', 'PrivatBank'])
+      assert.ok(!names.includes(absent), `${absent} must not exist`);
+
+    const connections = await db.query<{ n: string }>(
+      "SELECT count(*) AS n FROM bank_sync_runs WHERE state='succeeded'",
+    );
+    assert.ok(Number(connections.rows[0]!.n) >= 6, 'imports have been running');
+
     const categorised = await db.query<{ n: string }>(
       "SELECT count(*) AS n FROM transactions WHERE source='showcase' AND category_id IS NOT NULL",
     );

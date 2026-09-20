@@ -23,8 +23,10 @@ if (process.env.APP_MODE && process.env.APP_MODE !== 'demo')
 const directory = process.env.DEMO_DATA_DIR ?? 'data/demo';
 const db = memoryDatabase(directory);
 await migrate(db);
-const { transactions, accounts } = await seedShowcase(db);
+const seeded = await seedShowcase(db);
 await db.close();
 console.log(
-  `showcase seeded into ${directory}: ${transactions} payments across ${accounts} accounts`,
+  `showcase seeded into ${directory}: ${seeded.transactions} payments ` +
+    `across ${seeded.accounts} accounts, ${seeded.holdings} holdings ` +
+    `with ${seeded.snapshots} snapshots, ${seeded.rates} daily rates`,
 );
