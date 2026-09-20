@@ -9,10 +9,45 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**437fe5558453ebe576e438bc1ae543a57460626b**, live since September 20, 2026 at
+**8c952494199249f8ab8098b685505d5d28cce23d**, live since September 20, 2026 at
+schema version 63, deployed with `deploy/release.sh`: both services active,
+schema 63, 4,201 transactions, 684 server tests passed and 4 skipped, the import
+timers and the Telegram worker resumed afterwards. It carries PR #122 and adds
+migration 63.
+
+**A decision that cannot be written is now a question rather than a silence.**
+The owner asked why a payment they had just made produced no Telegram question.
+It had matched an owner-confirmed rule, so triage called it decided and asked
+nobody — and the rule pointed at the root catch-all, which the automatic write
+refuses to file anything under. `ready` is triage's word for *decided, nothing
+to ask*, and the question lane only selects `ready` rows carrying their own
+question text, or rows that are `deferred` or `uncertain`. So the payment was
+neither classified nor asked about, and nothing would have looked at it again.
+The state test and the write test are now one function, so they cannot drift
+apart, and a decision the write would refuse finishes `uncertain`.
+
+**The rules had lost their categories to the tree migration.**
+`migrateClassificationRules` moved every rule's category onto the shared tree
+through an explicit map of legacy paths and sent anything unlisted to the root
+catch-all; payments had a fallback pass first and rules never did. The
+household's legacy "Shopping" branch was deliberately unmapped, because naming a
+shop says nothing about the purpose, so 58 owner-confirmed rules survived it
+still matching, still confirmed, and pointing at Unspecified. Migration 63
+repaired them from the household's own decisions: 52 were restored to the single
+leaf a member had filed that merchant under themselves, and 6 were retired
+because their decisions did not settle on one leaf or because the owner says the
+shop's name cannot settle it — a variety chemist sells cosmetics and cleaning
+liquid across one counter. Each change is a new edition of the rule with its
+reason recorded. Three payments already stranded were moved to `uncertain`, and
+the payment the owner asked about now carries a sent question. Verified on the
+server after the switch: no active rule points at the root catch-all.
+
+## Previous release
+
+**437fe5558453ebe576e438bc1ae543a57460626b**, superseded September 20, 2026, at
 schema version 62, deployed with `deploy/release.sh`: both services active,
 schema 62, 4,199 transactions, 686 server tests passed, the import timers and
-the Telegram worker resumed afterwards. It carries PR #119 and #120.
+the Telegram worker resumed afterwards. It carried PR #119 and #120.
 
 **Home and Analytics now ask the database for the period they display.** Both
 have always sent one. The server read every payment the member had ever made,
@@ -42,8 +77,6 @@ tailnet port of its own. It is sized from measurement — 859M at peak, 405M
 settled, 1280M ceiling — because PGlite is a PostgreSQL inside the process
 rather than one across a socket. See [the showcase](showcase.md), including
 the rule that its hostname never leaves the tailnet.
-
-## Previous release
 
 **38c8c902b8315eb3ffa8a93a4b1a1df4fe56e39d**, superseded September 20, 2026, at
 schema version 62, deployed with `deploy/release.sh`: both services active,
@@ -1051,6 +1084,50 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# A rule that had lost its category asked nobody — September 20, 2026
+
+The owner made a payment and no question came. It had matched a rule they had
+confirmed themselves, so triage treated it as decided; the rule pointed at the
+root catch-all, which the automatic write refuses to file anything under. The
+payment was neither classified nor asked about, and the only reason anyone
+noticed is that the owner went looking for a question that never arrived.
+
+`ready` is triage's word for *decided, nothing to ask*. It could also mean
+*decided, and nothing written*, because the state it stored and the
+classification it wrote used two separate copies of the same test and only the
+write knew about the catch-all. The question lane selects `ready` rows that
+carry their own question text, or rows that are `deferred` or `uncertain`, so
+such a row was invisible to it. The two tests are now one function. A decision
+the write would refuse finishes `uncertain`, and `ready` means it was written.
+
+The route in was the category-tree migration. It moved every confirmed rule's
+category onto the shared tree through an explicit map of legacy paths and sent
+anything unlisted to the root catch-all — payments got a fallback pass first,
+rules never did. The household's legacy "Shopping" branch was deliberately
+unmapped, because naming a shop says nothing about the purpose, so 58
+owner-confirmed rules came out of it still matching, still confirmed, and
+pointing at Unspecified. Every payment matching one of them would have gone
+quiet.
+
+Migration 63 repaired them from the only source that still exists: the
+household's own decisions. Where a member had filed the same merchant under one
+leaf themselves, that leaf was restored — 52 rules. Where they had filed it
+under several, never filed it at all, or where the owner says the shop's name
+settles nothing, the rule was retired and the payment goes back to being asked
+about — 6 rules. Each change is a new edition with its reason in
+`classification_rule_audit`. Three payments already stranded were moved to
+`uncertain`.
+
+Checked on the server after the switch: no active rule points at the root
+catch-all, six are retired, and the payment the owner asked about carries a sent
+question.
+
+One hole of the same shape is still open and was raised in review rather than
+fixed here. `questionFor` returns no question text for any personal expense at
+0.9 confidence or above, while the automatic write needs 0.95, or 0.9 with
+supported consumer evidence. A model decision in that band without corroboration
+is `ready`, unwritten and unasked. No payment has landed there yet.
 
 # The application can be photographed without the household in it — September 20, 2026
 
