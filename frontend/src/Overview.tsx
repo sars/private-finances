@@ -411,8 +411,7 @@ export default function Overview() {
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                       {othersUnresolved} of them{' '}
                       {othersUnresolved === 1 ? 'belongs' : 'belong'} to{' '}
-                      {otherMember}{' '}
-                      and can only be decided from that sign-in.
+                      {otherMember} and can only be decided from that sign-in.
                     </p>
                   )}
                 </div>
