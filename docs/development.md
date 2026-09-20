@@ -5,13 +5,19 @@ Use Node from `.nvmrc` and pnpm from `package.json`.
 ```sh
 pnpm install --frozen-lockfile
 pnpm check
+pnpm demo:seed
 pnpm demo
 ```
 
-Open http://127.0.0.1:3300. Click **Import example transactions**, then refresh
-after the next worker tick (one second). Classify an outflow as a personal expense
-with category and reason. The corresponding currency total changes. Re-importing
-the examples creates no duplicates. No external API requests are made by the app.
+Open http://127.0.0.1:3300. `pnpm demo:seed` fills the workspace with an
+invented household — sixteen months of payments, savings, rates and receipts,
+none of it anybody's real money. Classify an outflow as a personal expense with
+category and reason; the corresponding currency total changes. Seeding again
+replaces the household rather than adding a second one, and the dates are
+generated relative to the day it runs, so reseed when "this month" looks empty.
+No external API requests are made by the app. See
+[the showcase](showcase.md), which is also what the public article is
+photographed against.
 
 Demo data persists in `data/demo`. Only one demo process may use that directory.
 Do not put real transactions into demo storage. Stop with Ctrl-C; startup resumes
