@@ -9,11 +9,44 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**5136504c88278c14fa02b431392e6efd0767e484**, live since September 20, 2026 at
+**16e3bf406bebe6f0e14fab738a8d79e8ced56f82**, live since September 20, 2026 at
 schema version 65, deployed with `deploy/release.sh`: both services active,
-schema 65, 4,201 transactions, 689 server tests passed and 4 skipped, the import
-timers and the Telegram worker resumed afterwards. It carries PR #127 and adds
-migration 65.
+schema 65, 4,201 transactions, 691 server tests passed and 4 skipped, the
+migration rehearsal on a restored copy reached schema 65 in 30 milliseconds, the
+import timers and the Telegram worker resumed afterwards. It carries PR #126 and
+adds no migration.
+
+**App health named one key twice, and never named the household's real
+deadline.** The owner opened the page and found two credential cards both headed
+"OpenAI API key". There is only one; the second was the IBKR Flex token, wearing
+the wrong name since the day it joined the watch list. That change made the
+tracked credentials a list with a label each and updated the API, the plain page,
+the docs and the tests — but not the React page, which printed the name as a
+literal inside the loop over every credential. Each now carries its own.
+
+The better question that raised: where does one see everything that expires?
+Nowhere. App health read two environment variables and stopped, while the thing
+that actually halts the imports — a bank approval, granted for days rather than
+months — appeared only on Bank connections, which lists the signed-in member's
+own approvals. One member's approval lapsing tomorrow was invisible to the other
+on every screen. The household's nearest deadline lived only in the Telegram
+group. App health now lists every live approval beside the credentials, both
+members', soonest first, with the days remaining and the date.
+
+It is a listing and not a new alarm: the on-screen problems block keeps the
+one-day threshold set on 18 September, and Telegram keeps 5, 2, 1 and 0. What
+was missing was somewhere to look before a warning arrives. Nothing is renewed
+from the page, because one member's approval never covers the other's accounts,
+and only expiry metadata leaves the server — no session, no state hash, no
+credential, with a test on the exact key set. The operator's GitHub token was
+considered for this page and deliberately left off: it never enters the
+application's runtime, so the application cannot read its expiry.
+
+Review of the first commit caught the new section printing the raw owner
+identifier, which the demo workspace's rename exists to prevent — the sidebar
+read "Alex" and the approval beneath it read "Katya". Both renderings now name
+the member as the rest of the page does, held by a test on the real route that
+also refuses either household identity anywhere on that page.
 
 **Three releases in one evening, all from one question the owner asked.** They
 had made a payment and no Telegram question came. The chain behind that is
@@ -36,6 +69,13 @@ keyed by rule id alone, with no descriptor in the source: what a household rule
 matches is the household's business and this repository is public.
 
 ## Previous release
+
+**5136504c88278c14fa02b431392e6efd0767e484**, superseded September 20, 2026, at
+schema version 65: it carried PR #127, the two corrections the owner made after
+reading what the rule repair had done — three more variety chemists retired so
+their payments are asked about rather than filed under cosmetics, and one rule
+moved off a branch catch-all onto the leaf the owner named. The release before
+it is described below.
 
 **514dbbcb488ed894c231412ca2be63e5349329b4**, superseded September 20, 2026, at
 schema version 64, deployed with `deploy/release.sh`: both services active,
