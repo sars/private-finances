@@ -1164,24 +1164,6 @@ export function web(
       }
       if (req.method === 'GET' && route === '/ops') {
         const health = await repo.health();
-        const connections = health.bankConnections as Array<
-          Record<string, unknown>
-        >;
-        const advice: Record<string, string> = {
-          auth: 'Reconnect this bank before retrying.',
-          consent:
-            'Bank consent has expired or was revoked. Reconnect this bank.',
-          rate_limit:
-            'The bank asked us to slow down. A later scheduled attempt can retry.',
-          transient:
-            'The bank is temporarily unavailable. A later scheduled attempt can retry.',
-          schema:
-            'The bank returned unexpected data. Review is needed before importing.',
-          incomplete:
-            'The bank response was incomplete. No completion is claimed for the failed account window.',
-          sync_failed:
-            'Import needs review. Previously completed account windows remain saved.',
-        };
         const consents = (health.bankConsents ?? []) as BankConsentNotice[];
         const backup = backupSummary(health.backup as BackupHealth | undefined);
         const storage = await readStorage();
@@ -1198,20 +1180,7 @@ export function web(
                   })
                   .join('')
               : '<p>No bank approval is live. Nothing is importing from a bank until one is approved on Bank connections.</p>'
-          }<p>Both members' approvals. Each is renewed by the member it belongs to, on Bank connections.</p><div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section><section class="total"><span class="muted">Off-server backup</span><div class="number">${escape(backup.headline)}</div><p>${escape(backup.detail)}</p></section>${storageTile}</div><h2>Bank imports</h2>${
-            connections.length
-              ? connections
-                  .map((c) => {
-                    const last = c.last_success_at
-                      ? new Date(String(c.last_success_at))
-                      : null;
-                    const fresh =
-                      last && Date.now() - last.getTime() <= 86400000;
-                    return `<section class="total"><h2>${escape(String(c.connection).replaceAll(':', ' · '))}</h2><p>${escape(c.state)} · ${last ? (fresh ? 'Updated within 24 hours' : 'Last complete run is over 24 hours old') : 'No complete run yet'}</p>${last ? `<p>Last complete run: ${escape(last.toISOString())}</p>` : ''}${c.error_code ? `<p class="warning">${escape(advice[String(c.error_code)] ?? 'Import needs review before retrying.')}</p>` : ''}</section>`;
-                  })
-                  .join('')
-              : '<p>No bank import has run yet. Live imports are being configured.</p>'
-          }<p>A complete run covers only its requested date window; it does not prove that all historical transactions are present.</p><details><summary>Technical diagnostics</summary><pre>${escape(JSON.stringify({ ...health, release: config.release }, null, 2))}</pre></details>`,
+          }<p>Both members' approvals. Each is renewed by the member it belongs to, on Bank connections.</p><div class="totals"><section class="total"><span class="muted">Application database</span><div class="number">Ready</div><p>Connected and responding</p></section><section class="total"><span class="muted">Running release</span><div class="number">${escape(config.release.slice(0, 7))}</div><p>Use this reference when reporting a problem</p></section><section class="total"><span class="muted">Off-server backup</span><div class="number">${escape(backup.headline)}</div><p>${escape(backup.detail)}</p></section>${storageTile}</div><p>Every bank connection and its history is on the Bank imports page.</p><details><summary>Technical diagnostics</summary><pre>${escape(JSON.stringify({ ...health, release: config.release }, null, 2))}</pre></details>`,
         );
 
         return;

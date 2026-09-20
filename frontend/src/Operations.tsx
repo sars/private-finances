@@ -1,9 +1,8 @@
 import LlmBudget from './LlmBudget';
-import { connectionLabel, owners } from './lib/account-visuals';
+import { owners } from './lib/account-visuals';
 import { useEffect, useState } from 'react';
 import {
   Activity,
-  ArrowUpRight,
   CircleAlert,
   Database,
   DatabaseBackup,
@@ -52,28 +51,8 @@ type Health = {
   jobs: Array<{ state: string; count: number }>;
   backup?: BackupHealth;
   storage?: StorageHealth | null;
-  bankConnections: Array<{
-    connection: string;
-    state: string;
-    last_success_at: string | null;
-    error_code: string | null;
-  }>;
   credentials: CredentialHealth[];
   bankConsents?: BankConsentNotice[];
-};
-const advice: Record<string, string> = {
-  auth: 'Reconnect this bank before retrying.',
-  consent: 'Bank consent has expired or was revoked. Reconnect this bank.',
-  rate_limit:
-    'The bank asked us to slow down. A later scheduled attempt can retry.',
-  transient:
-    'The bank is temporarily unavailable. A later scheduled attempt can retry.',
-  schema:
-    'The bank returned unexpected data. Review is needed before importing.',
-  incomplete:
-    'The bank response was incomplete. No completion is claimed for the failed account window.',
-  sync_failed:
-    'Import needs review. Previously completed account windows remain saved.',
 };
 const labels: Record<string, string> = {
   unknown_expiry: 'Expiry unknown',
@@ -224,11 +203,7 @@ export default function Operations() {
         const [data, session] = await Promise.all(
           responses.map((r) => r.json()),
         );
-        if (
-          !Array.isArray(data.bankConnections) ||
-          !Array.isArray(data.jobs) ||
-          !Array.isArray(data.credentials)
-        )
+        if (!Array.isArray(data.jobs) || !Array.isArray(data.credentials))
           throw new Error(
             'Health information was incomplete. Please try again.',
           );
@@ -254,7 +229,7 @@ export default function Operations() {
     <div className="mx-auto max-w-7xl space-y-5 pb-8">
       <PageHeader
         title="System health"
-        description="Bank imports, access expiry and the status of your workspace."
+        description="Access expiry, delivery and the status of your workspace. Bank imports have a page of their own."
         actions={<RefreshButton />}
       />
       <LlmBudget refresh={refresh} />
@@ -397,93 +372,6 @@ export default function Operations() {
                   </Card>
                 ))}
               </div>
-            </section>
-            <section className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-base font-semibold">Bank imports</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  render={<a href="/imports" />}
-                >
-                  All imports and statistics
-                  <ArrowUpRight className="ml-2 size-3.5" />
-                </Button>
-              </div>
-              {health.bankConnections.length ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {health.bankConnections.map((connection) => {
-                    const last = connection.last_success_at
-                      ? Date.parse(connection.last_success_at)
-                      : NaN;
-                    const fresh =
-                      Number.isFinite(last) && Date.now() - last <= 86400000;
-                    return (
-                      <Card
-                        key={connection.connection}
-                        className="gap-3 shadow-xs"
-                      >
-                        <CardHeader>
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <CardTitle className="break-words text-sm">
-                              {connectionLabel(connection.connection)}
-                            </CardTitle>
-                            <Badge
-                              variant="outline"
-                              className={
-                                connection.state === 'failed'
-                                  ? 'text-warning'
-                                  : ''
-                              }
-                            >
-                              {connection.state}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <p className="text-sm">
-                            {!Number.isFinite(last)
-                              ? 'No complete run yet'
-                              : fresh
-                                ? 'Last complete run within 24 hours'
-                                : 'Last complete run is over 24 hours old'}
-                          </p>
-                          {connection.last_success_at && (
-                            <p className="text-xs text-muted-foreground">
-                              Last complete run:{' '}
-                              {date(connection.last_success_at)}
-                            </p>
-                          )}
-                          {connection.error_code && (
-                            <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs leading-relaxed">
-                              <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
-                              <p>
-                                {advice[connection.error_code] ??
-                                  'Import needs review before retrying.'}
-                              </p>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed p-8 text-center">
-                  <Activity className="mx-auto mb-3 size-7 text-muted-foreground" />
-                  <p className="text-sm font-medium">
-                    No bank import has run yet
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Every connection and its history is on the Bank imports
-                    page; approvals are on Bank connections.
-                  </p>
-                </div>
-              )}
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                A complete run covers only its requested date window. It does
-                not prove that all historical transactions are present.
-              </p>
             </section>
             <section className="space-y-3">
               <h2 className="text-base font-semibold">Credential expiry</h2>
