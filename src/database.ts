@@ -7,6 +7,7 @@ import {
   initializeReceipts,
   upgradeReceiptEvidence,
   upgradeReceiptPreview,
+  upgradeReceiptAnswers,
   upgradeSettlementDifference,
 } from './receipts.js';
 import {
@@ -1037,6 +1038,16 @@ async function applyMigrations(db: Database): Promise<void> {
       // review flow is supposed to make impossible.
       await restoreRuleCategoriesLostToTheTree(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (63)');
+    }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=64'))
+        .rows.length
+    ) {
+      // A receipt sent as a reply to one of the bot's questions is an answer
+      // about that payment, and the reply says which payment far better than
+      // the date and merchant search can work out.
+      await upgradeReceiptAnswers(tx);
+      await tx.query('INSERT INTO schema_versions(version) VALUES (64)');
     }
   });
 }

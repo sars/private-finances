@@ -32,7 +32,8 @@ the tested policy is deployed. Ambiguous cases remain for review.
 Home and Analytics now separate confirmed spending from historical estimates.
 Recent review and the 2025 archive reduce the active queue; the 3,000 UAH priority
 filter was retired on September 17, 2026.
-Telegram JPEG/PNG receipts are live.
+Telegram JPEG/PNG receipts are live, and a receipt sent as a reply to a payment
+question links to that payment rather than being searched for.
 
 ## Current implementation increment
 
