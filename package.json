@@ -20,6 +20,7 @@
     "shots": "node scripts/shots.ts",
     "demo": "pnpm build && node dist/src/main.js",
     "demo:seed": "pnpm build && node scripts/seed-showcase.mjs",
+    "demo:receipts": "pnpm build && node scripts/make-receipt-images.mjs",
     "start": "node dist/src/main.js",
     "sync": "node dist/src/sync-cli.js"
   },

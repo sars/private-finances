@@ -25,6 +25,13 @@ import { Accounts } from './accounts.js';
 import { Categories, ensureStarterCategories } from './categories.js';
 import type { Kind, Owner, TransactionInput } from './domain.js';
 import { seedShowcaseAssets } from './showcase-assets.js';
+import {
+  RECEIPT_ACCOUNTS,
+  SHOWCASE_RECEIPTS,
+  receiptSourceId,
+  receiptTotalMinor,
+  seedShowcaseReceipts,
+} from './showcase-receipts.js';
 
 /**
  * A small deterministic generator, so the household is the same every time.
@@ -631,6 +638,28 @@ export function showcaseTransactions(now = new Date(), months = 16): Planned[] {
     });
   });
 
+  // The payments the photographed receipts belong to. They are ordinary
+  // shopping in every respect; what makes them worth generating separately is
+  // that their amount has to equal what the slip in the photograph adds up to.
+  for (const receipt of SHOWCASE_RECEIPTS) {
+    const at = new Date(now.getTime() - receipt.daysAgo * 86400000);
+    planned.push({
+      input: {
+        source: 'showcase',
+        sourceId: receiptSourceId(receipt),
+        accountId: RECEIPT_ACCOUNTS[receipt.owner]!,
+        owner: receipt.owner,
+        bookedAt: at.toISOString(),
+        currency: receipt.currency,
+        amountMinor: String(-receiptTotalMinor(receipt)),
+        description: receipt.merchant,
+      },
+      kind: 'personal_expense',
+      category: receipt.category,
+      decidedBy: 'human',
+    });
+  }
+
   return planned;
 }
 
@@ -648,6 +677,7 @@ export async function seedShowcase(
 ): Promise<{
   transactions: number;
   accounts: number;
+  receipts: number;
   holdings: number;
   snapshots: number;
   rates: number;
@@ -665,6 +695,10 @@ export async function seedShowcase(
   await ensureStarterCategories(db);
 
   // A reseed replaces the household rather than adding a second one to it.
+  // Receipts and their attachment history point at payments, so they are let
+  // go first or the ledger cannot be emptied at all.
+  await db.query('DELETE FROM receipt_attachment_events');
+  await db.query('DELETE FROM receipt_jobs');
   await db.query(
     `DELETE FROM audit_events WHERE transaction_id IN
        (SELECT id FROM transactions WHERE source='showcase')`,
@@ -734,9 +768,11 @@ export async function seedShowcase(
   }
 
   const assets = await seedShowcaseAssets(db, now, months);
+  const receipts = await seedShowcaseReceipts(db, now);
   return {
     transactions: planned.length,
     accounts: SHOWCASE_ACCOUNTS.length,
+    receipts: receipts.attached,
     ...assets,
   };
 }

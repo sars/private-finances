@@ -28,5 +28,11 @@ await db.close();
 console.log(
   `showcase seeded into ${directory}: ${seeded.transactions} payments ` +
     `across ${seeded.accounts} accounts, ${seeded.holdings} holdings ` +
-    `with ${seeded.snapshots} snapshots, ${seeded.rates} daily rates`,
+    `with ${seeded.snapshots} snapshots, ${seeded.rates} daily rates, ` +
+    `${seeded.receipts} receipts`,
 );
+
+if (!seeded.receipts)
+  console.log(
+    'no receipt pictures found — run `pnpm demo:receipts` once and commit them',
+  );
