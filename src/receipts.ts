@@ -128,6 +128,7 @@ export async function initializeReceipts(tx: Executor): Promise<void> {
   await upgradeReceiptEvidence(tx);
   await upgradeSettlementDifference(tx);
   await upgradeReceiptPreview(tx);
+  await upgradeReceiptAnswers(tx);
 }
 
 /**
@@ -210,6 +211,22 @@ export async function upgradeReceiptPreview(tx: Executor): Promise<void> {
   );
   await tx.query(
     'ALTER TABLE receipt_jobs ADD COLUMN IF NOT EXISTS preview_mime text',
+  );
+}
+
+/**
+ * The payment a receipt was sent as the answer to.
+ *
+ * A photo used to carry nothing about why it was sent, so it could only reach a
+ * payment through the ordinary date, amount, currency and merchant search — and
+ * a member answering the bot's own question about a payment had no way to say
+ * which one they meant. The reply itself says it, and this is where that is
+ * kept.
+ */
+export async function upgradeReceiptAnswers(tx: Executor): Promise<void> {
+  await tx.query(
+    `ALTER TABLE receipt_jobs ADD COLUMN IF NOT EXISTS
+     answers_transaction_id uuid REFERENCES transactions(id)`,
   );
 }
 // Fixed texts only. Extraction data, merchant, amount, items and reason codes are
@@ -589,9 +606,33 @@ export class Receipts {
       Number(file.file_size) > maxBytes
     )
       return false;
+    // A photo sent as a reply to one of the bot's own questions is an answer to
+    // that question. The member has said which payment they mean, which no
+    // amount of date and merchant arithmetic can be as sure of, so the link is
+    // taken from the reply rather than searched for later. Only their own open
+    // question counts: a reply to the question addressed to the other member is
+    // an ordinary receipt, and is matched the ordinary way.
+    const answered = obj(message.reply_to_message);
+    const question = Number.isSafeInteger(answered.message_id)
+      ? (
+          await this.db.query(
+            `SELECT transaction_id FROM telegram_outbox
+             WHERE chat_id=$1 AND message_id=$2 AND owner=$3`,
+            [settings.chatId, answered.message_id, owner],
+          )
+        ).rows[0]
+      : undefined;
     await this.db.query(
-      'INSERT INTO receipt_jobs(id,owner,chat_id,message_id,file_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(chat_id,message_id) DO NOTHING',
-      [randomUUID(), owner, settings.chatId, message.message_id, file.file_id],
+      `INSERT INTO receipt_jobs(id,owner,chat_id,message_id,file_id,answers_transaction_id)
+       VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(chat_id,message_id) DO NOTHING`,
+      [
+        randomUUID(),
+        owner,
+        settings.chatId,
+        message.message_id,
+        file.file_id,
+        question ? String(question.transaction_id) : null,
+      ],
     );
     return true;
   }
@@ -1068,7 +1109,8 @@ export class Receipts {
     requireActor(owner);
     const job = (
       await this.db.query(
-        "SELECT extraction FROM receipt_jobs WHERE id=$1 AND owner IN ('rodion','katya') AND state='pending'",
+        `SELECT extraction, answers_transaction_id FROM receipt_jobs
+         WHERE id=$1 AND owner IN ('rodion','katya') AND state='pending'`,
         [id],
       )
     ).rows[0];
@@ -1076,6 +1118,18 @@ export class Receipts {
     const r = parseReceipt(job.extraction);
     if (!r.isReceipt || !r.date || !r.amountMinor || !r.currency || !r.merchant)
       return;
+    // The member answered a question about this payment. Their word settles
+    // which payment it is; the search below exists for a photo that arrived
+    // with nothing said about it.
+    if (job.answers_transaction_id) {
+      await this.attach(
+        owner as 'rodion' | 'katya',
+        id,
+        String(job.answers_transaction_id),
+        'owner_answered_question',
+      );
+      return;
+    }
     const rows = await matchingCandidates(this.db, r);
     // Even a different merchant at the same price/date is an ambiguity safeguard,
     // so uniqueness across the whole window is checked before the merchant at all.
@@ -1144,6 +1198,9 @@ export class Receipts {
     owner: 'rodion' | 'katya',
     id: string,
     transactionId: string,
+    reason:
+      | 'owner_confirmed_match'
+      | 'owner_answered_question' = 'owner_confirmed_match',
   ): Promise<boolean> {
     requireActor(owner);
     return this.db.transaction(async (tx) => {
@@ -1170,8 +1227,9 @@ export class Receipts {
         await invalidateReceiptCategory(tx, String(row.transaction_id));
       await invalidateReceiptCategory(tx, transactionId);
       await tx.query(
-        "UPDATE receipt_jobs SET transaction_id=$2,state='matched',reason='owner_confirmed_match',updated_at=now() WHERE id=$1",
-        [id, transactionId],
+        `UPDATE receipt_jobs SET transaction_id=$2,state='matched',reason=$3,
+         updated_at=now() WHERE id=$1`,
+        [id, transactionId, reason],
       );
       await tx.query(
         'INSERT INTO receipt_attachment_events(id,receipt_id,actor,previous_transaction_id,transaction_id) VALUES($1,$2,$3,$4,$5)',

@@ -10,6 +10,11 @@ what was saved — the payment, its type, its category, any tags — and a link 
 the payment so a wrong answer can be corrected in one click. When nothing could
 be saved it reacts 👀 and the reply says why.
 
+A payment question can also be answered with the receipt itself. A photo replying
+to one of the bot's questions is linked to that question's payment directly; see
+[receipts](receipts.md). A photo that replies to nothing, or to the other
+member's question, is stored and matched the ordinary way.
+
 ## An answer that reaches nothing
 
 That is the path for an answer the application accepted. An answer it never

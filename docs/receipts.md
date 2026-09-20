@@ -327,3 +327,30 @@ See [the future item analytics architecture](receipt-item-analytics.md).
 Receipt-bearing payments bypass merchant-only triage except explicit saved rules.
 Inconclusive receipt assessments enter the existing review/Telegram clarification
 queue when eligible; they cannot be silently replaced by a merchant-only guess.
+
+## Answering a question with the receipt
+
+A photo sent as a reply to one of the bot's payment questions is an answer about
+that payment. The reply names it, so the link is taken from the reply rather
+than searched for: `receipt_jobs.answers_transaction_id` (schema 64) records the
+payment the question was about, resolved from `telegram_outbox` by the chat and
+the message replied to, and the matcher attaches to it instead of running the
+date, amount, currency and merchant search.
+
+This is the case the search is least able to help with. It refuses to guess
+between two candidates on purpose, so two payments of the same amount on the
+same day leave a receipt unmatched however clear it is to the person who sent
+it — and that person had already said which one they meant. The attachment is
+recorded as theirs, with actor set to the member and reason
+`owner_answered_question`, not as an automatic match.
+
+Only the member's own open question counts. A photo replying to the question
+addressed to the other member carries no statement about what this member meant,
+so it is stored and matched the ordinary way. A photo that is not a reply at all
+is unchanged in every respect.
+
+Once attached, the receipt reaches the payment's category through the existing
+receipt-informed categorization above: the attachment invalidates any automatic
+receipt category on that payment and the next pass proposes one from the items.
+Nothing here classifies the payment by itself, and no receipt evidence is sent
+to the chat.
