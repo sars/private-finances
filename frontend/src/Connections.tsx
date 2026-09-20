@@ -1,9 +1,9 @@
 import {
-import { owners } from './lib/account-visuals';
   invalidateFinancialData,
   observeSession,
   useRefreshSignal,
 } from './lib/query';
+import { owners } from './lib/account-visuals';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowUpRight, CircleAlert, Landmark, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -1,9 +1,9 @@
 import {
-import { owners } from './lib/account-visuals';
   invalidateFinancialData,
   useRefreshSignal,
   useSession,
 } from './lib/query';
+import { owners } from './lib/account-visuals';
 import { periodRange } from './lib/spending-period';
 import { useDisplayCurrency } from './lib/display-currency';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
