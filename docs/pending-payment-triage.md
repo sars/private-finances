@@ -91,3 +91,38 @@ payments. They run 30 minutes after the previous import completes (currently abo
 37–38 minutes between starts). A later `hold: false` updates the existing payment
 to booked; requesting data cannot force settlement. The API record gives no
 completion deadline. Categorization and receipt processing do not wait for it.
+
+## A decision that cannot be written is a question, not a silence
+
+Triage finishes a payment in one of four states, and `ready` is the one that
+means *decided, nothing to ask*. Until 20 September 2026 it could also mean
+*decided, and nothing written*: the automatic write refuses to file a payment
+under a catch-all leaf, so a decision whose category was `Unspecified` was
+stored as `ready`, applied to nothing, and carried no question text. The
+question lane only ever selects `ready` rows that carry their own question, or
+rows that are `deferred` or `uncertain`, so such a payment was invisible to it.
+It was neither classified nor asked about, and nothing would look at it again.
+
+The two halves now share one test — a category whose leaf is `Unspecified` — so
+they cannot drift apart. A decision the write would refuse finishes `uncertain`
+instead, and the member is asked. `ready` means the decision was written.
+
+### How a confirmed rule came to have no category
+
+The route in was the category-tree migration. It moved every confirmed rule's
+category onto the shared tree through an explicit map of legacy paths and sent
+anything unlisted to the root catch-all; payments got a fallback pass first,
+rules never did. The household's legacy "Shopping" branch was deliberately
+unmapped — naming a shop says nothing about the purpose — so fifty-eight
+owner-confirmed rules survived it still matching, still confirmed, and pointing
+at Unspecified. Every payment matching one of them went silent.
+
+Migration 63 repairs them from the only source that still exists: the
+household's own decisions. Where a member has filed the same merchant under one
+leaf themselves, that leaf is restored and the rule stays active. Where they
+have filed it under several, never filed it at all, or where the owner has said
+the shop's name settles nothing — a variety chemist sells cosmetics and cleaning
+liquid across one counter — the rule is retired and the payment goes back to
+being asked about. Each change is a new edition of the rule with its reason in
+`classification_rule_audit`, and the payments already stranded are moved to
+`uncertain` so they are asked rather than left.

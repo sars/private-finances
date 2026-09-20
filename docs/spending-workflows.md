@@ -52,6 +52,12 @@ Matching payments are then classified without a Telegram question once
 application is recorded as `auto_classified` with the rule as its provenance.
 Nothing generalises without the tick: one decision stays one decision.
 
+A rule whose category no longer resolves to a real leaf does not silently swallow
+the payments it matches. Triage treats a decision it cannot write as a question,
+and migration 63 restored or retired the rules the category-tree migration had
+left pointing at the root catch-all. See
+[pending-payment triage](pending-payment-triage.md).
+
 ## From the overview banner to Review
 
 The "there's more to the picture" banner links to Review with the needs-review
