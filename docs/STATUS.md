@@ -9,35 +9,43 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**2a52c70b9a9f36d43781656dca535bf2ef87f7a0**, live since September 20, 2026 at
+**437fe5558453ebe576e438bc1ae543a57460626b**, live since September 20, 2026 at
 schema version 62, deployed with `deploy/release.sh`: both services active,
-schema 62, 4,198 transactions, 681 server tests passed, the import timers and
-the Telegram worker resumed afterwards. It carries PR #118.
+schema 62, 4,199 transactions, 686 server tests passed, the import timers and
+the Telegram worker resumed afterwards. It carries PR #119 and #120.
 
-**The application can now be photographed without the household in it.** An
-article needs screenshots and short screencasts, and the pictures are
-permanent. Masking the real figures was rejected: a screenshot can be zoomed
-and kept, a screencast is not reviewed frame by frame, an article of
-blanked-out numbers shows nothing, and masking fails silently where a missed
-figure looks exactly like a scaled one. Removing unwanted holdings from real
-data also breaks the sums, which is where a careful reader looks. So the demo
-workspace holds an invented household instead — sixteen months of it, from a
-fixed seed so a reseed does not rewrite the article beneath its own
-screenshots, dated relative to the day it is seeded so "this month" is never
-empty. Real: the category tree, the banks this public repository already
-names, the currencies, the dates. Invented: every amount, every merchant, both
-members, every holding. See [the showcase](showcase.md).
+**Home and Analytics now ask the database for the period they display.** Both
+have always sent one. The server read every payment the member had ever made,
+enriched each one, and then dropped what fell outside — so a request for two
+days cost what a request for a year cost, measured at about 70ms either way on
+1,405 payments, and growing with the household's history for ever. The window
+now reaches SQL on the index that already existed; the filters still run over
+the result, so a mistake in the clause could only ever return too much, never
+the wrong thing. The delicate part is that a Riga day is not a UTC day and
+across the October clock change is not a fixed offset from one either, so the
+bounds become instants the way a cash purchase's day already does, and the
+test pins both edges of October and the change itself against what the filters
+would have kept.
 
-Nothing of this reaches production. Demo mode never opens `DATABASE_URL`; the
-seeder asks how the database was constructed rather than reading a variable
-that could be wrong, and refuses anything but a local PGlite one; the script
-refuses to start with `DATABASE_URL` present; and demo mode already runs with
-no bank, Telegram or AI credentials. `/showcase/reseed` does not exist outside
-demo mode, and the seeder behind it would refuse in any case.
+**The demo workspace now calls the household by the names it shows.** Five
+screens printed the ledger's identifier for a member instead — Balances tabs,
+the sidebar, Home's note about the other member, a payment's history and Bank
+connections — because each rendered the owner id under a CSS capitalize rather
+than reading the map the names live in. System health and Imports did the same
+inside connection identifiers, where the member is a segment of the string.
+And the balances screen showed zero everywhere: balances are stored bank
+evidence, never arithmetic over payments, so a workspace nobody wrote balances
+into shows zeroes however many payments it holds.
+
+A demo instance runs on the server from the same release, in demo mode, on a
+tailnet port of its own. It is sized from measurement — 859M at peak, 405M
+settled, 1280M ceiling — because PGlite is a PostgreSQL inside the process
+rather than one across a socket. See [the showcase](showcase.md), including
+the rule that its hostname never leaves the tailnet.
 
 ## Previous release
 
-**38c8c902b8315eb3ffa8a93a4b1a1df4fe56e39d**, live since September 20, 2026 at
+**38c8c902b8315eb3ffa8a93a4b1a1df4fe56e39d**, superseded September 20, 2026, at
 schema version 62, deployed with `deploy/release.sh`: both services active,
 schema 62, 4,194 transactions, the import timers and the Telegram worker
 resumed afterwards. It carries PR #109, #111, #112, #114 and #116, and adds
@@ -1043,6 +1051,28 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# The application can be photographed without the household in it — September 20, 2026
+
+An article needs screenshots and short screencasts, and the pictures are
+permanent. Masking the real figures was rejected: a screenshot can be zoomed
+and kept, a screencast is not reviewed frame by frame, an article of
+blanked-out numbers shows nothing, and masking fails silently where a missed
+figure looks exactly like a scaled one. Removing unwanted holdings from real
+data also breaks the sums, which is where a careful reader looks. So the demo
+workspace holds an invented household instead — sixteen months of it, from a
+fixed seed so a reseed does not rewrite the article beneath its own
+screenshots, dated relative to the day it is seeded so "this month" is never
+empty. Real: the category tree, the banks this public repository already
+names, the currencies, the dates. Invented: every amount, every merchant, both
+members, every holding. See [the showcase](showcase.md).
+
+Nothing of this reaches production. Demo mode never opens `DATABASE_URL`; the
+seeder asks how the database was constructed rather than reading a variable
+that could be wrong, and refuses anything but a local PGlite one; the script
+refuses to start with `DATABASE_URL` present; and demo mode already runs with
+no bank, Telegram or AI credentials. `/showcase/reseed` does not exist outside
+demo mode, and the seeder behind it would refuse in any case.
 
 # The rest of what a release left on the disk — September 19, 2026
 
