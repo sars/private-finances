@@ -19,6 +19,7 @@
     "check": "python3 scripts/check_repository.py && pnpm format:check && pnpm test && pnpm build:frontend && python3 scripts/check_frontend.py",
     "shots": "node scripts/shots.ts",
     "demo": "pnpm build && node dist/src/main.js",
+    "demo:seed": "pnpm build && node scripts/seed-showcase.mjs",
     "start": "node dist/src/main.js",
     "sync": "node dist/src/sync-cli.js"
   },

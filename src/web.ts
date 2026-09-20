@@ -50,7 +50,7 @@ import {
   type FeedOutcome,
 } from './holding-fill.js';
 import type { Fetcher } from './holding-feeds.js';
-import { accountDisplayName } from './account-names.js';
+import { accountDisplayName, ownerNames } from './account-names.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
@@ -565,6 +565,9 @@ export function web(
             new URLSearchParams(),
           ),
           mode: config.mode,
+          // The members' on-screen names, so the frontend calls them whatever
+          // this process decided. Demo mode renames them for screenshots.
+          ownerNames: ownerNames(),
           release: config.release,
           features: {
             ai: Boolean(config.classifierFor),

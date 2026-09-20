@@ -103,6 +103,19 @@ interface MemoryHandle {
 }
 const memoryHandles = new WeakMap<Database, MemoryHandle>();
 
+/**
+ * Whether this database is a local PGlite one rather than a PostgreSQL server.
+ *
+ * The showcase seeder asks before it writes, because it empties the ledger and
+ * rewrites it: run against the household's own database it would destroy the
+ * lot. The WeakMap is set when the database is constructed, so it answers from
+ * what was actually built — an environment variable can be wrong and a
+ * connection string can be edited, but this cannot.
+ */
+export function isMemoryDatabase(db: Database): boolean {
+  return memoryHandles.has(db);
+}
+
 export function memoryDatabase(path?: string): Database {
   let engine: Promise<PGlite> | undefined;
   let pristine = true;

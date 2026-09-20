@@ -11,10 +11,30 @@
  */
 export type AccountOwner = 'rodion' | 'katya';
 
+/**
+ * What each member is called on screen.
+ *
+ * The demo workspace renames them, so screenshots and screencasts made for a
+ * public article carry invented people instead of the household's own names.
+ * Only the label changes: the owner recorded against every payment is still
+ * `rodion` or `katya`, because that identity is what the ledger, the audit
+ * history and the bank connections are keyed by.
+ */
 const OWNER_NAMES: Record<AccountOwner, string> = {
   rodion: 'Rodion',
   katya: 'Katya',
 };
+/** Rename the members for this process; demo mode calls this at startup. */
+export function setOwnerNames(
+  names: Partial<Record<AccountOwner, string>>,
+): void {
+  for (const [owner, name] of Object.entries(names))
+    if (name) OWNER_NAMES[owner as AccountOwner] = name;
+}
+/** The names as they stand, for the payload the frontend reads them from. */
+export function ownerNames(): Record<AccountOwner, string> {
+  return { ...OWNER_NAMES };
+}
 /** Banks the household holds accounts with, by the word a label starts with. */
 const BANKS = ['Monobank', 'Wise', 'Revolut', 'Swedbank', 'LHV', 'PrivatBank'];
 const SOURCE_BANK: Record<string, string> = {
