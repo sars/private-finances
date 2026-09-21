@@ -9,47 +9,86 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**2a22b06003bc2c9fb63ce1d7899d28418622b82a**, live since September 21, 2026 at
+**f6511b16e5dc66d8608e5c8479b5a94b3c9fee9f**, live since September 21, 2026 at
 schema version 65, deployed with `deploy/release.sh`: both services active,
-schema 65, 4,202 transactions, the server test run passed with 4 skipped, the
-migration rehearsal on a restored copy reached schema 65 in 54 milliseconds, the
-import timers and the Telegram worker resumed afterwards. It carries PR #132 and
-adds no migration.
+schema 65, 4,207 transactions, the server test run passed with 4 skipped, the
+migration rehearsal on a restored copy reached schema 65, the import timers and
+the Telegram worker resumed afterwards. It carries PRs #134, #135, #136, #137
+and #138, and adds no migration.
 
-**Two corrections to Home, both from one question the owner asked.** They were
-reading the screen in euro, and asked why recent activity was always hryvnia and
-why one day's spending looked so small.
+**The demo had been serving a four-month-old release, and could not be
+refilled.** The owner noticed it looked wrong, and everything below came out of
+that one question.
 
-**Recent activity was the only payment list in the application that ignored the
-display currency.** It printed whatever the bank recorded, so a household that
-pays mostly from a hryvnia card read a column of hryvnia under a euro heading.
-The sharper half is that a euro purchase on a hryvnia card is charged to the
-account in hryvnia: the row showed a hryvnia figure for a payment made in euro,
-and the euro amount the bank itself recorded — which the conversion prefers over
-any market rate — appeared nowhere on the screen. The list now renders
-`DisplayAmount`, as Review and All transactions already do: the converted figure
-with the original beneath it. `signed` moved onto that component so money coming
-in keeps the plus sign the plain amount gave it.
+**Nothing restarts the showcase.** A release switches the `current` symlink and
+restarts `private-finances` alone. The showcase resolves
+`WorkingDirectory=/opt/private-finances/current` once at start, so flipping the
+symlink underneath it changes nothing for a process already running: it served
+the release it booted with until somebody restarted it by hand, and nothing
+anywhere reported that. `deploy/README.md` now says so where the release
+sequence is described.
 
-**The small day was two screens answering two questions without saying so.**
-Home counts payments already filed as personal expenses; Spending analytics
-counts those and the unresolved ones together. The same day therefore reads as
-two different amounts, and the owner found the gap by reading one figure after
-the other. On the day they asked about, the largest payment was still waiting
-for a decision; a member filed it twenty minutes later, and the two screens met.
+**The reseed that would have fixed it could not run.** `daily_fx_rates` is
+immutable — a trigger refuses an UPDATE or a DELETE so that a correction never
+changes the number an earlier report was built on — and the seeder was
+generating each rate by walking forward from a fixed value on the first day of
+its window. The window is sixteen months ending today, so it moves with the
+month the seeder runs in, and a reseed a month later offered the shared dates
+different numbers. `fx_rate_version_conflict`, thrown after the ledger had been
+emptied and refilled but before the holdings were, leaving a workspace holding
+half of two households that still starts and still looks plausible. Each rate
+is now a function of its own date, so seeding twice offers each day the same
+number and the insert does nothing. A finished seeding records itself, so a
+workspace seeded part way no longer passes for whole.
 
-The owner chose to keep both meanings and label each, rather than make one
-screen adopt the other's rule. Analytics already had its label: its fourth total
-is "Not yet placed", noted as unresolved outflows inside the total. Home now
-says the other half in the one place that already names the money — the amber
-band — which appears only when something is actually waiting, so a month with
-nothing undecided gains no words at all.
+**Refunds were never in the demo at all.** The seeder wrote a purchase and an
+equal credit three days later and left them unlinked — `refund_links` was empty
+on every workspace it had ever built — so the Payments screen showed two
+unrelated rows, and the reduced headline, the "Original … · … returned" line
+and the "still settling" note had not once appeared in a screenshot of this
+application. They are linked now and take four shapes in rotation: the whole
+charge back; part of it, leaving the purchase reduced; a reversal still on
+hold; and one charged in euro and returned in hryvnia, which the matcher
+refuses to decide alone and which runs its arithmetic through the daily quote
+the workspace holds.
 
-Neither figure was ever wrong and nothing was recomputed. What changed is that
-each screen says which question it is answering, and that an amount is shown in
-the currency the reader chose.
+**The demo showed the household's real names on nine screens.** The rename
+works by rewriting one map in place, so it reaches a screen only if the screen
+asked; nine carried their own `'Rodion'`/`'Katya'` ternary and one wrote
+`'Kate'`. A Bank imports row read avatar **A** beside the label **Rodion**.
+All of them read `ownerName` now, and the check is a rule about the source
+rather than a render of a screen — three files may write a member's name, and a
+tenth screen that does fails by file and line.
+
+**`/showcase/reseed` now carries four knobs and does the whole job.** Density,
+months, refunds and receipts, each clamped inside the seeder rather than
+trusted. The page asks rather than acts: it writes a request file, a `.path`
+unit notices, and a root oneshot stops the service, rebuilds the workspace and
+starts it again — which is also what moves the demo onto the current release.
+The page follows along by polling from a document already loaded, so the
+minutes when the demo is stopped read as "Working" rather than as an error, and
+it ends by naming the counts and the release. A failure says so and starts the
+demo again anyway.
+
+**Two things worth keeping from how these were found.** Both faults were found
+by looking at the demo, not by anything reporting them — so both are written in
+`docs/showcase.md` as rules rather than as fixes. And the name check first
+shipped shelling out to `git ls-files`, which passed locally and in CI and died
+on the server, where a release is built from a `git archive` extract with no
+`.git`: a test that asks the environment a question must be run in the
+environment the gate uses.
 
 ## Previous release
+
+**b14cfea4a2562f348fbb3625f75fb8dce3e78479**, superseded September 21, 2026, at
+schema version 65: it carried PRs #134, #135 and #136 — the seeder made
+re-runnable, the reseed knobs and the linked refunds, and the reseed page — and
+was superseded the same day by the owner-name repair. The releases before it
+are described below.
+
+**2a22b06003bc2c9fb63ce1d7899d28418622b82a**, superseded September 21, 2026, at
+schema version 65: it carried PR #132, the two corrections to Home the owner
+found by reading the screen in euro. The releases before it are described below.
 
 **e13c55f9771c10f5002341bc00f7330f66632d63**, superseded September 21, 2026, at
 schema version 65: it carried PR #130, which stopped System health repeating the
