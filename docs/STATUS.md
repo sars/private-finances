@@ -9,83 +9,56 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**e13c55f9771c10f5002341bc00f7330f66632d63**, live since September 20, 2026 at
+**2a22b06003bc2c9fb63ce1d7899d28418622b82a**, live since September 21, 2026 at
 schema version 65, deployed with `deploy/release.sh`: both services active,
-schema 65, 4,201 transactions, 691 server tests passed and 4 skipped, the
-migration rehearsal on a restored copy reached schema 65 in 32 milliseconds, the
-import timers and the Telegram worker resumed afterwards. It carries PR #130 and
+schema 65, 4,202 transactions, the server test run passed with 4 skipped, the
+migration rehearsal on a restored copy reached schema 65 in 54 milliseconds, the
+import timers and the Telegram worker resumed afterwards. It carries PR #132 and
 adds no migration.
 
-**System health stopped repeating the Bank imports page.** Every bank
-connection, its state, its last complete run and the advice for its error code
-were drawn twice: once on Bank imports, which exists to show exactly that and
-carries the run history besides, and again on System health, where they took
-more room than everything else on the page put together. The owner asked for
-the copy to go, and both renderings drop it.
+**Two corrections to Home, both from one question the owner asked.** They were
+reading the screen in euro, and asked why recent activity was always hryvnia and
+why one day's spending looked so small.
 
-Nothing went with it. Bank imports is in the sidebar beside System health, so
-the page is not orphaned; a connection that has actually stopped is still
-reported on Home by the problems block, which reads the sync records directly;
-and the raw rows stay in the technical diagnostics for anyone debugging. The
-plain page keeps one line saying where the connections are, and the React
-page's description no longer opens with the section it no longer has.
+**Recent activity was the only payment list in the application that ignored the
+display currency.** It printed whatever the bank recorded, so a household that
+pays mostly from a hryvnia card read a column of hryvnia under a euro heading.
+The sharper half is that a euro purchase on a hryvnia card is charged to the
+account in hryvnia: the row showed a hryvnia figure for a payment made in euro,
+and the euro amount the bank itself recorded — which the conversion prefers over
+any market rate — appeared nowhere on the screen. The list now renders
+`DisplayAmount`, as Review and All transactions already do: the converted figure
+with the original beneath it. `signed` moved onto that component so money coming
+in keeps the plus sign the plain amount gave it.
 
-The release it replaces, described below, is the one that put the approvals
-there in the first place.
+**The small day was two screens answering two questions without saying so.**
+Home counts payments already filed as personal expenses; Spending analytics
+counts those and the unresolved ones together. The same day therefore reads as
+two different amounts, and the owner found the gap by reading one figure after
+the other. On the day they asked about, the largest payment was still waiting
+for a decision; a member filed it twenty minutes later, and the two screens met.
 
-**App health named one key twice, and never named the household's real
-deadline.** The owner opened the page and found two credential cards both headed
-"OpenAI API key". There is only one; the second was the IBKR Flex token, wearing
-the wrong name since the day it joined the watch list. That change made the
-tracked credentials a list with a label each and updated the API, the plain page,
-the docs and the tests — but not the React page, which printed the name as a
-literal inside the loop over every credential. Each now carries its own.
+The owner chose to keep both meanings and label each, rather than make one
+screen adopt the other's rule. Analytics already had its label: its fourth total
+is "Not yet placed", noted as unresolved outflows inside the total. Home now
+says the other half in the one place that already names the money — the amber
+band — which appears only when something is actually waiting, so a month with
+nothing undecided gains no words at all.
 
-The better question that raised: where does one see everything that expires?
-Nowhere. App health read two environment variables and stopped, while the thing
-that actually halts the imports — a bank approval, granted for days rather than
-months — appeared only on Bank connections, which lists the signed-in member's
-own approvals. One member's approval lapsing tomorrow was invisible to the other
-on every screen. The household's nearest deadline lived only in the Telegram
-group. App health now lists every live approval beside the credentials, both
-members', soonest first, with the days remaining and the date.
-
-It is a listing and not a new alarm: the on-screen problems block keeps the
-one-day threshold set on 18 September, and Telegram keeps 5, 2, 1 and 0. What
-was missing was somewhere to look before a warning arrives. Nothing is renewed
-from the page, because one member's approval never covers the other's accounts,
-and only expiry metadata leaves the server — no session, no state hash, no
-credential, with a test on the exact key set. The operator's GitHub token was
-considered for this page and deliberately left off: it never enters the
-application's runtime, so the application cannot read its expiry.
-
-Review of the first commit caught the new section printing the raw owner
-identifier, which the demo workspace's rename exists to prevent — the sidebar
-read "Alex" and the approval beneath it read "Katya". Both renderings now name
-the member as the rest of the page does, held by a test on the real route that
-also refuses either household identity anywhere on that page.
-
-**Three releases in one evening, all from one question the owner asked.** They
-had made a payment and no Telegram question came. The chain behind that is
-recorded in the entries below; what is live now is the end of it.
-
-**The two corrections the owner made after reading the repair.** Three more
-merchants were the same kind of variety chemist as the one they had already
-named, so their rules are retired and those payments are asked about rather
-than filed under cosmetics on the strength of a few past baskets. Retired means
-deactivated: the rule, its history and its reasons stay, and either member can
-switch one back on. The descriptor test stopped being a bare prefix at the same
-time, so a three-letter name can no longer take every merchant that merely
-begins with it.
-
-And one rule the repair could only leave on a branch's own catch-all, because
-that is where the member had filed those payments themselves, now points at the
-leaf the owner named. A catch-all is not a category, so under the triage fix
-those payments would have been asked about for ever instead of filed. It is
-keyed by rule id alone, with no descriptor in the source: what a household rule
-matches is the household's business and this repository is public.
+Neither figure was ever wrong and nothing was recomputed. What changed is that
+each screen says which question it is answering, and that an amount is shown in
+the currency the reader chose.
 
 ## Previous release
+
+**e13c55f9771c10f5002341bc00f7330f66632d63**, superseded September 21, 2026, at
+schema version 65: it carried PR #130, which stopped System health repeating the
+Bank imports page. Every bank connection, its state, its last complete run and
+the advice for its error code were drawn twice, and both renderings drop the
+copy. Bank imports sits in the sidebar beside System health, a connection that
+has actually stopped is still reported on Home by the problems block, and the
+raw rows stay in the technical diagnostics. The releases before it are described
+below.
 
 **16e3bf406bebe6f0e14fab738a8d79e8ced56f82**, superseded September 20, 2026, at
 schema version 65: it carried PR #126, which gave each tracked credential its
@@ -1201,6 +1174,45 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# Home says which question it is answering — September 21, 2026
+
+The owner was reading Home in euro and asked two things: why recent activity was
+always hryvnia, and why one day's spending looked so small. Both were the same
+kind of fault — a screen stating a figure without stating what it counts.
+
+Recent activity was the only payment list in the application that ignored the
+display currency; it printed whatever the bank recorded. A household that pays
+mostly from a hryvnia card therefore read a column of hryvnia under a euro
+heading. The sharper half is that a euro purchase on a hryvnia card is charged
+to the account in hryvnia, so the row showed a hryvnia figure for a payment made
+in euro, and the euro amount the bank itself recorded — which the conversion
+prefers over any market rate, because it is what the money actually did —
+appeared nowhere. The list now renders `DisplayAmount`, as Review and All
+transactions already do: the converted figure with the original beneath it.
+`signed` moved onto that component, so money coming in keeps the plus sign the
+plain amount gave it and the two older lists are unchanged.
+
+The small day was two screens answering two questions without saying so. Home
+counts payments already filed as personal expenses; Spending analytics counts
+those and the unresolved ones together. The same day therefore reads as two
+amounts. On the day the owner asked about, the largest of its payments was still
+waiting for a decision when they looked, and a member filed it about twenty
+minutes later — after which both screens agreed, which is why nothing looked
+broken by the time it was investigated.
+
+Offered the choice of making one screen adopt the other's rule or labelling
+both, the owner chose labels, on the grounds that the amber band already names
+the money that is waiting, so the two figures visibly add up. Analytics needed
+nothing: its fourth total is "Not yet placed", noted as unresolved outflows
+inside the total. Home now says the other half in the band itself — it needs a
+decision, and is not in the figures below — and the band renders only when
+something is waiting, so a month with nothing undecided gains no words.
+
+Checked while diagnosing it: every one of the 374 days that carries a
+transaction also carries a euro rate, so the third candidate explanation — a
+payment silently dropped from a total for want of a rate — is not happening, and
+the count Home never shows was left unbuilt at the owner's call.
 
 # The corrections the owner made after reading the repair — September 20, 2026
 
