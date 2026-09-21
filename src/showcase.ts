@@ -24,7 +24,8 @@ import { Repository } from './repository.js';
 import { Accounts } from './accounts.js';
 import { Categories, ensureStarterCategories } from './categories.js';
 import type { Kind, Owner, TransactionInput } from './domain.js';
-import { seedShowcaseAssets } from './showcase-assets.js';
+import { Refunds, type RefundOrigin } from './refunds.js';
+import { seedShowcaseAssets, showcaseRateOn } from './showcase-assets.js';
 import {
   RECEIPT_ACCOUNTS,
   SHOWCASE_RECEIPTS,
@@ -389,12 +390,93 @@ const RECURRING = [
   },
 ] as const;
 
+/**
+ * What the reseed page may ask for, and the range each answer may take.
+ *
+ * The ceilings are not arbitrary. Seeding costs time and memory roughly in
+ * proportion to how many payments it writes — a default workspace peaked at
+ * 859M and took a few minutes — and the showcase shares a server with the
+ * household's own application. Three times the payments across two years is
+ * about as much as that server should be asked for on a button press.
+ */
+export const SHOWCASE_LIMITS = {
+  /** Everyday payments, as a multiple of the default of about eighty a month. */
+  density: { min: 0.25, max: 3, default: 1 },
+  /** How far back the ledger reaches. */
+  months: { min: 1, max: 24, default: 16 },
+  /** Refund pairs across the whole window; see `REFUND_SHAPES`. */
+  refunds: { min: 0, max: 24, default: 4 },
+  /** How many of the committed receipt pictures to attach. */
+  receipts: {
+    min: 0,
+    max: SHOWCASE_RECEIPTS.length,
+    default: SHOWCASE_RECEIPTS.length,
+  },
+} as const;
+
+export type ShowcaseShape = {
+  density?: number;
+  refunds?: number;
+  receipts?: number;
+};
+
+/** A number inside its documented range, or the default if it is not a number. */
+export function clampShowcase(
+  key: keyof typeof SHOWCASE_LIMITS,
+  value: number | undefined,
+): number {
+  const limit = SHOWCASE_LIMITS[key];
+  if (value === undefined || !Number.isFinite(value)) return limit.default;
+  return Math.min(limit.max, Math.max(limit.min, value));
+}
+
+/**
+ * The shape a seeding will actually take.
+ *
+ * Refunds default to one every four months rather than to a fixed count, so
+ * that asking for a shorter window does not leave the ledger looking as though
+ * this household returns things constantly.
+ */
+function resolveShape(
+  shape: ShowcaseShape,
+  months: number,
+): { density: number; refunds: number; receipts: number } {
+  return {
+    density: clampShowcase('density', shape.density),
+    refunds: Math.round(
+      clampShowcase(
+        'refunds',
+        shape.refunds ?? Math.max(1, Math.round(months / 4)),
+      ),
+    ),
+    receipts: Math.round(clampShowcase('receipts', shape.receipts)),
+  };
+}
+
+/** The four ways a refund can look, so the screens show more than one. */
+export const REFUND_SHAPES = [
+  'full',
+  'partial',
+  'settling',
+  'currency',
+] as const;
+export type RefundShape = (typeof REFUND_SHAPES)[number];
+
+/** Shops that take things back, so every refund is not from the same one. */
+const REFUND_MERCHANTS = ['Rozetka', 'Comfy', 'Foxtrot', 'MOYO', 'Intertop'];
+
 type Planned = {
   input: TransactionInput;
   kind: Kind;
   category: string | null;
   /** How this payment came to be classified, for the decision-coverage view. */
   decidedBy: 'human' | 'rule' | 'model' | 'mcc' | 'default';
+  /**
+   * Set on the credit of a refund pair: which purchase it reverses, and how
+   * the link should be recorded. `seedShowcase` makes the link once the ledger
+   * has given both sides an id.
+   */
+  refundOf?: { debit: string; shape: RefundShape; origin: RefundOrigin };
 };
 
 const pick = <T>(random: () => number, items: readonly T[]): T =>
@@ -415,9 +497,23 @@ function monthStart(from: Date, back: number): Date {
  * look abandoned. Reseeding is how the workspace stays current; there is no
  * timer, because it is only wanted before a screenshot.
  */
-export function showcaseTransactions(now = new Date(), months = 16): Planned[] {
+export function showcaseTransactions(
+  now = new Date(),
+  months = 16,
+  shape: ShowcaseShape = {},
+): Planned[] {
+  const { density, refunds } = resolveShape(shape, months);
   const random = generator(0x5ea5ed);
   const planned: Planned[] = [];
+
+  // Which months get a refund, and which shape each one takes. Spreading them
+  // across the window rather than taking the first months keeps the recent
+  // screens — the ones a screenshot is most likely to be of — from being the
+  // empty ones.
+  const refundMonths = new Map<number, number>();
+  for (let i = 0; i < refunds; i += 1)
+    refundMonths.set(months - 1 - Math.floor((i * months) / refunds), i);
+
   let counter = 0;
   const id = () => `showcase-${(counter += 1).toString(36)}`;
   const accountsByCurrency = (currency: string, owner: Owner) =>
@@ -470,7 +566,10 @@ export function showcaseTransactions(now = new Date(), months = 16): Planned[] {
       const count = Math.max(
         1,
         Math.round(
-          spend.monthly * (0.7 + random() * 0.6) * (lastDay / daysInMonth),
+          spend.monthly *
+            density *
+            (0.7 + random() * 0.6) *
+            (lastDay / daysInMonth),
         ),
       );
       for (let n = 0; n < count; n += 1) {
@@ -548,43 +647,101 @@ export function showcaseTransactions(now = new Date(), months = 16): Planned[] {
       });
     }
 
-    // Something bought and sent back. A refund is one of the more interesting
-    // things the application does, so the screens need one to show.
-    if (back % 4 === 1 && lastDay >= 24) {
-      const amount = 120000 + Math.floor(random() * 200000);
+    // Something bought and sent back.
+    //
+    // Refunds were the one part of the application the demo could not show.
+    // It generated a purchase and an equal credit three days later and left
+    // them there, unlinked: two unrelated rows on the Payments screen, and
+    // `refund_links` empty. None of the display the feature exists for — the
+    // reduced headline, the "Original … · … returned" line underneath, the
+    // "still settling" note — has ever appeared in a screenshot.
+    //
+    // So each of these is linked, in `seedShowcase` once the ledger has ids,
+    // and they are deliberately not all alike. Four shapes, in rotation:
+    //
+    //   full       the whole charge comes back, on the card that paid
+    //   partial    some of it comes back and the purchase stays, reduced
+    //   settling   the reversal is still a hold, so the amounts may change
+    //   currency   charged in euro, returned in hryvnia, confirmed by hand
+    //
+    // The last is the one worth having: it is the case the matcher refuses to
+    // decide on its own, and the one whose arithmetic depends on the daily
+    // quote this workspace holds.
+    const refundThisMonth = refundMonths.get(back);
+    if (refundThisMonth !== undefined && lastDay >= 24) {
+      const shape = REFUND_SHAPES[refundThisMonth % REFUND_SHAPES.length]!;
+      const charged = 120000 + Math.floor(random() * 200000);
+      const bought = new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 21, 14, 30),
+      );
+      const returned = new Date(
+        Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 24, 10, 5),
+      );
+      // By position rather than at random: four draws from the same stream
+      // kept landing on the same shop, and a household that returns everything
+      // to Comfy reads as a fixture.
+      const merchant =
+        REFUND_MERCHANTS[refundThisMonth % REFUND_MERCHANTS.length]!;
+      const debitId = id();
+
+      // Charged in euro only for the cross-currency shape; on the card that
+      // paid for every other one, because that is where a reversal lands.
+      const euro = shape === 'currency';
       planned.push({
         input: {
           source: 'showcase',
-          sourceId: id(),
-          accountId: 'mono-alex-black',
+          sourceId: debitId,
+          accountId: euro ? 'wise-alex-eur' : 'mono-alex-black',
           owner: 'rodion',
-          bookedAt: new Date(
-            Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 21, 14, 30),
-          ).toISOString(),
-          currency: 'UAH',
-          amountMinor: String(-amount),
-          description: 'Rozetka',
+          bookedAt: bought.toISOString(),
+          currency: euro ? 'EUR' : 'UAH',
+          amountMinor: String(-(euro ? Math.round(charged / 40) : charged)),
+          description: merchant,
         },
         kind: 'personal_expense',
         category: 'electronics',
         decidedBy: 'rule',
       });
+
+      // What comes back, in the currency it comes back in. The cross-currency
+      // credit is sized from the quote this workspace will hold for the day it
+      // arrives and then trimmed slightly, because money back that converts to
+      // more than the charge is refused as `refund_exceeds_purchase`.
+      const chargedEuroMinor = Math.round(charged / 40);
+      const rate = showcaseRateOn('EUR', returned) ?? 44.6;
+      const back_ =
+        shape === 'partial'
+          ? Math.round(charged * 0.4)
+          : shape === 'currency'
+            ? Math.floor(chargedEuroMinor * rate * 0.995)
+            : charged;
       planned.push({
         input: {
           source: 'showcase',
           sourceId: id(),
+          // Always the hryvnia card: for three shapes that is the card that
+          // was charged, and for the cross-currency one it is the point.
           accountId: 'mono-alex-black',
           owner: 'rodion',
-          bookedAt: new Date(
-            Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 24, 10, 5),
-          ).toISOString(),
+          bookedAt: returned.toISOString(),
           currency: 'UAH',
-          amountMinor: String(amount),
-          description: 'Rozetka refund',
+          amountMinor: String(back_),
+          description: `${merchant} refund`,
+          // A hold, so the pair reads as still settling: either side pending
+          // is what `provisionalPair` looks at.
+          ...(shape === 'settling' ? { status: 'pending' as const } : {}),
         },
         kind: 'personal_expense',
         category: 'electronics',
         decidedBy: 'human',
+        refundOf: {
+          debit: debitId,
+          shape,
+          // Crossing a currency or an account is the matcher's line, not a
+          // person's: ADR 0007 keeps automatic matching on one card in one
+          // currency, so this one is recorded as confirmed by hand.
+          origin: shape === 'currency' ? 'manual' : 'automatic',
+        },
       });
     }
 
@@ -699,7 +856,7 @@ export async function showcaseSeededAt(db: Database): Promise<Date | null> {
  */
 export async function seedShowcase(
   db: Database,
-  options: { now?: Date; months?: number } = {},
+  options: { now?: Date; months?: number } & ShowcaseShape = {},
 ): Promise<{
   transactions: number;
   accounts: number;
@@ -707,9 +864,10 @@ export async function seedShowcase(
   holdings: number;
   snapshots: number;
   rates: number;
+  refunds: number;
 }> {
   const now = options.now ?? new Date();
-  const months = options.months ?? 16;
+  const months = Math.round(clampShowcase('months', options.months));
   if (!isMemoryDatabase(db))
     throw new Error(
       'refusing to seed: the showcase may only be written to a local demo database',
@@ -735,6 +893,11 @@ export async function seedShowcase(
   // Receipts and their attachment history point at payments, so they are let
   // go first or the ledger cannot be emptied at all.
   await db.query('DELETE FROM receipt_attachment_events');
+  // Refund links point at two payments each, and the matcher's reviews at one,
+  // so both are let go before the ledger is emptied for the same reason the
+  // receipts above are.
+  await db.query('DELETE FROM refund_links');
+  await db.query('DELETE FROM refund_match_reviews');
   await db.query('DELETE FROM receipt_jobs');
   await db.query(
     `DELETE FROM audit_events WHERE transaction_id IN
@@ -755,7 +918,7 @@ export async function seedShowcase(
       account.owner,
     );
 
-  const planned = showcaseTransactions(now, months);
+  const planned = showcaseTransactions(now, months, options);
   await repo.importBatch(planned.map((p) => p.input));
 
   // The ledger keys a payment by where it came from, so the generated ids map
@@ -805,7 +968,50 @@ export async function seedShowcase(
   }
 
   const assets = await seedShowcaseAssets(db, now, months);
-  const receipts = await seedShowcaseReceipts(db, now);
+
+  // The refunds, now that both sides of each pair have an id and — this is
+  // the part that has to come after `seedShowcaseAssets` — the workspace
+  // holds the daily quotes. A refund that arrives in another currency is
+  // converted into the purchase's currency to check it does not exceed it,
+  // and with no quote for the day it arrived that check cannot be made:
+  // `link` refuses with `refund_conversion_unavailable`.
+  //
+  // `link` reads the revision it is given against the row, and the loop above
+  // has just bumped every payment to revision 1 by classifying it; it is read
+  // back rather than assumed, because a seeder that quietly stopped linking
+  // would look exactly like the demo did before it linked anything at all.
+  const refunds = new Refunds(db);
+  let linked = 0;
+  for (const plan of planned) {
+    if (!plan.refundOf) continue;
+    const creditId = bySourceId.get(plan.input.sourceId);
+    const debitId = bySourceId.get(plan.refundOf.debit);
+    if (!creditId || !debitId) continue;
+    const revisions = await db.query<{ id: string; revision: number }>(
+      'SELECT id, revision FROM transactions WHERE id=ANY($1::uuid[])',
+      [[debitId, creditId]],
+    );
+    const revisionOf = new Map(
+      revisions.rows.map((r) => [r.id, Number(r.revision)]),
+    );
+    await refunds.link({
+      debitId,
+      creditId,
+      expectedDebitRevision: revisionOf.get(debitId)!,
+      expectedCreditRevision: revisionOf.get(creditId)!,
+      owner: 'rodion',
+      reason:
+        plan.refundOf.origin === 'manual'
+          ? 'Returned in a different currency; confirmed against the receipt'
+          : 'The reversal the shop sent for this purchase',
+      origin: plan.refundOf.origin,
+    });
+    linked += 1;
+  }
+
+  const receipts = await seedShowcaseReceipts(db, now, {
+    limit: Math.round(clampShowcase('receipts', options.receipts)),
+  });
 
   // Last, so that it means what it says.
   await db.query(
@@ -816,6 +1022,7 @@ export async function seedShowcase(
     transactions: planned.length,
     accounts: SHOWCASE_ACCOUNTS.length,
     receipts: receipts.attached,
+    refunds: linked,
     ...assets,
   };
 }

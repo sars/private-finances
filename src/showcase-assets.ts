@@ -333,6 +333,19 @@ function rateOn(
 }
 
 /**
+ * What the workspace says a currency was worth against the hryvnia on a day.
+ *
+ * Exported so that a generated amount can agree with the quote the workspace
+ * holds: a refund that arrives in another currency has to be worth roughly
+ * what was charged, judged by the same number the screens will use to convert
+ * it, or the link is refused as exceeding the purchase.
+ */
+export function showcaseRateOn(currency: string, day: Date): number | null {
+  const shape = FX[currency];
+  return shape ? rateOn(currency, shape, day) : null;
+}
+
+/**
  * A daily rate for every day the article can show, from the one source the
  * owner approved as primary.
  *
