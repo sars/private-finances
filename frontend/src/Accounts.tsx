@@ -42,6 +42,7 @@ import {
 import { accountIdentity } from '@/lib/account-identity';
 import { currencyFromLabel, owners, tileFor } from '@/lib/account-visuals';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ownerName as memberName } from './lib/account-visuals';
 
 type Owner = 'rodion' | 'katya';
 type Purpose = 'personal' | 'business' | 'investment' | 'unreviewed';
@@ -307,12 +308,7 @@ export default function Accounts() {
   const missingIdentifier = accounts.filter(
     (a) => !a.identifierRegistered,
   ).length;
-  const ownerName =
-    identity?.actor === 'rodion'
-      ? 'Rodion'
-      : identity?.actor === 'katya'
-        ? 'Katya'
-        : 'you';
+  const ownerName = identity?.actor ? memberName(identity.actor) : 'you';
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-8">
@@ -452,7 +448,7 @@ export default function Accounts() {
                             {purpose.name}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {account.owner === 'rodion' ? 'Rodion' : 'Katya'}
+                            {memberName(account.owner)}
                           </span>
                         </div>
                         <p className="rounded-md bg-muted/40 p-2 text-xs leading-relaxed text-muted-foreground">

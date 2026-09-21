@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 const visuals = await import(
   new URL('../../frontend/src/lib/account-visuals.ts', import.meta.url).href
 );
@@ -108,4 +109,55 @@ test('the badge keeps its parts inside the picture at every size', () => {
           assert.ok(g.disc.cx - g.disc.r >= 0 && g.disc.cy - g.disc.r >= 0);
         if (size === 'sm') assert.equal(g.pill, null);
       }
+});
+
+test('no screen writes a member name into itself', () => {
+  // The demo workspace renames the household so a screenshot can be published,
+  // and the rename works by rewriting `owners` in place — so it reaches a
+  // screen only if that screen asked. Nine did not: they carried their own
+  // `'Rodion'`/`'Katya'` ternary, and one wrote `'Kate'`, a spelling nothing
+  // else used. The result was a Bank imports row reading avatar "A" beside the
+  // label "Rodion", the household's own name on a page built to be published.
+  //
+  // This is a grep rather than a render test on purpose. The fault was never
+  // that one screen was wrong; it was that nothing stopped the next screen
+  // from writing the name again, and only a rule about the source can.
+  const sources = execFileSync('git', ['ls-files', 'frontend/src', 'src'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((path) => /\.(ts|tsx)$/.test(path))
+    .filter((path) => !path.endsWith('.test.ts'));
+
+  // The three places a member's name is allowed to be written down: the map
+  // the frontend rewrites, the one the server rewrites, and Telegram's own —
+  // which addresses a person rather than labelling a screen, and which demo
+  // mode never loads at all.
+  const allowed = new Set([
+    'frontend/src/lib/account-visuals.ts',
+    'src/account-names.ts',
+    'src/telegram.ts',
+  ]);
+
+  const offenders: string[] = [];
+  for (const path of sources) {
+    if (allowed.has(path)) continue;
+    const text = readFileSync(
+      new URL(`../../${path}`, import.meta.url),
+      'utf8',
+    );
+    for (const [index, line] of text.split('\n').entries()) {
+      // Only string literals count. A comment explaining the rule, or an
+      // owner key like `rodion`, is not a name on a screen.
+      if (/['"`](Rodion|Katya|Kate)['"`]/.test(line.replace(/\/\/.*$/, '')))
+        offenders.push(`${path}:${index + 1}`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'these write a member name instead of reading it from `owners` or ' +
+      '`ownerNames()`, so the demo cannot rename them:\n' +
+      offenders.join('\n'),
+  );
 });

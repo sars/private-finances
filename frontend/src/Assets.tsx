@@ -37,6 +37,7 @@ import {
 } from '@/components/finance';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { DonutSlice } from '@/components/charts/Donut';
+import { ownerName } from './lib/account-visuals';
 const BarSeries = lazy(() => import('@/components/charts/BarSeries'));
 const Donut = lazy(() => import('@/components/charts/Donut'));
 
@@ -815,9 +816,7 @@ function HoldingName({ holding }: { holding: Holding }) {
       <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
         <span>{kinds[holding.kind] ?? holding.kind}</span>
         {holding.group && <span>· {holding.group}</span>}
-        {holding.owner && (
-          <span>· {holding.owner === 'rodion' ? 'Rodion' : 'Katya'}</span>
-        )}
+        {holding.owner && <span>· {ownerName(holding.owner)}</span>}
         <span>· {holding.invested ? 'invested' : 'not invested'}</span>
         <span>· {holding.liquid ? 'liquid' : 'illiquid'}</span>
         {holding.maturesOn && (

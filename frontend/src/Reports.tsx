@@ -14,10 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Choice, Field, PageHeader, RefreshButton } from '@/components/finance';
 import type { ReportSnapshot } from '../../src/reports';
+import { ownerName } from './lib/account-visuals';
 
 type Scope = 'all' | 'rodion' | 'katya';
 const scopeName = (scope: string) =>
-  scope === 'all' ? 'Together' : scope === 'rodion' ? 'Rodion' : 'Katya';
+  scope === 'all' ? 'Together' : ownerName(scope);
 function periodLabel(snapshot: ReportSnapshot) {
   const period = snapshot.report.period;
   const format = new Intl.DateTimeFormat('en-GB', {

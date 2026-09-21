@@ -31,6 +31,7 @@ import { apiGet } from '@/lib/query';
 import type { Owner } from '@/lib/account-visuals';
 import type { ImportAttempt, ImportRunPage } from '../../src/import-runs';
 import type { ImportStatus } from '../../src/import-status';
+import { ownerName } from './lib/account-visuals';
 
 const dateTime = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/Riga',
@@ -150,7 +151,7 @@ export default function ImportRuns() {
       { value: '', label: 'All banks' },
       ...(status.data?.connections ?? []).map((c) => ({
         value: c.connection,
-        label: `${c.label} · ${c.owner === 'rodion' ? 'Rodion' : c.owner === 'katya' ? 'Katya' : c.owner}`,
+        label: `${c.label} · ${ownerName(c.owner)}`,
       })),
     ],
     [status.data],

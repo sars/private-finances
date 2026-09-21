@@ -109,10 +109,13 @@ export const sourceNames: Record<string, string> = {
   wallet: 'from the wallet',
 };
 
-export const ownerNames: Record<Owner, string> = {
-  rodion: 'Rodion',
-  katya: 'Katya',
-};
+/**
+ * Re-exported so callers here do not keep a second copy of the names.
+ *
+ * This file used to hold its own `ownerNames` map, which nothing rewrote — so
+ * the demo renamed the members everywhere except wherever this was read.
+ */
+export { ownerName } from './account-visuals';
 
 /** Today in the household's own calendar; a snapshot belongs to a Riga day. */
 export const rigaToday = () =>

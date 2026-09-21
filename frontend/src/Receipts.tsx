@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ownerName } from './lib/account-visuals';
 type Receipt = {
   id: string;
   state: string;
@@ -286,9 +287,9 @@ export default function Receipts() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Uploaded by {receipt.owner === 'katya' ? 'Kate' : 'Rodion'}
+                  Uploaded by {ownerName(receipt.owner)}
                   {receipt.transaction_owner
-                    ? ` · Payment by ${receipt.transaction_owner === 'katya' ? 'Kate' : 'Rodion'}`
+                    ? ` · Payment by ${ownerName(receipt.transaction_owner)}`
                     : ''}
                 </p>
                 {receipt.transaction_id &&
@@ -500,8 +501,8 @@ export default function Receipts() {
                           <option value="">Choose a payment</option>
                           {matches.slice(0, 60).map((t) => (
                             <option key={t.id} value={t.id}>
-                              {t.owner === 'katya' ? 'Kate' : 'Rodion'} ·{' '}
-                              {t.bookedAt.slice(0, 10)} · {t.description} ·{' '}
+                              {ownerName(t.owner)} · {t.bookedAt.slice(0, 10)} ·{' '}
+                              {t.description} ·{' '}
                               {amount(t.amountMinor, t.currency)}
                               {t.status === 'pending' ? ' · Pending' : ''}
                             </option>

@@ -215,6 +215,23 @@ export function connectionLabel(connection: string): string {
     .join(' · ');
 }
 
+/**
+ * What to call a member on screen.
+ *
+ * Always through here, never a literal. `owners` is rewritten in place when the
+ * server says the workspace renames its members, so a hard-coded "Rodion"
+ * silently keeps the household's own name on a screen the demo exists to make
+ * publishable — and does it beside an avatar that *was* renamed, so a row reads
+ * "A · Rodion". Nine screens did exactly that.
+ *
+ * An unknown value is returned unchanged rather than guessed at: it is a
+ * member this build does not know about, and inventing a name for one would
+ * hide that.
+ */
+export function ownerName(owner: string): string {
+  return owners[owner as Owner]?.name ?? owner;
+}
+
 export function setOwnerNames(names: Partial<Record<Owner, string>>): void {
   for (const [owner, name] of Object.entries(names)) {
     const entry = owners[owner as Owner];

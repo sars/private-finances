@@ -6,6 +6,10 @@
 import type { Transaction } from './repository.js';
 import type { ConvertedSpendingRow } from './analytics.js';
 import type { Kind } from './domain.js';
+// The members' names live in one place because the demo workspace rewrites
+// them, and a chart legend naming the household is exactly what it exists to
+// prevent.
+import { ownerNames, type AccountOwner } from './account-names.js';
 
 export type Bucket = 'day' | 'week' | 'month';
 export type SeriesBy = 'none' | 'category' | 'owner' | 'kind';
@@ -153,7 +157,7 @@ export function aggregateSpending(
             parts.length ? parts.slice(0, depth).join(' / ') : 'Uncategorized',
           ]
         : series === 'owner'
-          ? [row.owner, row.owner === 'rodion' ? 'Rodion' : 'Katya']
+          ? [row.owner, ownerNames()[row.owner as AccountOwner] ?? row.owner]
           : series === 'kind'
             ? [row.kind, kindLabels[row.kind]]
             : ['total', 'Spending'];
