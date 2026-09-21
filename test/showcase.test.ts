@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryDatabase, migrate, postgresDatabase } from '../src/database.js';
-import { seedShowcase, showcaseTransactions } from '../src/showcase.js';
+import {
+  seedShowcase,
+  showcaseSeededAt,
+  showcaseTransactions,
+} from '../src/showcase.js';
 import { Repository } from '../src/repository.js';
 import { web } from '../src/web.js';
 import { seedTestOwners, signInAs } from './sign-in.js';
@@ -121,6 +125,69 @@ test('a seeded workspace has the money the screens need to show', async () => {
       "SELECT count(*) AS n FROM transactions WHERE source='showcase' AND category_id IS NOT NULL",
     );
     assert.ok(Number(categorised.rows[0]!.n) > 50, 'spending must be placed');
+  } finally {
+    await db.close();
+  }
+});
+
+test('the showcase can be seeded again in a later month', async () => {
+  // The failure this covers took four months to show up and looked like a
+  // corrupt database: the seeder walked forward from a fixed value on the
+  // first day of its window, the window moved with the month, and so the
+  // second seeding offered the shared dates different numbers. A quote is
+  // immutable — there is a trigger that refuses even a DELETE — so the insert
+  // threw and left a fresh ledger sitting beside the previous holdings.
+  //
+  // Two seedings a month apart is the smallest case that shows it; reseeding
+  // within one month never failed, which is why it went unnoticed.
+  const db = memoryDatabase();
+  await migrate(db);
+  try {
+    await seedShowcase(db, {
+      now: new Date('2026-05-20T12:00:00Z'),
+      months: 3,
+    });
+    const shared = await db.query<{ rate: string }>(
+      "SELECT rate FROM daily_fx_rates WHERE base='USD' AND as_of='2026-05-03'",
+    );
+    assert.equal(shared.rows.length, 1);
+
+    const later = new Date('2026-06-20T12:00:00Z');
+    await seedShowcase(db, { now: later, months: 3 });
+
+    // The shared date keeps the number it was first given, because that is
+    // what immutability means and the seeder now offers the same one.
+    const after = await db.query<{ rate: string }>(
+      "SELECT rate FROM daily_fx_rates WHERE base='USD' AND as_of='2026-05-03'",
+    );
+    assert.equal(after.rows.length, 1, 'no second version of a settled day');
+    assert.equal(after.rows[0]!.rate, shared.rows[0]!.rate);
+
+    // And the day it was seeded has a quote. A date without one is what
+    // "Conversion unavailable" says on the screens.
+    const today = await db.query<{ n: string }>(
+      "SELECT count(*) AS n FROM daily_fx_rates WHERE as_of='2026-06-20'",
+    );
+    assert.equal(Number(today.rows[0]!.n), 2, 'both currencies reach today');
+  } finally {
+    await db.close();
+  }
+});
+
+test('a workspace seeded only part way does not claim to be whole', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  try {
+    assert.equal(
+      await showcaseSeededAt(db),
+      null,
+      'nothing has seeded this one yet',
+    );
+    await seedShowcase(db, {
+      now: new Date('2026-09-20T12:00:00Z'),
+      months: 2,
+    });
+    assert.ok(await showcaseSeededAt(db), 'a finished seeding says so');
   } finally {
     await db.close();
   }

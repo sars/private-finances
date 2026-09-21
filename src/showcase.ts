@@ -664,6 +664,32 @@ export function showcaseTransactions(now = new Date(), months = 16): Planned[] {
 }
 
 /**
+ * Where a finished seeding records itself.
+ *
+ * `sync_state` already answers "when did this last succeed" for the synthetic
+ * importer, and the question here is the same one, so it gets a row rather
+ * than a table of its own.
+ */
+const SHOWCASE_SEED = 'showcase-seed';
+
+/**
+ * When this workspace was last seeded all the way through, or null.
+ *
+ * Null is the answer both for a workspace nothing has ever seeded and for one
+ * where a seeding died part way, and the two want the same treatment: seed it
+ * again before believing anything on the screens.
+ */
+export async function showcaseSeededAt(db: Database): Promise<Date | null> {
+  const row = (
+    await db.query<{ last_success_at: string }>(
+      'SELECT last_success_at FROM sync_state WHERE source=$1',
+      [SHOWCASE_SEED],
+    )
+  ).rows[0];
+  return row ? new Date(row.last_success_at) : null;
+}
+
+/**
  * Fill a demo workspace with the invented household.
  *
  * Refuses anything but a local PGlite database. The seeder empties the ledger
@@ -693,6 +719,17 @@ export async function seedShowcase(
   const accounts = new Accounts(db);
   const categories = new Categories(db);
   await ensureStarterCategories(db);
+
+  // From here the workspace is being taken apart, and until the last write it
+  // is a mixture of two seedings: a fresh ledger beside the previous holdings,
+  // say, which still starts and still looks plausible. That is how a failure
+  // half way through this function was found the slow way — by opening the
+  // demo and noticing the screens disagreed.
+  //
+  // So the mark comes off before the first delete and goes back on after the
+  // last write. Anything that wants to know whether this workspace is whole
+  // can ask `showcaseSeededAt`, and a seeding that died gives no answer.
+  await db.query('DELETE FROM sync_state WHERE source=$1', [SHOWCASE_SEED]);
 
   // A reseed replaces the household rather than adding a second one to it.
   // Receipts and their attachment history point at payments, so they are let
@@ -769,6 +806,12 @@ export async function seedShowcase(
 
   const assets = await seedShowcaseAssets(db, now, months);
   const receipts = await seedShowcaseReceipts(db, now);
+
+  // Last, so that it means what it says.
+  await db.query(
+    'INSERT INTO sync_state(source,last_success_at) VALUES($1,now())',
+    [SHOWCASE_SEED],
+  );
   return {
     transactions: planned.length,
     accounts: SHOWCASE_ACCOUNTS.length,

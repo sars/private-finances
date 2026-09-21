@@ -273,37 +273,96 @@ function monthStart(from: Date, back: number): Date {
   );
 }
 
+/** What marks a quote as this household's invention rather than a real one. */
+export const SHOWCASE_PROVENANCE = 'Showcase household';
+
+/**
+ * A value in [0,1) derived from a string, so a date can name its own number.
+ *
+ * Unlike `generator`, which walks forward and so depends on how many times it
+ * has been called, this answers from the key alone.
+ */
+function hashed(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i += 1) {
+    h = Math.imul(h ^ key.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  return h / 0x100000000;
+}
+
+/**
+ * What one currency is worth on one day.
+ *
+ * Derived from the calendar date and nothing else, which is the whole point.
+ * `daily_fx_rates` is immutable — there is a trigger that refuses an UPDATE or
+ * a DELETE, because a correction must never change the quote an earlier report
+ * was built on — so a seeder may only ever write a date the same number twice.
+ *
+ * The first version of this walked forward from a fixed base value on the
+ * first day of the window, and the window moves with the month it is seeded
+ * in. So a reseed a month later handed the same dates different numbers, the
+ * insert threw `fx_rate_version_conflict` on the first date the two windows
+ * shared, and the workspace was left half filled. The demo stopped being
+ * reseedable a month after it was first filled, and nothing said so until the
+ * screens were wrong.
+ *
+ * The shape is a level that wanders month to month, interpolated across the
+ * days between so the line is smooth, plus a small daily jitter so it is not a
+ * straight one. It stays within about the drift of the base value, so the
+ * hryvnia does not wander somewhere absurd as the years pass.
+ */
+function rateOn(
+  currency: string,
+  shape: { base: number; drift: number },
+  day: Date,
+): number {
+  const level = (year: number, month: number) =>
+    shape.base +
+    (hashed(`${currency}:${year}-${month}`) - 0.5) * 2 * shape.drift;
+  const year = day.getUTCFullYear();
+  const month = day.getUTCMonth();
+  const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const through = (day.getUTCDate() - 1) / days;
+  const from = level(year, month);
+  const to = level(year, month + 1);
+  const jitter =
+    (hashed(`${currency}:${day.toISOString().slice(0, 10)}`) - 0.5) *
+    shape.drift *
+    0.16;
+  return from + (to - from) * through + jitter;
+}
+
 /**
  * A daily rate for every day the article can show, from the one source the
- * owner approved as primary. Quotes are immutable, so re-seeding writes
- * nothing it has written before.
+ * owner approved as primary.
+ *
+ * Quotes are immutable and every rate here is a function of its own date, so
+ * re-seeding writes each day the same number it wrote before: the insert takes
+ * its `ON CONFLICT DO NOTHING` path and the run costs nothing but the reads.
  */
 export async function seedShowcaseRates(
   db: Database,
   now: Date,
   months: number,
 ): Promise<number> {
-  const random = generator(0x2adeb1);
   const rates = new FxRates(db);
   const start = monthStart(now, months - 1);
   let written = 0;
   for (const [currency, shape] of Object.entries(FX)) {
-    let value = shape.base;
     for (
       let day = new Date(start);
       day <= now;
       day = new Date(day.getTime() + 86400000)
     ) {
-      value += (random() - 0.45) * (shape.drift / 12);
       await rates.insert({
         source: PRIVATBANK_SOURCE,
         base: currency,
         target: 'UAH',
-        rate: value.toFixed(4),
+        rate: rateOn(currency, shape, day).toFixed(4),
         asOf: isoDate(day),
         retrievedAt: new Date(day.getTime() + 43200000).toISOString(),
         version: 1,
-        provenance: 'Showcase household',
+        provenance: SHOWCASE_PROVENANCE,
       });
       written += 1;
     }
