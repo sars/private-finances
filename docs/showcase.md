@@ -43,6 +43,29 @@ come from one map on each side — `OWNER_NAMES` in `src/account-names.ts` and
 `owners` in `frontend/src/lib/account-visuals.ts` — and the server states them
 in the bootstrap payload so both sides agree.
 
+### Never write a member's name in a screen
+
+Read it — `ownerName(owner)` on the front end, `ownerNames()` on the server.
+The rename works by rewriting those maps in place, so it reaches a screen only
+if the screen asked.
+
+Nine screens did not ask. Each carried its own `owner === 'rodion' ? 'Rodion'
+: 'Katya'`, and one wrote `'Kate'`, a spelling nothing else uses. The result
+was a Bank imports row reading avatar **A** beside the label **Rodion** — the
+avatar came from the map, the label did not — and the household's real names
+sat on Accounts, Reports, Import runs, Assets, Receipts, Categories and the
+owner series of the analytics charts for as long as those screens existed.
+
+`test/account-visuals.test.ts` now greps the tracked sources for a member's
+name in a string literal and allows exactly three files: the two maps above,
+and `src/telegram.ts`, which addresses a person rather than labelling a screen
+and which demo mode never loads. Adding a tenth screen that writes the name
+fails the check by file and line.
+
+The general point is worth keeping. Anything the demo has to change about how
+the application presents itself must have **one** place it is read from, or the
+next screen will quietly disagree with it and nothing will say so.
+
 ## Using it
 
 ```sh
@@ -142,12 +165,25 @@ a `monthly` count, and they sum to about eighty payments a month; doubling them
 doubles how busy every screen looks. `min` and `max` are minor units, so
 `24000` is 240 UAH.
 
-Two things that must stay true. A receipt's items are what the slip in the
+Three things that must stay true. A receipt's items are what the slip in the
 photograph adds up to, so changing them means running `pnpm demo:receipts`
 again — otherwise the picture and the payment disagree, which is the first
-thing a reader notices. And a holding group that is not in `SHOWCASE_HOLDINGS`
+thing a reader notices. A holding group that is not in `SHOWCASE_HOLDINGS`
 simply does not exist: that is why the totals still add up, where deleting rows
 from a copy of the real workspace would leave them short.
+
+And **an exchange rate must be a function of its own date and nothing else**.
+`daily_fx_rates` is immutable — there is a trigger that refuses an UPDATE or a
+DELETE, so that a correction never changes the number an earlier report was
+built on — which means a seeder may only ever offer a date the same quote
+twice. The first version of `seedShowcaseRates` walked forward from a fixed
+value on the first day of its window, and the window is sixteen months *ending
+today*, so it moves with the month it runs in. A reseed a month later offered
+the shared dates different numbers, the insert threw
+`fx_rate_version_conflict`, and the run stopped having already refilled the
+ledger but not the holdings — a workspace holding half of two households, which
+still starts and still looks plausible. The demo was four months stale before
+anybody noticed, and what said so was the screens, not the seeder.
 
 ## It cannot reach the household's own data
 
