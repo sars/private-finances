@@ -123,6 +123,27 @@ and verify authenticated readiness with its release SHA. Roll back the symlink
 if readiness fails; never automatically downgrade schema. Automatic CD remains
 disabled until rollout and rollback have both been demonstrated.
 
+## The showcase does not follow a release
+
+A release restarts `private-finances` and nothing else, which is deliberate —
+but it means the showcase keeps serving whatever release it booted with.
+`WorkingDirectory=/opt/private-finances/current` is resolved once at start, so
+flipping the symlink underneath a running process changes nothing for it. The
+demo once served a four-month-old release, and nothing said so; it was noticed
+because its screens looked wrong.
+
+It is brought forward by refilling it, from `/showcase/reseed` on the demo's
+own hostname. That stops the service, rebuilds the workspace and starts it
+again, which is also what re-resolves the symlink — one press, new code and
+fresh data. The two units behind it are
+`private-finances-showcase-reseed.path` and `.service`; installation is in
+[showcase](../docs/showcase.md).
+
+Adding a showcase restart to `switch-release.py` would keep its code current
+automatically, and is worth considering. It would not keep its *data* current:
+the demo's dates are generated relative to the day it was seeded, so it still
+needs a refill before anything is photographed.
+
 ## Monthly assets snapshot
 
 `private-finances-assets-snapshot.service` and `.timer` run
