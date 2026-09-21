@@ -67,6 +67,7 @@ export function DisplayAmount({
   requested,
   className,
   compact = false,
+  signed = false,
 }: {
   transaction: Pick<Transaction, 'id' | 'amountMinor' | 'currency' | 'refund'>;
   reporting?: ReviewData['reporting'];
@@ -74,6 +75,8 @@ export function DisplayAmount({
   className?: string;
   /** In a list row: the figure that counts, and one short word about it. */
   compact?: boolean;
+  /** Prefix a plus sign on money coming in, where nothing else says so. */
+  signed?: boolean;
 }) {
   const row =
     reporting?.currency === requested
@@ -84,6 +87,9 @@ export function DisplayAmount({
   const reduced =
     transaction.refund?.role === 'reduced' ? transaction.refund : undefined;
   const lead = className ?? 'text-2xl font-semibold tracking-tight';
+  // A refunded purchase is money out however it nets, so the sign belongs only
+  // on the two plain branches below.
+  const plus = (minor: string) => (signed && BigInt(minor) > 0n ? '+' : '');
   if (reduced && compact)
     return (
       <span className="inline-flex flex-col items-end gap-0.5">
@@ -115,6 +121,7 @@ export function DisplayAmount({
   if (transaction.currency === requested)
     return (
       <span className={lead}>
+        {plus(transaction.amountMinor)}
         {money(transaction.amountMinor, transaction.currency)}
       </span>
     );
@@ -122,7 +129,7 @@ export function DisplayAmount({
     <span className="inline-flex flex-col gap-0.5">
       <span className={lead}>
         {row?.convertedAmountMinor != null
-          ? `${row.method === 'market_estimate' ? '≈ ' : ''}${money(row.convertedAmountMinor, requested)}`
+          ? `${row.method === 'market_estimate' ? '≈ ' : ''}${plus(row.convertedAmountMinor)}${money(row.convertedAmountMinor, requested)}`
           : row
             ? 'Conversion unavailable'
             : `Loading ${requested} conversion…`}
