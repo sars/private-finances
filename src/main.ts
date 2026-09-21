@@ -5,6 +5,7 @@ import { loadFeedCredentials } from './holding-fill.js';
 import { memoryDatabase, postgresDatabase, migrate } from './database.js';
 import { Repository } from './repository.js';
 import { web } from './web.js';
+import { controlDirectory } from './showcase-control.js';
 import { synthetic } from './synthetic.js';
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -158,6 +159,11 @@ const frontendAvailable = await stat(
   },
 );
 const server = web(repo, {
+  // Beside the demo's data directory, not inside it: that one belongs to
+  // PGlite and is also the thing a reseed rebuilds. Only in demo mode, so the
+  // household's own application never carries these routes at all.
+  showcaseControlDirectory:
+    mode === 'demo' ? controlDirectory(demoDataDirectory) : undefined,
   frontendDirectory: frontendAvailable ? frontendDirectory : undefined,
   telegram,
   classifierFor:

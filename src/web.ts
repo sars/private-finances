@@ -54,7 +54,12 @@ import {
 } from './holding-fill.js';
 import type { Fetcher } from './holding-feeds.js';
 import { accountDisplayName, ownerNames } from './account-names.js';
-import { seedShowcase } from './showcase.js';
+import { clampShowcase } from './showcase.js';
+import {
+  showcaseReseedPage,
+  showcaseReseedScript,
+} from './showcase-reseed-page.js';
+import { readReseedStatus, writeReseedRequest } from './showcase-control.js';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
@@ -140,6 +145,12 @@ export type WebConfig = {
   };
   port: number;
   mode: 'demo' | 'postgres';
+  /**
+   * Where the reseed page leaves its request and reads its status. Absent on a
+   * demo nobody has wired a reseed unit to, where the page says so rather than
+   * writing a file that nothing will ever read.
+   */
+  showcaseControlDirectory?: string;
   // Credentials live in the `users` table, seeded from the environment by
   // `seedOwners` before the server listens — see src/auth.ts.
   release: string;
@@ -583,9 +594,9 @@ export function web(
       // Refilling the showcase, on demand and by hand.
       //
       // A page of its own rather than a button in the application, because the
-      // demo exists to be photographed and a Reseed button would appear in the
-      // article. Demo-only: in every other mode this route does not exist, and
-      // the seeder behind it refuses anything but a local PGlite database.
+      // demo exists to be photographed and a Refill button would appear in the
+      // article. Demo-only: in every other mode these routes do not exist, and
+      // the seeder behind them refuses anything but a local PGlite database.
       if (req.method === 'GET' && route === '/showcase/reseed') {
         if (config.mode !== 'demo') {
           json(404, { error: 'not_found', requestId });
@@ -593,19 +604,37 @@ export function web(
         }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(
-          `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-            `<meta name="viewport" content="width=device-width,initial-scale=1">` +
-            `<title>Refill the showcase</title><link rel="stylesheet" href="/style.css"></head>` +
-            `<body><h1>Refill the showcase</h1>` +
-            `<p>Replaces the invented household with a freshly generated one. ` +
-            `The people and their spending come out the same every time; what ` +
-            `changes is that the dates end today, so "this month" is current ` +
-            `again. Takes a minute.</p>` +
-            `<form method="post" action="/showcase/reseed">` +
-            `<input type="hidden" name="csrf" value="${escape(csrf)}">` +
-            `<button type="submit">Refill</button></form>` +
-            `<p><a href="/">Back to the application</a></p></body></html>`,
+          showcaseReseedPage(
+            csrf,
+            config.showcaseControlDirectory
+              ? await readReseedStatus(config.showcaseControlDirectory)
+              : null,
+          ),
         );
+        return;
+      }
+      if (req.method === 'GET' && route === '/showcase/reseed.js') {
+        if (config.mode !== 'demo') {
+          json(404, { error: 'not_found', requestId });
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        res.end(showcaseReseedScript());
+        return;
+      }
+      // Polled by that page for the whole of a refill, including the minutes
+      // when this server is not running at all — the page treats a failed
+      // request as "still down", which is what it means.
+      if (req.method === 'GET' && route === '/showcase/reseed/status') {
+        if (config.mode !== 'demo' || !config.showcaseControlDirectory) {
+          json(404, { error: 'not_found', requestId });
+          return;
+        }
+        const status = await readReseedStatus(config.showcaseControlDirectory);
+        json(200, status ?? { state: 'none' });
         return;
       }
       if (shellRoute) {
@@ -1678,16 +1707,30 @@ export function web(
             json(404, { error: 'not_found', requestId });
             return;
           }
-          const seeded = await seedShowcase(repo.db);
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(
-            `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-              `<title>Showcase refilled</title>` +
-              `<link rel="stylesheet" href="/style.css"></head>` +
-              `<body><h1>Showcase refilled</h1><p>${seeded.transactions} payments, ` +
-              `${seeded.holdings} holdings and ${seeded.rates} daily rates.</p>` +
-              `<p><a href="/">Back to the application</a></p></body></html>`,
-          );
+          // Asking, not doing. Seeding here would write into the database this
+          // process is holding open, would run inside a cgroup sized for
+          // serving rather than for building a workspace, and would leave the
+          // demo on the release it booted with — which is the fault that made
+          // any of this worth writing. See src/showcase-control.ts.
+          if (!config.showcaseControlDirectory) {
+            json(503, { error: 'reseed_not_configured', requestId });
+            return;
+          }
+          const asked = {
+            density: clampShowcase('density', Number(form.density)),
+            months: Math.round(clampShowcase('months', Number(form.months))),
+            refunds: Math.round(clampShowcase('refunds', Number(form.refunds))),
+            receipts: Math.round(
+              clampShowcase('receipts', Number(form.receipts)),
+            ),
+          };
+          await writeReseedRequest(config.showcaseControlDirectory, asked);
+          log({
+            event: 'showcase_reseed_requested',
+            requestId,
+            ...asked,
+          });
+          json(202, { state: 'queued', shape: asked });
           return;
         }
         if (route === '/import') {

@@ -1,0 +1,47 @@
+# Refills the showcase and puts it back on the current release.
+#
+# Started by private-finances-showcase-reseed.path when the reseed page leaves
+# a request. Read docs/showcase.md before installing it.
+#
+# This one runs as root, unlike every other unit here, because it stops and
+# starts private-finances-showcase.service. It drops to `private-finances` for
+# the seeding itself, so the database files end up owned by the account that
+# has to read them. That is the whole of the privilege: it touches one service
+# and one state directory, and the hardening below says so rather than relying
+# on it being true.
+[Unit]
+Description=Private Finances showcase refill (rebuild the invented household)
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/private-finances/current
+ExecStart=/usr/bin/node scripts/reseed-showcase.mjs
+
+# Seeding a default workspace takes a few minutes; the reseed page allows three
+# times the payments across two years, which is the case this has to survive.
+# Well short of infinity, so a wedged run does not hold the demo down forever.
+TimeoutStartSec=45min
+
+# The seeding runs outside this unit's own accounting, in a child process, but
+# the ceiling still wants to be generous: PGlite compiles PostgreSQL to
+# WebAssembly and does its initdb in-process, which is the expensive step, and
+# a default workspace was measured peaking at 859M.
+MemoryMax=3G
+
+# It must reach exactly one state directory and nothing else it can write to.
+# `ProtectSystem=strict` makes the rest of the filesystem read-only, so the
+# release it runs from cannot be modified by a seeder that went wrong.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/private-finances-showcase
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+UMask=0022
+LimitNOFILE=2048
+
+[Install]
+WantedBy=multi-user.target

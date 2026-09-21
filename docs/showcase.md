@@ -63,7 +63,8 @@ the seeder never depends on a browser being present.
 
 The workspace can also be refilled from the running application, at
 `/showcase/reseed`. It is a page of its own rather than a button in the
-interface, because a Refill button would appear in the article.
+interface, because a Refill button would appear in the article. On the server
+that page is the whole of the routine: see **Refilling it from the page** below.
 
 The household is generated from a fixed seed, so reseeding produces the same
 people with the same spending: a figure quoted in the article's text still
@@ -289,3 +290,62 @@ file is `deploy/private-finances-showcase.service`.
 6. **Check it.** Open the hostname on your phone, install it, and confirm the
    header says **Demo mode** and the people are Alex and Sam. If it says
    anything else, stop and do not photograph it.
+
+## Refilling it from the page
+
+`/showcase/reseed` carries the four knobs and a Refill button, and pressing it
+does the whole job: the demo stops, the workspace is rebuilt from nothing, and
+the demo starts again — **on whatever release the server currently has**. That
+last part is the point. Nothing in the release switch restarts the showcase,
+and `WorkingDirectory` is resolved once at start, so a demo left alone keeps
+serving the release it booted with. It did that for four months once, and the
+only thing that said so was the screens looking wrong.
+
+The page cannot do any of that itself. PGlite allows one process per data
+directory and the service is holding it, so a workspace can only be rebuilt
+while the service is stopped — and stopping a service needs root, which the
+demo has none of and should never be given: it is a service with no login,
+reachable by anyone on the tailnet.
+
+So the page writes a request file, `private-finances-showcase-reseed.path`
+notices it, and `private-finances-showcase-reseed.service` does the work as
+root, dropping to `private-finances` for the seeding itself. The page follows
+along by polling a status file — including across the minutes when the demo is
+stopped and cannot answer at all, which it reports as "Working" rather than as
+an error, because that is what it is.
+
+A refill that fails says so on the page, names the reason, and starts the demo
+again anyway: a workspace that is empty or half built can be recognised and
+refilled, where a demo that is simply not there looks like a broken server.
+
+### Installing the two units
+
+Yours to run; they need root. Do this once, after the showcase itself is up.
+
+1. **Copy them over and enable the watcher.** Only the `.path` unit is enabled
+   — the `.service` is started by it, not by boot.
+
+   ```sh
+   scp deploy/private-finances-showcase-reseed.{path,service} radar:/tmp/
+   ssh radar "sudo mv /tmp/private-finances-showcase-reseed.path /tmp/private-finances-showcase-reseed.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now private-finances-showcase-reseed.path"
+   ```
+
+2. **Check the watcher is waiting.**
+
+   ```sh
+   ssh radar "systemctl status private-finances-showcase-reseed.path --no-pager | head -5"
+   ```
+
+   It should say `active (waiting)`. `active (running)` means a refill is in
+   progress; `inactive` means it was not enabled.
+
+3. **Try it.** Open `/showcase/reseed` on the tailnet hostname, leave the
+   defaults, and press Refill. The page should move through Queued → Building
+   the household → Starting the demo → Done, and end by naming the counts and
+   the release. It takes a few minutes at the default size.
+
+   If it sits on "Working" far longer than that, read the unit:
+
+   ```sh
+   ssh radar "sudo journalctl -u private-finances-showcase-reseed -n 40 --no-pager"
+   ```
