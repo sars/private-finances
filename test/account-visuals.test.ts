@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
+import { sep } from 'node:path';
 const visuals = await import(
   new URL('../../frontend/src/lib/account-visuals.ts', import.meta.url).href
 );
@@ -122,12 +123,20 @@ test('no screen writes a member name into itself', () => {
   // This is a grep rather than a render test on purpose. The fault was never
   // that one screen was wrong; it was that nothing stopped the next screen
   // from writing the name again, and only a rule about the source can.
-  const sources = execFileSync('git', ['ls-files', 'frontend/src', 'src'], {
-    encoding: 'utf8',
-  })
-    .split('\n')
-    .filter((path) => /\.(ts|tsx)$/.test(path))
-    .filter((path) => !path.endsWith('.test.ts'));
+  // Walked from the filesystem rather than asked of git. A release is built on
+  // the server from a `git archive` extract, which has no `.git` at all, so a
+  // test that shells out to git passes everywhere except the one place a
+  // release is gated on it — which is where this first failed.
+  const sources = ['frontend/src', 'src'].flatMap((directory) =>
+    readdirSync(new URL(`../../${directory}`, import.meta.url), {
+      recursive: true,
+      encoding: 'utf8',
+    })
+      .filter((name) => /\.(ts|tsx)$/.test(name))
+      .filter((name) => !name.endsWith('.test.ts'))
+      .map((name) => `${directory}/${name.split(sep).join('/')}`),
+  );
+  assert.ok(sources.length > 50, 'the sources were found at all');
 
   // The three places a member's name is allowed to be written down: the map
   // the frontend rewrites, the one the server rewrites, and Telegram's own —
