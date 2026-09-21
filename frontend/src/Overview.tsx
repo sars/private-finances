@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { accountIdentity } from './lib/account-identity';
 import { money, toNumber } from './lib/format';
+import { DisplayAmount } from '@/components/transaction/pieces';
+import type { Transaction as Payment } from '@/lib/transactions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -55,7 +57,7 @@ type Transaction = {
     accountPurpose: 'personal' | 'business' | 'investment' | 'unreviewed';
   };
   storedClassification?: { kind: string; category: string | null };
-  refund?: { fullyReduced: boolean };
+  refund?: Payment['refund'];
 };
 type Reporting = {
   currency: string;
@@ -71,6 +73,7 @@ type Reporting = {
     convertedAmountMinor: string | null;
     /** What the payment cost after any refund against it. */
     netAmountMinor: string | null;
+    method: string | null;
     counted: string;
   }[];
 };
@@ -394,6 +397,11 @@ export default function Overview() {
       ) : (
         <>
           <ProblemsBlock problems={problems} />
+          {/* The band names the money that is waiting, and says where it is
+              not: the total and the chart below count decided spending only,
+              while Spending analytics counts this alongside it and labels it
+              "Not yet placed". Two screens, two questions, and each one now
+              says which it is answering. */}
           {unresolved > 0 && reporting && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
               <div className="flex items-start gap-3">
@@ -405,7 +413,8 @@ export default function Overview() {
                       currency={activeCurrency}
                     />{' '}
                     across {unresolved}{' '}
-                    {unresolved === 1 ? 'payment' : 'payments'} needs a decision
+                    {unresolved === 1 ? 'payment' : 'payments'} needs a
+                    decision, and is not in the figures below
                   </p>
                   {othersUnresolved > 0 && (
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
@@ -544,7 +553,14 @@ export default function Overview() {
                   has settled it, the rule that excluded it and the link into
                   its history were all taken out: each was a second line of
                   small print on a row whose job is to let the reader recognise
-                  a payment. */}
+                  a payment.
+
+                  The amount follows the display currency, as it does on Review
+                  and All transactions. This list used to print whatever the
+                  bank recorded, so a household that pays mostly from a hryvnia
+                  card read a column of hryvnia under a euro heading — and a
+                  euro purchase on that card, which the bank charges in
+                  hryvnia, never showed the euro figure at all. */}
               <div className="px-4 sm:px-6">
                 {recent.map((row) => (
                   <TransactionRow
@@ -577,10 +593,12 @@ export default function Overview() {
                       </>
                     }
                     amount={
-                      <Money
-                        minor={row.amountMinor}
-                        currency={row.currency}
+                      <DisplayAmount
+                        transaction={row}
+                        reporting={reporting ?? undefined}
+                        requested={activeCurrency}
                         signed
+                        compact
                         className="text-sm font-semibold"
                       />
                     }
