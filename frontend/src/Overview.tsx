@@ -397,6 +397,11 @@ export default function Overview() {
       ) : (
         <>
           <ProblemsBlock problems={problems} />
+          {/* The band names the money that is waiting, and says where it is
+              not: the total and the chart below count decided spending only,
+              while Spending analytics counts this alongside it and labels it
+              "Not yet placed". Two screens, two questions, and each one now
+              says which it is answering. */}
           {unresolved > 0 && reporting && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
               <div className="flex items-start gap-3">
@@ -408,7 +413,8 @@ export default function Overview() {
                       currency={activeCurrency}
                     />{' '}
                     across {unresolved}{' '}
-                    {unresolved === 1 ? 'payment' : 'payments'} needs a decision
+                    {unresolved === 1 ? 'payment' : 'payments'} needs a
+                    decision, and is not in the figures below
                   </p>
                   {othersUnresolved > 0 && (
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
