@@ -74,6 +74,50 @@ Home screen is always the current one. **Reseed before taking screenshots** —
 that is the only thing that keeps the workspace from slowly emptying out as
 time passes. There is no timer, because it is only wanted before a photograph.
 
+## How much of it there is
+
+Four knobs change the size and shape of the workspace without touching a file.
+The reseed page carries them, and the seeder script reads the same four from
+the environment:
+
+```sh
+SHOWCASE_DENSITY=2 SHOWCASE_MONTHS=24 pnpm demo:seed
+```
+
+| | What it does | Range | Default |
+| --- | --- | --- | --- |
+| `SHOWCASE_DENSITY` | Everyday payments, as a multiple of about eighty a month. Rent, salary, bills and the business invoice are one a month whatever this says — multiplying those would read as nonsense. | 0.25–3 | 1 |
+| `SHOWCASE_MONTHS` | How far back the ledger reaches. | 1–24 | 16 |
+| `SHOWCASE_REFUNDS` | Refund pairs across the whole window, cycling through the four shapes below. | 0–24 | one per four months |
+| `SHOWCASE_RECEIPTS` | How many of the committed slips to attach. | 0–5 | 5 |
+
+Every one is clamped inside the seeder rather than trusted, so a mistyped
+figure asks for the ceiling instead of for a workspace the server cannot build.
+The ceilings are about cost: seeding a default workspace takes a few minutes
+and peaked at 859M, and both scale roughly with the number of payments written.
+
+### The refunds
+
+A refund is one of the more interesting things the application does, and for a
+long time the demo could not show it: the seeder wrote a purchase and an equal
+credit three days later and left them unlinked, so `refund_links` was empty and
+none of the display the feature exists for ever appeared.
+
+They are linked now, and deliberately not all alike. Four shapes, in rotation:
+
+| | |
+| --- | --- |
+| **full** | the whole charge comes back, on the card that paid |
+| **partial** | some of it comes back and the purchase stays, reduced |
+| **settling** | the reversal is still a hold, so the pair reads as still settling |
+| **currency** | charged in euro, returned in hryvnia, confirmed by hand |
+
+The last is the one worth having. Automatic matching never crosses an account
+or a currency (ADR 0007), so it is recorded as a person's decision; and its
+arithmetic runs through the daily quote the workspace holds for the day the
+money came back, which is why the refunds are linked after the rates are
+written and not before.
+
 ## Changing what it holds
 
 Every figure comes from three files, and the fast way to judge a change is to

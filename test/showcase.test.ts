@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryDatabase, migrate, postgresDatabase } from '../src/database.js';
 import {
+  SHOWCASE_LIMITS,
   seedShowcase,
   showcaseSeededAt,
   showcaseTransactions,
@@ -188,6 +189,126 @@ test('a workspace seeded only part way does not claim to be whole', async () => 
       months: 2,
     });
     assert.ok(await showcaseSeededAt(db), 'a finished seeding says so');
+  } finally {
+    await db.close();
+  }
+});
+
+test('the demo shows what a refund does, not just that money came back', async () => {
+  // Before this, the seeder wrote a purchase and an equal credit three days
+  // later and left them unlinked: `refund_links` was empty, so the reduced
+  // headline, the "Original … · … returned" line and the "still settling"
+  // note had never appeared in a screenshot of this application.
+  const db = memoryDatabase();
+  await migrate(db);
+  try {
+    const seeded = await seedShowcase(db, {
+      now: new Date('2026-09-21T12:00:00Z'),
+      months: 16,
+    });
+    assert.equal(seeded.refunds, 4, 'one refund every four months');
+
+    const links = await db.query<{
+      origin: string;
+      dc: string;
+      damt: string;
+      cc: string;
+      camt: string;
+      status: string;
+    }>(
+      `SELECT l.origin, d.currency AS dc, d.amount_minor AS damt,
+              c.currency AS cc, c.amount_minor AS camt, c.status
+       FROM refund_links l
+       JOIN transactions d ON d.id=l.debit_id
+       JOIN transactions c ON c.id=l.credit_id
+       WHERE l.state='active'`,
+    );
+    assert.equal(links.rows.length, 4);
+
+    // Each shape drives a different part of the interface, and a demo missing
+    // one shows the feature as simpler than it is.
+    const rows = links.rows;
+    assert.ok(
+      rows.some((r) => r.dc === r.cc && r.damt === `-${r.camt}`),
+      'the whole charge came back',
+    );
+    assert.ok(
+      rows.some(
+        (r) =>
+          r.dc === r.cc &&
+          BigInt(r.camt) < -BigInt(r.damt) &&
+          BigInt(r.camt) > 0n,
+      ),
+      'some of it came back and the purchase survives, reduced',
+    );
+    assert.ok(
+      rows.some((r) => r.status === 'pending'),
+      'one reversal is still a hold, so the pair reads as settling',
+    );
+    const crossed = rows.find((r) => r.dc !== r.cc);
+    assert.ok(crossed, 'charged in one currency and returned in another');
+    assert.equal(
+      crossed.origin,
+      'manual',
+      'the matcher never crosses a currency; a person confirmed this one',
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test('the reseed knobs change the workspace and cannot ask for the absurd', async () => {
+  const now = new Date('2026-09-21T12:00:00Z');
+  const plain = showcaseTransactions(now, 12).length;
+  const dense = showcaseTransactions(now, 12, { density: 2 }).length;
+  assert.ok(dense > plain * 1.5, 'twice the density is visibly busier');
+
+  // The ceiling is what keeps a mistyped figure from asking the server for a
+  // workspace it cannot seed; the floor keeps it from asking for nothing.
+  assert.equal(
+    showcaseTransactions(now, 12, { density: 99 }).length,
+    showcaseTransactions(now, 12, { density: SHOWCASE_LIMITS.density.max })
+      .length,
+    'density is capped',
+  );
+  assert.equal(
+    showcaseTransactions(now, 12, { refunds: 500 }).filter((p) => p.refundOf)
+      .length,
+    showcaseTransactions(now, 12, {
+      refunds: SHOWCASE_LIMITS.refunds.max,
+    }).filter((p) => p.refundOf).length,
+    'refunds are capped',
+  );
+
+  // Months are clamped where they are read, so a request for a decade does not
+  // quietly become a ten-year seeding.
+  const db = memoryDatabase();
+  await migrate(db);
+  try {
+    const seeded = await seedShowcase(db, { now, months: 120, density: 0.25 });
+    const oldest = await db.query<{ oldest: string }>(
+      "SELECT min(booked_at)::text AS oldest FROM transactions WHERE source='showcase'",
+    );
+    const months =
+      (now.getTime() - new Date(oldest.rows[0]!.oldest).getTime()) /
+      (30 * 86400000);
+    assert.ok(months < 26, `the window is capped, got about ${months} months`);
+    assert.ok(seeded.transactions > 0);
+  } finally {
+    await db.close();
+  }
+});
+
+test('the receipt knob cannot ask for a picture that was never drawn', async () => {
+  const db = memoryDatabase();
+  await migrate(db);
+  try {
+    const some = await seedShowcase(db, {
+      now: new Date('2026-09-21T12:00:00Z'),
+      months: 2,
+      receipts: 2,
+    });
+    assert.equal(some.receipts, 2, 'two of the five were asked for');
   } finally {
     await db.close();
   }

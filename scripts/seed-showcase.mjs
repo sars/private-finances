@@ -22,6 +22,25 @@ if (process.env.APP_MODE && process.env.APP_MODE !== 'demo')
     `APP_MODE is ${process.env.APP_MODE}: the showcase is demo-only`,
   );
 
+// The knobs, read from the environment so a systemd unit can pass on what the
+// reseed page was asked for without a shell quoting them into an argument
+// list. Anything missing or unreadable falls back to the default, and every
+// one of them is clamped to its documented range inside the seeder.
+const number = (name) => {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value))
+    throw new Error(`${name} is not a number: ${raw}`);
+  return value;
+};
+const shape = {
+  months: number('SHOWCASE_MONTHS'),
+  density: number('SHOWCASE_DENSITY'),
+  refunds: number('SHOWCASE_REFUNDS'),
+  receipts: number('SHOWCASE_RECEIPTS'),
+};
+
 const directory = process.env.DEMO_DATA_DIR ?? 'data/demo';
 const db = memoryDatabase(directory);
 await migrate(db);
@@ -33,7 +52,7 @@ await migrate(db);
 // photographing a workspace whose screens disagree with each other.
 let seeded;
 try {
-  seeded = await seedShowcase(db);
+  seeded = await seedShowcase(db, shape);
 } catch (error) {
   console.error(
     `showcase seeding failed: ${error instanceof Error ? error.message : error}`,
@@ -50,7 +69,7 @@ console.log(
   `showcase seeded into ${directory}: ${seeded.transactions} payments ` +
     `across ${seeded.accounts} accounts, ${seeded.holdings} holdings ` +
     `with ${seeded.snapshots} snapshots, ${seeded.rates} daily rates, ` +
-    `${seeded.receipts} receipts`,
+    `${seeded.refunds} linked refunds, ${seeded.receipts} receipts`,
 );
 
 if (!seeded.receipts)

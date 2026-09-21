@@ -185,10 +185,23 @@ export const receiptSourceId = (receipt: ShowcaseReceipt): string =>
 export async function seedShowcaseReceipts(
   db: Database,
   now: Date,
+  options: { limit?: number } = {},
 ): Promise<{ attached: number; missing: number }> {
+  // There are only as many receipts as there are pictures committed under
+  // `showcase/receipts/`, and the server has no Playwright to draw more — that
+  // is deliberate, so the seeder never depends on a browser being installed.
+  // So the limit chooses how many of them to attach, and cannot ask for one
+  // that does not exist.
+  const limit = Math.max(
+    0,
+    Math.min(
+      SHOWCASE_RECEIPTS.length,
+      options.limit ?? SHOWCASE_RECEIPTS.length,
+    ),
+  );
   let attached = 0;
   let missing = 0;
-  for (const [index, receipt] of SHOWCASE_RECEIPTS.entries()) {
+  for (const [index, receipt] of SHOWCASE_RECEIPTS.slice(0, limit).entries()) {
     let image: Buffer;
     try {
       image = await readFile(
