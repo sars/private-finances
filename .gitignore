@@ -29,3 +29,7 @@ __pycache__/
 !.claude/skills/
 # Screenshots from scripts/shots.ts: regenerable, and they show financial data.
 .shots/
+
+# The owner's own scratch folder for things written during a session.
+# Not part of the project, and a binary in it fails the repository check.
+Claude outputs/

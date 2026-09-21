@@ -9,7 +9,7 @@ import {
   feedNames,
   holdingKinds,
   holdingsUrl,
-  ownerNames,
+  ownerName,
   postForm,
   refreshHoldings,
   sourceNames,
@@ -347,8 +347,8 @@ function HoldingForm({
                   onChange={set('owner')}
                   options={[
                     { value: '', label: 'Household' },
-                    { value: 'rodion', label: ownerNames.rodion },
-                    { value: 'katya', label: ownerNames.katya },
+                    { value: 'rodion', label: ownerName('rodion') },
+                    { value: 'katya', label: ownerName('katya') },
                   ]}
                 />
               </div>

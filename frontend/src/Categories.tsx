@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Choice, PageHeader, RefreshButton } from '@/components/finance';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ownerName as memberName } from './lib/account-visuals';
 
 type Node = {
   id: string;
@@ -293,7 +294,7 @@ export default function Categories() {
     [tagList],
   );
   const activeRules = rules.filter((r) => r.active).length;
-  const ownerName = identity?.actor === 'rodion' ? 'Rodion' : 'Katya';
+  const ownerName = memberName(identity?.actor ?? '');
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-8">

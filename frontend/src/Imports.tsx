@@ -27,7 +27,7 @@ import {
 } from '@/components/finance';
 import { apiGet } from '@/lib/query';
 import type { Owner } from '@/lib/account-visuals';
-import { connectionLabel } from '@/lib/account-visuals';
+import { connectionLabel, ownerName } from '@/lib/account-visuals';
 import type {
   ImportConnection,
   ImportRun,
@@ -102,9 +102,6 @@ function upcoming(value: string | null, now: number): string | null {
 }
 function asOwner(owner: string): Owner | null {
   return owner === 'rodion' || owner === 'katya' ? owner : null;
-}
-function ownerName(owner: string) {
-  return owner === 'rodion' ? 'Rodion' : owner === 'katya' ? 'Katya' : owner;
 }
 
 type Health = 'ok' | 'waiting' | 'attention';
