@@ -18,12 +18,33 @@ if (process.env.DATABASE_URL)
     'DATABASE_URL is set: run the showcase seeder in a shell that has no production database',
   );
 if (process.env.APP_MODE && process.env.APP_MODE !== 'demo')
-  throw new Error(`APP_MODE is ${process.env.APP_MODE}: the showcase is demo-only`);
+  throw new Error(
+    `APP_MODE is ${process.env.APP_MODE}: the showcase is demo-only`,
+  );
 
 const directory = process.env.DEMO_DATA_DIR ?? 'data/demo';
 const db = memoryDatabase(directory);
 await migrate(db);
-const seeded = await seedShowcase(db);
+
+// A seeding that dies part way leaves a workspace mixing two households — a
+// fresh ledger beside the previous holdings, say — and it still starts and
+// still looks plausible. A stack trace on its own does not say that, so say
+// it here: whoever is reading this is one `systemctl start` away from
+// photographing a workspace whose screens disagree with each other.
+let seeded;
+try {
+  seeded = await seedShowcase(db);
+} catch (error) {
+  console.error(
+    `showcase seeding failed: ${error instanceof Error ? error.message : error}`,
+  );
+  console.error(
+    `the workspace in ${directory} is now part seeded and must not be used ` +
+      'or photographed; run this again once the cause is fixed',
+  );
+  await db.close();
+  throw error;
+}
 await db.close();
 console.log(
   `showcase seeded into ${directory}: ${seeded.transactions} payments ` +
