@@ -1,4 +1,7 @@
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { memoryDatabase, migrate, postgresDatabase } from '../src/database.js';
 import {
@@ -9,6 +12,7 @@ import {
 } from '../src/showcase.js';
 import { Repository } from '../src/repository.js';
 import { web } from '../src/web.js';
+import { readReseedRequest } from '../src/showcase-control.js';
 import { seedTestOwners, signInAs } from './sign-in.js';
 import {
   accountDisplayName,
@@ -370,6 +374,116 @@ test('the demo names the members on App health approvals too', async () => {
     setOwnerNames(before);
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await db.close();
+  }
+});
+
+test('the reseed page asks for a refill rather than doing one', async () => {
+  // The page must not seed in this process. PGlite holds one process per data
+  // directory, the service's cgroup is sized for serving rather than for
+  // building a workspace, and seeding in place would leave the demo on the
+  // release it booted with — which is the fault that made any of this worth
+  // writing. So the whole of its job is to leave a request for the unit.
+  const control = await mkdtemp(join(tmpdir(), 'showcase-control-'));
+  const db = memoryDatabase();
+  await migrate(db);
+  const server = web(new Repository(db), {
+    port: 3398,
+    mode: 'demo',
+    release: 'showcase-test',
+    showcaseControlDirectory: control,
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(3398, '127.0.0.1', resolve),
+  );
+  const base = 'http://127.0.0.1:3398';
+  try {
+    const page = await fetch(base + '/showcase/reseed');
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    for (const knob of ['density', 'months', 'refunds', 'receipts'])
+      assert.match(html, new RegExp(`name="${knob}"`), `${knob} is offered`);
+
+    const csrf = /name="csrf" value="([^"]+)"/.exec(html)?.[1];
+    assert.ok(csrf, 'the form carries a token');
+
+    const asked = await fetch(base + '/showcase/reseed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        csrf,
+        density: '2',
+        months: '8',
+        refunds: '3',
+        receipts: '1',
+      }).toString(),
+    });
+    assert.equal(asked.status, 202, 'accepted, not performed');
+
+    // The ledger is untouched: this process seeded nothing.
+    const written = await db.query<{ n: string }>(
+      "SELECT count(*) AS n FROM transactions WHERE source='showcase'",
+    );
+    assert.equal(Number(written.rows[0]!.n), 0);
+
+    const request = await readReseedRequest(control);
+    assert.deepEqual(request?.shape, {
+      density: 2,
+      months: 8,
+      refunds: 3,
+      receipts: 1,
+    });
+
+    // And the page can report on it without the unit having run yet.
+    const status = await (await fetch(base + '/showcase/reseed/status')).json();
+    assert.equal((status as { state: string }).state, 'queued');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await db.close();
+    await rm(control, { recursive: true, force: true });
+  }
+});
+
+test('a knob outside its range asks for the nearest thing that is allowed', async () => {
+  const control = await mkdtemp(join(tmpdir(), 'showcase-control-'));
+  const db = memoryDatabase();
+  await migrate(db);
+  const server = web(new Repository(db), {
+    port: 3397,
+    mode: 'demo',
+    release: 'showcase-test',
+    showcaseControlDirectory: control,
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(3397, '127.0.0.1', resolve),
+  );
+  try {
+    const page = await fetch('http://127.0.0.1:3397/showcase/reseed');
+    const csrf = /name="csrf" value="([^"]+)"/.exec(await page.text())?.[1]!;
+    // A number input is a suggestion, not a guarantee: anything can be posted
+    // here, and a workspace three years deep at thirty times the payments
+    // would take the server down rather than fill a screenshot.
+    await fetch('http://127.0.0.1:3397/showcase/reseed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        csrf,
+        density: '40',
+        months: '600',
+        refunds: 'not a number',
+        receipts: '-3',
+      }).toString(),
+    });
+    const request = await readReseedRequest(control);
+    assert.deepEqual(request?.shape, {
+      density: SHOWCASE_LIMITS.density.max,
+      months: SHOWCASE_LIMITS.months.max,
+      refunds: SHOWCASE_LIMITS.refunds.default,
+      receipts: SHOWCASE_LIMITS.receipts.min,
+    });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await db.close();
+    await rm(control, { recursive: true, force: true });
   }
 });
 

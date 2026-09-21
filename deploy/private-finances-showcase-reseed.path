@@ -1,0 +1,24 @@
+# Watches for the reseed page's request file.
+#
+# The page cannot refill the showcase itself. PGlite allows one process per
+# data directory and the service is holding it, so a workspace can only be
+# rebuilt while the service is stopped — and stopping it is also the only way
+# the demo ever moves onto a newer release, because `WorkingDirectory` is
+# resolved once at start and the release switch flips the symlink underneath a
+# process that already resolved it.
+#
+# Both of those need root, and the demo has none. It is a service with no
+# login, reachable by anyone on the tailnet; giving it the power to run
+# `systemctl` would be a poor trade for the convenience. So it writes a file
+# and this unit notices, which means the privileged work lives somewhere the
+# owner can read and the demo's only authority is the authority to leave a note.
+[Unit]
+Description=Private Finances showcase reseed request watcher
+
+[Path]
+# The demo writes this as `private-finances`; systemd reads it as root.
+PathChanged=/var/lib/private-finances-showcase/reseed.request
+Unit=private-finances-showcase-reseed.service
+
+[Install]
+WantedBy=paths.target
