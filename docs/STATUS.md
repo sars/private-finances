@@ -9,12 +9,41 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**f6511b16e5dc66d8608e5c8479b5a94b3c9fee9f**, live since September 21, 2026 at
+**02304dd7fbc7519a0550b3dec9aafd9c195aada4**, live since September 22, 2026 at
 schema version 65, deployed with `deploy/release.sh`: both services active,
-schema 65, 4,207 transactions, the server test run passed with 4 skipped, the
-migration rehearsal on a restored copy reached schema 65, the import timers and
-the Telegram worker resumed afterwards. It carries PRs #134, #135, #136, #137
-and #138, and adds no migration.
+schema 65, 4,210 transactions, the server test run passed, the migration
+rehearsal on a restored copy reached schema 65, the import timers and the
+Telegram worker resumed afterwards. It carries PR #145, and adds no migration.
+
+**Renewing a bank approval now restarts its imports by itself.** Revolut's
+consent expired on September 21 and the 18:07 UTC run latched the connection,
+which is what a failure a person must look at is supposed to do. The owner
+re-approved three hours later — the consent row went `authorized` to October 1
+and a fresh session file was written — but nothing carried that answer to the
+scheduler, so every half-hourly firing afterwards found the latch, logged
+`blocked` and exited **without one request to the bank**. Thirty runs, fifteen
+hours, no new row in `bank_sync_attempts` at all, and a screen still reporting
+that the bank had stopped while both Revolut balances stayed frozen at the 17:37
+UTC reading. Left alone it would have recurred at every expiry, about every ten
+days.
+
+The dashboard cannot clear the latch itself: it runs as its own unit under
+`ProtectSystem=strict` with no write access to the scheduler's state directory,
+and that separation is deliberate. So the scheduler reads the evidence an
+approval already leaves — the consent session file, rewritten each time the
+owner approves — and lifts the latch when the approval is newer than the latch.
+One approval buys exactly one attempt: a run that fails again writes a fresh
+latch, now newer than the session, so a bank broken for some other reason still
+waits for a person. This matters because `consent` is overloaded — the connector
+also raises it when an account's identity hash stops matching, which should stay
+latched. Monobank holds a token rather than a consent and is untouched.
+
+Verified on the live server rather than in a test: the release switched at 11:50
+local, the first firing on it at 12:20 removed the latch and imported, and
+`bank_sync_runs` for Revolut went to `succeeded` with no error code and a
+`polling_interval` wait. Both balances were re-observed at 09:20 UTC after
+sixteen hours frozen, and all seven connections now read `succeeded`. Nothing
+was typed on the server to achieve it, which was the point.
 
 **The demo had been serving a four-month-old release, and could not be
 refilled.** The owner noticed it looked wrong, and everything below came out of
@@ -79,6 +108,13 @@ on the server, where a release is built from a `git archive` extract with no
 environment the gate uses.
 
 ## Previous release
+
+**f6511b16e5dc66d8608e5c8479b5a94b3c9fee9f**, superseded September 22, 2026, at
+schema version 65: it carried PRs #134, #135, #136, #137 and #138 — the demo
+repaired and refillable, the owner's names off every screen, and the name rule
+reading the tree rather than git — and was superseded by the scheduler change
+that lets a renewed bank approval restart its own imports. The releases before
+it are described below.
 
 **b14cfea4a2562f348fbb3625f75fb8dce3e78479**, superseded September 21, 2026, at
 schema version 65: it carried PRs #134, #135 and #136 — the seeder made
@@ -1213,6 +1249,52 @@ matching of pending payments is designed in ADR 0005 but not yet merged, so unti
 it ships an unsettled purchase still waits for the bank.
 
 # Recent entries
+
+# A renewed approval was not reaching the scheduler — September 22, 2026
+
+The owner said their Revolut token had expired, that they had refreshed it, and
+that the error was still there with nothing importing. The refresh had worked.
+What had not worked was everything downstream of it.
+
+Revolut's consent lapsed on September 21. The 18:07 UTC run failed with
+`error_code=consent` and the runner left its latch behind, which is the designed
+answer to a failure a person has to look at. The owner re-approved at 21:05 UTC:
+`bank_consents` went `authorized` through October 1 and a new session file was
+written at 21:06. Nothing read either. Every firing after that found the latch,
+logged `blocked` and exited in under a second — around thirty runs across fifteen
+hours, and `bank_sync_attempts` recorded exactly one attempt in the whole stretch,
+the failure that started it. The connection was not failing to import; it was
+never being asked to. Both balances sat at their 17:37 UTC values while every
+other Enable Banking account refreshed each morning.
+
+The error message was honest — "Revolut stopped and is waiting to be looked at …
+will not retry on its own" is precisely what the state said — which is why it did
+not read as a bug. The gap was that renewing the approval **was** somebody
+looking at it, and no path existed for that to count.
+
+The obvious repair, having the consent callback delete the latch, was rejected
+after reading the units: the dashboard runs under `ProtectSystem=strict` with
+`StateDirectory=private-finances-consent` and cannot write the scheduler's
+directory, so it would have taken a systemd change and broken a boundary
+`bank-connectors.md` sets down deliberately. The other candidate — stop latching
+`consent` at all, since it is self-healing once re-approved — was rejected for a
+better reason: the connector raises the same `consent` code when an account's
+identity hash stops matching what is registered, and that must keep waiting for a
+person. Conflating the two would have traded a real safety property for
+convenience.
+
+So the scheduler compares the latch against the session file the approval
+rewrites and lifts the latch when the approval is the newer of the two. One
+approval permits one attempt; a second failure writes a fresh latch that is newer
+than the session, and the connection waits for a human again. Monobank supplies
+no timestamp and keeps its latch as final as before.
+
+Proven on the server, not only in tests. The release switched at 11:50 local, and
+the 12:20 firing — the first to run the new code — removed the latch, reached the
+bank, and recorded a `succeeded` attempt over two accounts. `bank_sync_runs` went
+to `succeeded` with no error code and a `polling_interval` wait, the balances were
+re-observed at 09:20 UTC, and all seven connections read `succeeded`. No command
+was run on the server to make it happen, which is the whole claim.
 
 # Home says which question it is answering — September 21, 2026
 
