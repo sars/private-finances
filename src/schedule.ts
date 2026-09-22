@@ -162,7 +162,56 @@ type ScheduleOptions = {
    * does, so the caller's errors are swallowed by `report` below.
    */
   announce?: (retryAfter: Date | null, reason: string | null) => Promise<void>;
+  /**
+   * When the owner last approved this bank, or null if they never have.
+   *
+   * Only a connection that has an approval to renew supplies this. Monobank
+   * holds a token rather than a consent and leaves it undefined, which keeps a
+   * latch there exactly as final as it has always been.
+   */
+  consentRenewedAt?: () => Promise<number | null>;
 };
+
+/**
+ * Lifts a latch the owner has already answered by approving the bank again.
+ *
+ * An expired consent latches like every other failure a person has to look at,
+ * but unlike the rest it has one unambiguous answer, and the owner gives it on
+ * the Bank connections page rather than on the server. Until this existed the
+ * approval went through, the consent session was rewritten, and the scheduler
+ * went on skipping the connection every half hour against a consent that had
+ * been valid for hours — no import, no request to the bank at all, and a screen
+ * still reporting that the bank had stopped. Revolut sat like that from 21
+ * September 2026, about three hours after the owner had already renewed it.
+ *
+ * The web process cannot clear the latch itself. It runs as its own unit under
+ * `ProtectSystem=strict` with no write access to the scheduler's state
+ * directory, and that separation is deliberate — the scheduler's files are not
+ * the dashboard's to edit. So the scheduler reads the one piece of evidence an
+ * approval leaves behind, the session file rewritten each time the owner
+ * approves, and lifts the latch when that file is newer than the latch itself.
+ *
+ * One approval buys exactly one attempt. A run that fails again writes a fresh
+ * latch, now newer than the session, so a bank that is broken for some other
+ * reason stays down for a person to look at rather than retrying every half
+ * hour. Anything unreadable here leaves the latch alone: the safe direction is
+ * the one that goes on waiting for a human.
+ */
+async function liftLatchTheOwnerAnswered(
+  latch: string,
+  consentRenewedAt: (() => Promise<number | null>) | undefined,
+): Promise<void> {
+  if (!consentRenewedAt) return;
+  try {
+    const latchedAt = (await lstat(latch)).mtimeMs;
+    const approvedAt = await consentRenewedAt();
+    if (approvedAt === null || approvedAt <= latchedAt) return;
+    await unlink(latch);
+  } catch {
+    // A latch that is not there needs no lifting, and a state directory this
+    // cannot read is not a reason to start calling a bank again.
+  }
+}
 
 export async function runScheduledSync(options: ScheduleOptions) {
   const [provider, owner, bank] = parseInstance(options.instance);
@@ -207,6 +256,7 @@ export async function runScheduledSync(options: ScheduleOptions) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   const latch = resolve(options.stateDirectory, `${options.instance}.blocked`);
+  await liftLatchTheOwnerAnswered(latch, options.consentRenewedAt);
   try {
     // Exclusive creation also prevents concurrent manual invocations. A crash
     // leaves the latch in place: a possibly failed consent is never retried.
@@ -351,6 +401,27 @@ async function announceToDatabase(
   }
 }
 
+/**
+ * When the owner last approved this bank, read from the session file the
+ * approval writes — the same file, named the same way, that the import itself
+ * opens to reach the provider. The scheduler only ever reads it.
+ */
+async function consentApprovedAt(
+  owner: string,
+  bank: string,
+): Promise<number | null> {
+  const directory = process.env.ENABLEBANKING_SESSION_DIRECTORY;
+  if (!directory) return null;
+  try {
+    return (
+      await lstat(resolve(directory, `enablebanking-${owner}-${bank}-session`))
+    ).mtimeMs;
+  } catch {
+    // No approval on file is not an error here: it is a bank waiting for one.
+    return null;
+  }
+}
+
 async function main() {
   const instance = process.argv[2] ?? '';
   const [provider, owner, bank] = parseInstance(instance);
@@ -363,6 +434,9 @@ async function main() {
     invoke: invokeCli,
     announce: (retryAfter, reason) =>
       announceToDatabase(connection, retryAfter, reason),
+    ...(bank
+      ? { consentRenewedAt: () => consentApprovedAt(owner!, bank) }
+      : {}),
     halfHourlyPolling: await verifiedMarker(
       resolve('/etc/private-finances/schedules', `${instance}.half-hourly`),
       instance,

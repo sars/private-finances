@@ -30,6 +30,13 @@ A sync timer may be enabled before its bank has been approved. Until the
 approval writes the session file, each run ends as `consent_pending`: no
 latch, no cooldown, and the first import follows the approval on its own.
 
+An approval that _lapses_ is different, because by then a session file exists and
+the provider refuses it: the run fails, and the scheduler latches the connection
+for a person to look at. Renewing the approval is that person answering, so the
+next run lifts the latch on its own and imports — nothing has to be cleared on
+the server. See "Failures and disablement" in [scheduling](scheduling.md) for how
+the two files are compared and why one approval permits only one attempt.
+
 An approval lasts days rather than months, and when it lapses the imports stop
 without any other sign. The Telegram loop therefore checks every authorised
 approval on each pass and sends a notice five, two and one day before it ends,

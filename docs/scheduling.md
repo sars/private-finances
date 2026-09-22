@@ -108,11 +108,23 @@ No child stdout/stderr is forwarded; journal events contain only the allowlisted
 instance and scheduler result. The database retains the existing sanitized sync
 failure status. A timeout may leave a job lease until its normal expiry.
 
-Investigate the sanitized failure status and repair/revalidate credentials or
-consent before removing the affected `.blocked` file. After an interrupted run,
-check job/lease state and recovery first. Never clear latches in a timer or retry
-loop. The service deadline is 45 minutes; its child invocation deadline is 40
-minutes. An unusually large account set may need a separately reviewed deadline.
+One thing lifts a latch without an operator: the owner approving that bank
+again. An Enable Banking run compares the latch against the consent session file
+the approval rewrites, and when the approval is the newer of the two it removes
+the latch and tries once. This is why it exists: an expired consent latches like
+any other failure a person must look at, but the person who answers it does so on
+the Bank connections page, and before this the approval left the connection
+skipped every half hour against a consent that had been valid for hours. One
+approval buys exactly one attempt — a run that fails again writes a fresh latch,
+now newer than the session, so a bank broken for some other reason still waits
+for a human. Monobank holds a token rather than a consent and is unaffected.
+
+Otherwise: investigate the sanitized failure status and repair/revalidate
+credentials or consent before removing the affected `.blocked` file. After an
+interrupted run, check job/lease state and recovery first. Never clear latches in
+a timer or retry loop. The service deadline is 45 minutes; its child invocation
+deadline is 40 minutes. An unusually large account set may need a separately
+reviewed deadline.
 
 To disable future runs, stop/disable the instance timer and remove its enable
 marker. Stopping the timer alone does not stop a currently running service; stop

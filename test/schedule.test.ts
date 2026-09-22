@@ -5,6 +5,7 @@ import {
   rm,
   writeFile,
   chmod,
+  lstat,
   readFile,
   readdir,
   symlink,
@@ -490,6 +491,125 @@ test('a streak file that is not a count waits the longest, never the shortest', 
       await readFile(join(directory, `${instance}.retry-after`), 'utf8'),
     );
     assert.ok(retry >= now.getTime() + 86400000);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Revolut, 21 September 2026: the consent expired, the half-hourly run latched
+ * it, and the owner re-approved about three hours later. Nothing read that
+ * approval, so the connection went on being skipped without a single request to
+ * the bank — thirty runs, fifteen hours, and a screen still saying it had
+ * stopped. An approval is the person the latch was waiting for.
+ */
+test('an approval the owner has already given lifts the latch, once', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-reconsent-'));
+  const tick = () => new Promise((done) => setTimeout(done, 20));
+  const latch = join(directory, 'enablebanking-rodion-revolut.blocked');
+  let calls = 0;
+  let approvedAt: number | null = null;
+  const options = {
+    instance: 'enablebanking-rodion-revolut',
+    now: new Date('2026-09-21T18:07:00Z'),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async () => {
+      calls++;
+      return 'blocked' as const;
+    },
+    consentRenewedAt: async () => approvedAt,
+  };
+  try {
+    // The consent expires: one failed attempt, then silence.
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(calls, 1);
+
+    // The approval that expired is older than the latch it caused, and lifting
+    // on it would retry the very consent the bank has already refused.
+    approvedAt = (await lstat(latch)).mtimeMs - 1000;
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(calls, 1);
+
+    // The owner approves again on the Bank connections page, and the next tick
+    // tries the bank without anyone typing anything on the server.
+    await tick();
+    approvedAt = Date.now();
+    await tick();
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(calls, 2);
+
+    // That attempt failed too, so the connection is waiting for a person again
+    // rather than calling the bank every half hour on a dead approval.
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(calls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('re-approving a latched bank restores its imports with no server command', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-recovery-'));
+  const tick = () => new Promise((done) => setTimeout(done, 20));
+  let approvedAt: number | null = null;
+  let expired = true;
+  const options = {
+    instance: 'enablebanking-rodion-revolut',
+    now: new Date('2026-09-21T18:07:00Z'),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async () => (expired ? ('blocked' as const) : ('success' as const)),
+    consentRenewedAt: async () => approvedAt,
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(await runScheduledSync(options), 'blocked');
+    await tick();
+    approvedAt = Date.now();
+    expired = false;
+    await tick();
+    assert.equal(await runScheduledSync(options), 'success');
+    // The latch is gone and the connection is back on its polling interval,
+    // which is what the owner sees as the bank importing again.
+    assert.equal(
+      (await readdir(directory)).includes(
+        'enablebanking-rodion-revolut.blocked',
+      ),
+      false,
+    );
+    assert.equal(
+      (
+        await readFile(
+          join(directory, 'enablebanking-rodion-revolut.retry-reason'),
+          'utf8',
+        )
+      ).trim(),
+      'polling_interval',
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a bank with no approval to renew keeps its latch final', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pf-schedule-token-latch-'));
+  let calls = 0;
+  const options = {
+    instance: 'monobank-rodion',
+    now: new Date('2026-09-21T18:07:00Z'),
+    stateDirectory: directory,
+    ready: async () => true,
+    invoke: async () => {
+      calls++;
+      return 'blocked' as const;
+    },
+  };
+  try {
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(await runScheduledSync(options), 'blocked');
+    assert.equal(calls, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
