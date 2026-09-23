@@ -409,3 +409,30 @@ test('a connection is named the way the owner names it', () => {
   // A slug written by a newer release and read back after a rollback.
   assert.equal(connectionLabel('enablebanking:rodion:monzo'), 'monzo · Rodion');
 });
+
+test('a Telegram worker that has stopped polling is reported after fifteen minutes', async () => {
+  // On 23 September 2026 the worker was down for twelve hours and nothing
+  // said so: a stopped worker queues nothing that could look undelivered.
+  const db = await healthy();
+  const minutesAgo = (n: number) =>
+    new Date(NOW.getTime() - n * 60000).toISOString();
+  try {
+    // Never ran here: the cursor row does not exist, which is a setup, not a fault.
+    assert.deepEqual((await systemProblems(db, { now: NOW })).problems, []);
+    await db.query(
+      'INSERT INTO telegram_poll_cursor(singleton,next_update_id,polled_at) VALUES(true,0,$1)',
+      [minutesAgo(10)],
+    );
+    // Inside a release's pause and a restart's backoff.
+    assert.deepEqual((await systemProblems(db, { now: NOW })).problems, []);
+    await db.query('UPDATE telegram_poll_cursor SET polled_at=$1', [
+      minutesAgo(16),
+    ]);
+    const { problems } = await systemProblems(db, { now: NOW });
+    assert.deepEqual(ids(problems), ['telegram:worker-stopped']);
+    assert.equal(problems[0]!.severity, 'critical');
+    assert.equal(problems[0]!.since, minutesAgo(16));
+  } finally {
+    await db.close();
+  }
+});

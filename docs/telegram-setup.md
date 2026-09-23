@@ -76,6 +76,12 @@ becomes `uncertain` and is never repeated. A PostgreSQL restart no longer crashe
 it at all: the pool logs `database_connection_lost` with the SQLSTATE and opens a
 fresh connection on the next query.
 
+Every finished poll stamps `telegram_poll_cursor.polled_at`. When the stamp is
+more than fifteen minutes old, Home's Problems block shows "The Telegram worker
+has stopped". A server where the worker has never run has no stamp and shows
+nothing; a worker stopped on purpose after it has run keeps showing the problem
+until it runs again.
+
 Each poll accepts at most 50 updates and a 1 MiB response. Poll requests time out
 at 20 seconds; failures stop the worker with a generic diagnostic. No update text,
 chat/user IDs, URLs or tokens are logged. Cursor advancement and reply persistence
