@@ -9,11 +9,33 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**02304dd7fbc7519a0550b3dec9aafd9c195aada4**, live since September 22, 2026 at
+**170fc05d58abf624383fcefb52b8e6499bd492fd**, live since September 23, 2026 at
 schema version 65, deployed with `deploy/release.sh`: both services active,
-schema 65, 4,210 transactions, the server test run passed, the migration
+schema 65, 4,219 transactions, the server test run passed, the migration
 rehearsal on a restored copy reached schema 65, the import timers and the
-Telegram worker resumed afterwards. It carries PR #145, and adds no migration.
+Telegram worker resumed afterwards. It carries PR #147, and adds no migration.
+The release refreshed `private-finances-telegram.service` itself; verified
+afterwards: `Restart=on-failure`, `RestartUSec=30s`, active.
+
+**The Telegram worker now survives a PostgreSQL restart.** The nightly
+unattended upgrade restarted PostgreSQL at 03:38 UTC; the worker's idle pool
+connection was ended, the pool emitted an error nothing listened for, Node
+exited, and `Restart=no` kept it down for about twelve hours — no triage and no
+questions, so a payment in Review never got one. The pool now logs
+`database_connection_lost` and reconnects on the next query, the unit restarts
+on failure, and `release.sh` installs changed unit files, which until now reached
+the server only by hand. Once the worker was back, triage filed the waiting
+payment by a standing rule. See
+[the incident note](incidents/2026-09-23-worker-stopped-on-database-restart.md).
+Not built: a heartbeat so a worker that stays down appears on Home.
+
+**Home's amber band counts undecided holds.** It counted undecided payments only
+once settled, while the server's figure and Analytics count holds, so with the
+only undecided payment still on hold Home read short of Analytics and the band
+explaining the gap did not render.
+
+**02304dd7fbc7519a0550b3dec9aafd9c195aada4**, superseded September 23, 2026, at
+schema version 65. It carried PR #145.
 
 **Renewing a bank approval now restarts its imports by itself.** Revolut's
 consent expired on September 21 and the 18:07 UTC run latched the connection,
