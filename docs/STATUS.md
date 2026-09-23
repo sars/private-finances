@@ -9,7 +9,20 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**170fc05d58abf624383fcefb52b8e6499bd492fd**, live since September 23, 2026 at
+**1a4e0c19d6802a4cdde1090d7b2f9c5b8a0fdae0**, live since September 23, 2026 at
+schema version 66, deployed with `deploy/release.sh`: both services active,
+schema 66, 4,219 transactions, server tests and the migration rehearsal passed.
+It carries PR #149 and adds migration 66, `telegram_poll_cursor.polled_at`.
+Verified afterwards: the worker stamped the heartbeat within seconds of starting.
+
+**Home now says when the Telegram worker has stopped.** Every finished poll
+stamps `polled_at`; the Problems block reports "The Telegram worker has stopped"
+as critical once the stamp is fifteen minutes old, longer than a release's pause
+and the thirty-second restart. It replaces the undelivered row, which it
+explains. No stamp means the worker has never run on that server, and says
+nothing.
+
+**170fc05d58abf624383fcefb52b8e6499bd492fd**, superseded September 23, 2026, at
 schema version 65, deployed with `deploy/release.sh`: both services active,
 schema 65, 4,219 transactions, the server test run passed, the migration
 rehearsal on a restored copy reached schema 65, the import timers and the
@@ -27,7 +40,7 @@ on failure, and `release.sh` installs changed unit files, which until now reache
 the server only by hand. Once the worker was back, triage filed the waiting
 payment by a standing rule. See
 [the incident note](incidents/2026-09-23-worker-stopped-on-database-restart.md).
-Not built: a heartbeat so a worker that stays down appears on Home.
+The heartbeat followed in 1a4e0c1, above.
 
 **Home's amber band counts undecided holds.** It counted undecided payments only
 once settled, while the server's figure and Analytics count holds, so with the
