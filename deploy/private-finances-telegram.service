@@ -2,6 +2,10 @@
 Description=Private Finances Telegram clarifications
 After=network-online.target postgresql.service
 Wants=network-online.target
+# Five failed starts inside ten minutes means something is really wrong; stop
+# retrying and stay failed rather than loop.
+StartLimitIntervalSec=600
+StartLimitBurst=5
 ConditionPathExists=/etc/private-finances/telegram.enabled
 
 [Service]
@@ -12,7 +16,12 @@ WorkingDirectory=/opt/private-finances/current
 EnvironmentFile=/etc/private-finances/app.env
 EnvironmentFile=/etc/private-finances/telegram.env
 ExecStart=/usr/bin/node dist/src/telegram-cli.js
-Restart=no
+# A crash leaves no half-sent message behind: a send in flight becomes
+# 'uncertain' and is never repeated, and a classifier request in flight becomes
+# 'uncertain' too. So restarting is safe, and without it one PostgreSQL restart
+# silenced every question for the rest of the day (23 September 2026).
+Restart=on-failure
+RestartSec=30
 TimeoutStopSec=45
 UMask=0077
 NoNewPrivileges=true

@@ -69,7 +69,12 @@ sudo systemctl status private-finances-telegram.service --no-pager
 After a verified pilot, enable startup explicitly if desired:
 `sudo systemctl enable private-finances-telegram.service`.
 To stop, run `sudo systemctl stop private-finances-telegram.service` and remove
-`/etc/private-finances/telegram.enabled`. No automatic restart is configured.
+`/etc/private-finances/telegram.enabled`. A crash restarts the worker after 30
+seconds (`Restart=on-failure`); five failed starts inside ten minutes leave it
+stopped. Restarting is safe because an interrupted send or classifier request
+becomes `uncertain` and is never repeated. A PostgreSQL restart no longer crashes
+it at all: the pool logs `database_connection_lost` with the SQLSTATE and opens a
+fresh connection on the next query.
 
 Each poll accepts at most 50 updates and a 1 MiB response. Poll requests time out
 at 20 seconds; failures stop the worker with a generic diagnostic. No update text,
