@@ -152,6 +152,19 @@ export function postgresDatabase(url: string): Database {
     max: 5,
     connectionTimeoutMillis: 5000,
   });
+  // An idle connection the server ends — a PostgreSQL restart, as the nightly
+  // unattended upgrade did on 23 September — is reported on the pool. Without a
+  // listener that is an unhandled 'error' event and takes the whole process
+  // down; with one the pool drops the dead connection and the next query opens
+  // a fresh one. Only the SQLSTATE is written: the message may carry a query.
+  pool.on('error', (error: Error & { code?: string }) => {
+    process.stderr.write(
+      JSON.stringify({
+        event: 'database_connection_lost',
+        code: typeof error.code === 'string' ? error.code : 'unknown',
+      }) + '\n',
+    );
+  });
   return {
     query: async <T extends Row>(sql: string, params?: unknown[]) =>
       pool.query<T>(sql, params),

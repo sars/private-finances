@@ -29,5 +29,5 @@ Regression test / PF-ID / PR: тест у `test/refund-automation.test.ts`, що
 
 Що змінити, відповідальний, статус: виконано. Ширший висновок — код, що
 виконується лише на сервері, має мати PostgreSQL-тест: PGlite не є доказом
-сумісності. Перезапуск worker-а після падіння (systemd `Restart=`) лишається
-відкритим питанням до власника.
+сумісності. Перезапуск worker-а після падіння: з 23 вересня 2026 `Restart=on-failure`
+(див. `2026-09-23-worker-stopped-on-database-restart.md`).

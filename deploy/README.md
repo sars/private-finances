@@ -142,6 +142,11 @@ restores the real database into a disposable copy and migrates _that_ with the n
 code, pauses the sync timers and the worker until no import is running, installs
 the root-owned release, hands over to `switch-release.py`, resumes the timers and
 the worker, and prints the resulting release, schema version and transaction count.
+After the switch it also refreshes every systemd unit the server already has
+(`*.service`, `*.timer`, `*.path`) from the new release when the file differs,
+then runs `daemon-reload`, so a change to a unit takes effect with the release
+that carries it. A unit the server does not have yet, and the per-bank
+`private-finances-sync@*.timer.d` drop-ins, are still installed by hand.
 
 Every step is a gate and the first failure stops the release, so a half-finished
 attempt leaves the previous release serving and the build directory in place for

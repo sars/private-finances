@@ -247,7 +247,23 @@ ssh -o BatchMode=yes "$host" "set -e
   sudo -n cp -a $build /opt/private-finances/releases/$sha
   sudo -n chown -R root:root /opt/private-finances/releases/$sha
   sudo -n chmod -R go+rX /opt/private-finances/releases/$sha
-  sudo -n python3 /opt/private-finances/releases/$sha/deploy/switch-release.py $sha --schema-compatible"
+  sudo -n python3 /opt/private-finances/releases/$sha/deploy/switch-release.py $sha --schema-compatible
+  # A unit that changed in the repository reached the server only when someone
+  # copied it by hand, so a fix to one — the worker's restart policy — could be
+  # released and never take effect. Refresh the units this server already has;
+  # installing a new one, and the per-bank timer drop-ins, stay deliberate acts.
+  changed=0
+  for unit in /opt/private-finances/releases/$sha/deploy/*.service \
+              /opt/private-finances/releases/$sha/deploy/*.timer \
+              /opt/private-finances/releases/$sha/deploy/*.path; do
+    installed=/etc/systemd/system/\$(basename \"\$unit\")
+    [ -f \"\$installed\" ] || continue
+    cmp -s \"\$unit\" \"\$installed\" && continue
+    sudo -n install -m 644 \"\$unit\" \"\$installed\"
+    echo \"unit updated: \$(basename \"\$unit\")\"
+    changed=1
+  done
+  if [ \$changed = 1 ]; then sudo -n systemctl daemon-reload; fi"
 
 step 'resuming imports and the worker'
 resume_services

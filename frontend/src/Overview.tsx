@@ -297,7 +297,11 @@ export default function Overview() {
       (r.kind === 'unresolved' || r.category === 'Unspecified') &&
       !r.refund?.fullyReduced,
   );
-  const unresolved = reviewable.filter((r) => r.status !== 'pending').length;
+  // A hold is money already taken, and the server's unresolved figure counts it,
+  // so the band counts it too. Leaving holds out hid the band whenever the only
+  // undecided payment was still on hold, and Home then read short of Analytics
+  // with nothing on screen to say why.
+  const unresolved = reviewable.length;
   // This page reports the household; Review only ever shows the signed-in
   // owner's own payments, so say which of these they cannot open from here.
   const othersUnresolved = actor
