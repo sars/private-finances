@@ -182,3 +182,20 @@ test('polling uses fixed origin, bounded response and sanitized errors with fake
       /^Error: telegram_poll_failed$/,
     );
 });
+
+test('every finished poll stamps the heartbeat the Problems block reads', async () => {
+  const { db } = await setup();
+  try {
+    await db.transaction(initializeTelegramCursor);
+    const before = (
+      await db.query('SELECT polled_at FROM telegram_poll_cursor')
+    ).rows[0]!.polled_at;
+    assert.equal(before, null);
+    await pollOnce(db, settings, async () => []);
+    const after = (await db.query('SELECT polled_at FROM telegram_poll_cursor'))
+      .rows[0]!.polled_at;
+    assert.ok(after, 'a poll with no updates still proves the worker is alive');
+  } finally {
+    await db.close();
+  }
+});

@@ -1073,6 +1073,25 @@ async function applyMigrations(db: Database): Promise<void> {
       await applyOwnerRuleCorrections(tx);
       await tx.query('INSERT INTO schema_versions(version) VALUES (65)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=66'))
+        .rows.length
+    ) {
+      // When the Telegram worker last finished a poll. It polls without pause,
+      // so a stamp that stops moving means the worker has stopped — crashed,
+      // hung or cut off from Telegram — and the Problems block can say so. On
+      // 23 September it was down for twelve hours and nothing anywhere noticed,
+      // because a stopped worker queues nothing that could look undelivered.
+      // The table was the worker's own until now; creating it here as well lets
+      // the dashboard read it on a server where the worker has never run.
+      await tx.query(`CREATE TABLE IF NOT EXISTS telegram_poll_cursor (
+        singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),next_update_id bigint NOT NULL CHECK(next_update_id>=0)
+      )`);
+      await tx.query(
+        'ALTER TABLE telegram_poll_cursor ADD COLUMN IF NOT EXISTS polled_at timestamptz',
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (66)');
+    }
   });
 }
 

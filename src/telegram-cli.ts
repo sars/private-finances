@@ -48,6 +48,9 @@ export async function initializeTelegramCursor(tx: Executor): Promise<void> {
     singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),next_update_id bigint NOT NULL CHECK(next_update_id>=0)
   )`);
   await tx.query(
+    'ALTER TABLE telegram_poll_cursor ADD COLUMN IF NOT EXISTS polled_at timestamptz',
+  );
+  await tx.query(
     'INSERT INTO telegram_poll_cursor(singleton,next_update_id) VALUES(true,0) ON CONFLICT DO NOTHING',
   );
 }
@@ -184,7 +187,8 @@ export async function pollOnce(
       next = Number(update.update_id) + 1;
     }
     await tx.query(
-      'UPDATE telegram_poll_cursor SET next_update_id=GREATEST(next_update_id,$1) WHERE singleton=true',
+      // polled_at is the worker's heartbeat, read by the Problems block.
+      'UPDATE telegram_poll_cursor SET next_update_id=GREATEST(next_update_id,$1),polled_at=now() WHERE singleton=true',
       [next],
     );
     return next;

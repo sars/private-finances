@@ -25,4 +25,6 @@ and a working next query.
 What changes: the pool logs `database_connection_lost` and carries on; the unit
 restarts on failure after 30 s, at most five times in ten minutes; `release.sh`
 now installs changed unit files, which previously reached the server only by
-hand. Not done: a heartbeat so a worker that stays down shows up on Home.
+hand. Follow-up the same day: every finished poll stamps
+`telegram_poll_cursor.polled_at` (migration 66), and Home's Problems block
+reports "The Telegram worker has stopped" once the stamp is fifteen minutes old.

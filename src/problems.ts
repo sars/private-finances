@@ -13,7 +13,8 @@
  * So this is the one place that says so. It reads the tables the application
  * already writes and reports nothing of its own: a bank's own sync record, the
  * approvals a provider granted, the exchange rates that were retrieved, the
- * outbox the bot sends from, the classifier's budget. Nothing here is a new
+ * outbox the bot sends from, the moment the worker last polled, the
+ * classifier's budget. Nothing here is a new
  * store to keep in step with the truth; it is a reading of the truth.
  *
  * Two rules decide what belongs. A problem is something **broken**, not
@@ -75,6 +76,14 @@ const RATES_STALE_MS = 72 * 3600000;
  * message still queued has not been delayed — nothing is sending it.
  */
 const UNDELIVERED_MS = 2 * 3600000;
+
+/**
+ * Fifteen minutes since the worker last finished a poll. Longer than a release
+ * keeps it paused (up to five minutes waiting for an import, then the switch)
+ * and than systemd's thirty-second restart, so only a worker that is really
+ * down is reported.
+ */
+const WORKER_SILENT_MS = 15 * 60000;
 
 export type ProblemInputs = {
   now?: Date;
@@ -304,6 +313,28 @@ async function classifierProblems(db: Executor): Promise<Problem[]> {
  * that can say it.
  */
 async function telegramProblems(db: Executor, now: Date): Promise<Problem[]> {
+  // The worker stamps every poll it finishes. No stamp at all means it has
+  // never run here, which is a setup, not a fault; a stamp that has stopped
+  // moving is the fault, and it explains any backlog below, so it stands alone.
+  const polledAt = iso(
+    (
+      await db.query(
+        'SELECT polled_at FROM telegram_poll_cursor WHERE singleton=true',
+      )
+    ).rows[0]?.polled_at,
+  );
+  if (polledAt && now.getTime() - Date.parse(polledAt) > WORKER_SILENT_MS)
+    return [
+      {
+        id: 'telegram:worker-stopped',
+        severity: 'critical',
+        title: 'The Telegram worker has stopped',
+        detail:
+          'No questions or warnings are being sent and new payments are not being sorted. Restart private-finances-telegram on the server.',
+        href: '/ops',
+        since: polledAt,
+      },
+    ];
   const stuck = await db.query(
     `SELECT min(created_at) AS since, count(*)::int AS waiting FROM (
        SELECT created_at FROM telegram_outbox WHERE state IN ('queued','uncertain')
