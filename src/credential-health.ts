@@ -1,3 +1,4 @@
+import { stoppedImportProblems } from './problems.js';
 import { randomUUID } from 'node:crypto';
 import type { Database, Executor } from './database.js';
 import type { Owner } from './domain.js';
@@ -210,7 +211,7 @@ function reminderText(health: CredentialHealth): string {
 
 export async function initializeCredentialHealth(db: Executor): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS credential_reminders (
-    id uuid PRIMARY KEY, credential text NOT NULL CHECK(credential IN ('openai_api_key','bank_consent','ibkr_flex_token')),
+    id uuid PRIMARY KEY, credential text NOT NULL CHECK(credential IN ('openai_api_key','bank_consent','ibkr_flex_token','bank_import')),
     expiry_key text NOT NULL, warning_days integer NOT NULL CHECK(warning_days IN (5,2,1)),
     message text NOT NULL,
     chat_id text NOT NULL, state text NOT NULL CHECK(state IN ('queued','sending','sent','uncertain','cancelled')),
@@ -228,7 +229,7 @@ export async function initializeCredentialHealth(db: Executor): Promise<void> {
   );
   await db.query(
     `ALTER TABLE credential_reminders ADD CONSTRAINT credential_reminders_credential_check
-     CHECK(credential IN ('openai_api_key','bank_consent','ibkr_flex_token'))`,
+     CHECK(credential IN ('openai_api_key','bank_consent','ibkr_flex_token','bank_import'))`,
   );
   await db.query(
     'ALTER TABLE credential_reminders DROP CONSTRAINT IF EXISTS credential_reminders_warning_days_check',
@@ -461,6 +462,45 @@ export class CredentialReminders {
       });
     }
     return notices;
+  }
+  /**
+   * Queue one notice for each bank import that has stopped.
+   *
+   * On 23 September 2026 Kate's Monobank stopped for a day and nothing said so
+   * anywhere the household would see it. A stopped import is the same kind of
+   * news as a lapsed approval — money has stopped arriving and only a person
+   * can restart it — so it goes through the same outbox, once per stop: the
+   * key is the connection and the last complete run, so a bank that recovers
+   * and stops again is a new notice, and one that recovers before its notice
+   * is sent has that notice cancelled.
+   */
+  async enqueueStoppedImports(now = new Date()): Promise<number> {
+    const stopped = await stoppedImportProblems(this.db, now);
+    const keys = stopped.map(
+      (problem) => `${problem.id}:since:${problem.since}`,
+    );
+    await this.db.transaction(async (tx) => {
+      await tx.query('SELECT pg_advisory_xact_lock(7482402)');
+      await tx.query(
+        `UPDATE credential_reminders SET state='cancelled'
+         WHERE credential='bank_import' AND chat_id=$1 AND state='queued'
+           AND NOT (expiry_key = ANY($2::text[]))`,
+        [this.chatId, keys],
+      );
+      for (const [index, problem] of stopped.entries())
+        await tx.query(
+          `INSERT INTO credential_reminders(id,credential,expiry_key,warning_days,chat_id,message,state)
+           VALUES($1,'bank_import',$2,0,$3,$4,'queued')
+           ON CONFLICT(credential,expiry_key,warning_days,chat_id) DO NOTHING`,
+          [
+            randomUUID(),
+            keys[index],
+            this.chatId,
+            `⚠️ ${problem.title}. ${problem.detail} See the Bank imports page.`,
+          ],
+        );
+    });
+    return stopped.length;
   }
   async dispatchOne(): Promise<'idle' | 'sent' | 'uncertain'> {
     const item = await this.db.transaction(async (tx) => {

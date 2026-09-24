@@ -47,10 +47,13 @@ The Bank imports screen (`/imports`, `frontend/src/Imports.tsx`) reads
 `bank_sync_runs` for each connection's state and last complete run,
 `bank_import_windows` for how many payments each run changed and when, the
 accounts each connection reaches with what they hold, and `bank_consents` for
-how long the provider's approval lasts. It records nothing itself. A connection
-whose scheduler has stopped shows as a last run growing old; the scheduler's
-latch and cooldown files on the server are deliberately not read by the web
-process. System health links here in place of the approvals form, which stays
+how long the provider's approval lasts. It records nothing itself. The
+scheduler's latch and cooldown files on the server are deliberately not read by
+the web process; a latch reaches the page through the `blocked` reason the
+scheduler announces into `bank_sync_runs`, and shows as "Stopped, needs a look".
+A row still `running` after its lease expired is a run that died: stopped, or
+"Interrupted, will retry" once the scheduler has put it on the transient
+backoff. System health links here in place of the approvals form, which stays
 on Bank connections.
 
 ## Balances

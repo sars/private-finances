@@ -117,6 +117,12 @@ function verdict(
     return { health: 'waiting', text: 'Waiting for its first import' };
   if (c.state === 'failed')
     return { health: 'attention', text: 'Last import failed' };
+  // Stopped is the scheduler waiting for a person; interrupted is a run that
+  // died and is already due to be retried, which the next-attempt line shows.
+  if (c.state === 'stopped')
+    return { health: 'attention', text: 'Stopped, needs a look' };
+  if (c.state === 'interrupted')
+    return { health: 'waiting', text: 'Interrupted, will retry' };
   if (c.state === 'running') return { health: 'ok', text: 'Importing now' };
   const last = c.lastSuccessAt ? Date.parse(c.lastSuccessAt) : NaN;
   if (!Number.isFinite(last))

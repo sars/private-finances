@@ -12,7 +12,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { invalidateFinancialData, useRefreshSignal } from './lib/query';
-import { PageHeader, RefreshButton } from '@/components/finance';
+import {
+  PageHeader,
+  ProblemsBlock,
+  RefreshButton,
+  type Problem,
+} from '@/components/finance';
 import { DecisionCoverage } from '@/components/decision-coverage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -172,6 +177,35 @@ function Backup({ backup }: { backup?: BackupHealth }) {
     </Card>
   );
 }
+/**
+ * The same list Home leads with. It lives here too because this is the page
+ * the owner opens when something seems wrong, and on 24 September 2026 it said
+ * nothing while a bank had been stopped for a day. It loads on its own, so a
+ * list that fails to arrive never takes the rest of the page with it.
+ */
+function useProblems(refresh: unknown): Problem[] {
+  const [problems, setProblems] = useState<Problem[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/problems', {
+      signal: controller.signal,
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()) as { problems?: Problem[] };
+        if (!controller.signal.aborted)
+          setProblems(Array.isArray(data.problems) ? data.problems : []);
+      })
+      .catch(() => {
+        // Aborted, or unreachable: the rest of the page reports the latter.
+      });
+    return () => controller.abort();
+  }, [refresh]);
+  return problems;
+}
+
 export default function Operations() {
   const [health, setHealth] = useState<Health>();
   const [release, setRelease] = useState('');
@@ -179,6 +213,7 @@ export default function Operations() {
   const [error, setError] = useState('');
   const refresh = useRefreshSignal();
   const [checkedAt, setCheckedAt] = useState('');
+  const problems = useProblems(refresh);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -232,6 +267,7 @@ export default function Operations() {
         description="Access expiry, delivery and the status of your workspace. Bank imports have a page of their own."
         actions={<RefreshButton />}
       />
+      <ProblemsBlock problems={problems} />
       <LlmBudget refresh={refresh} />
       <DecisionCoverage />
       {loading ? (

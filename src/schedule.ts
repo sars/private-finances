@@ -4,7 +4,11 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BANK_SLUGS } from './connectors/banks.js';
 import { postgresDatabase } from './database.js';
-import { recordNextAttempt } from './import-runs.js';
+import {
+  interruptedAttemptStartedAt,
+  recordNextAttempt,
+} from './import-runs.js';
+import { reportedFailure } from './sync-failure.js';
 
 /** PF-002: bounded reconciliation, never a historical completeness watermark. */
 export function dailyReplayWindow(now: Date): { from: string; to: string } {
@@ -170,7 +174,52 @@ type ScheduleOptions = {
    * latch there exactly as final as it has always been.
    */
   consentRenewedAt?: () => Promise<number | null>;
+  /**
+   * When the newest import attempt began, if it died without saying how it
+   * ended — see `interruptedAttemptStartedAt`. Null when it finished, is still
+   * within its lease, or there is none.
+   */
+  interruptedAttemptAt?: () => Promise<number | null>;
 };
+
+/**
+ * How far from the latch an attempt may begin and still be the run that made
+ * it: the import opens its attempt a moment after the scheduler takes the
+ * latch, once it has read its credentials and checked the schema.
+ */
+const ATTEMPT_AFTER_LATCH_MS = 10 * 60000;
+
+/**
+ * Whether the latch was left by a run that died before it knew anything.
+ *
+ * The latch doubles as the lock that keeps two runs of one connection apart, so
+ * a run killed mid-way leaves it behind looking exactly like a bank waiting for
+ * a person. Its attempt tells them apart: a bank that refused something was
+ * recorded as a failed attempt, and one that was never closed means the
+ * process died first. That run is retried on the transient backoff, measured
+ * from when it began, so an import killed every time still slows to once a day
+ * rather than repeating every half hour.
+ */
+async function interruptedRun(
+  latch: string,
+  interruptedAttemptAt: (() => Promise<number | null>) | undefined,
+): Promise<number | null> {
+  if (!interruptedAttemptAt) return null;
+  try {
+    const latchedAt = (await lstat(latch)).mtimeMs;
+    const startedAt = await interruptedAttemptAt();
+    if (
+      startedAt === null ||
+      startedAt < latchedAt - 1000 ||
+      startedAt > latchedAt + ATTEMPT_AFTER_LATCH_MS
+    )
+      return null;
+    return startedAt;
+  } catch {
+    // No latch, or no way to read the record: leave it for a person.
+    return null;
+  }
+}
 
 /**
  * Lifts a latch the owner has already answered by approving the bank again.
@@ -257,9 +306,30 @@ export async function runScheduledSync(options: ScheduleOptions) {
   }
   const latch = resolve(options.stateDirectory, `${options.instance}.blocked`);
   await liftLatchTheOwnerAnswered(latch, options.consentRenewedAt);
+  const streakFile = resolve(
+    options.stateDirectory,
+    `${options.instance}.transient-streak`,
+  );
+  const interruptedAt = await interruptedRun(
+    latch,
+    options.interruptedAttemptAt,
+  );
+  if (interruptedAt !== null) {
+    const streak = (await transientStreak(streakFile)) + 1;
+    await writeFile(streakFile, String(streak) + '\n', { mode: 0o600 });
+    const until =
+      interruptedAt +
+      TRANSIENT_BACKOFF_MS[Math.min(streak, TRANSIENT_BACKOFF_MS.length) - 1]!;
+    await unlink(latch);
+    if (options.now.getTime() < until) {
+      await wait(until, 'transient');
+      return 'deferred';
+    }
+  }
   try {
     // Exclusive creation also prevents concurrent manual invocations. A crash
-    // leaves the latch in place: a possibly failed consent is never retried.
+    // leaves the latch in place: a possibly failed consent is never retried —
+    // unless its attempt shows the run died before hearing from the bank.
     await writeFile(latch, 'review_required\n', { flag: 'wx', mode: 0o600 });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
@@ -284,10 +354,6 @@ export async function runScheduledSync(options: ScheduleOptions) {
   const conservative = resolve(
     options.stateDirectory,
     `${options.instance}.conservative`,
-  );
-  const streakFile = resolve(
-    options.stateDirectory,
-    `${options.instance}.transient-streak`,
   );
   let backgroundHours = 6;
   if (
@@ -357,22 +423,14 @@ function invokeCli(args: string[]): Promise<SyncResult> {
       (error, _stdout, stderr) => {
         if (!error) return done('success');
         // CLI emits sanitized JSON; do not forward child output to logs.
-        try {
-          const failure = JSON.parse(stderr.trim()) as {
-            event?: string;
-            code?: string;
-          };
-          if (
-            !error.killed &&
-            failure.event === 'bank_sync_failed' &&
-            (failure.code === 'transient' ||
-              failure.code === 'rate_limit' ||
-              failure.code === 'consent_pending')
-          )
-            return done(failure.code);
-        } catch {
-          // Unknown output conservatively requires operator review.
-        }
+        const code = error.killed ? null : reportedFailure(stderr);
+        if (
+          code === 'transient' ||
+          code === 'rate_limit' ||
+          code === 'consent_pending'
+        )
+          return done(code);
+        // Unknown output conservatively requires operator review.
         done('blocked');
       },
     );
@@ -396,6 +454,19 @@ async function announceToDatabase(
   const db = postgresDatabase(process.env.DATABASE_URL);
   try {
     await recordNextAttempt(db, connection, retryAfter, reason);
+  } finally {
+    await db.close();
+  }
+}
+
+/** Read-only, and a database it cannot reach leaves the latch where it is. */
+async function interruptedAttemptFromDatabase(
+  connection: string,
+): Promise<number | null> {
+  if (!process.env.DATABASE_URL) return null;
+  const db = postgresDatabase(process.env.DATABASE_URL);
+  try {
+    return await interruptedAttemptStartedAt(db, connection);
   } finally {
     await db.close();
   }
@@ -437,6 +508,7 @@ async function main() {
     ...(bank
       ? { consentRenewedAt: () => consentApprovedAt(owner!, bank) }
       : {}),
+    interruptedAttemptAt: () => interruptedAttemptFromDatabase(connection),
     halfHourlyPolling: await verifiedMarker(
       resolve('/etc/private-finances/schedules', `${instance}.half-hourly`),
       instance,

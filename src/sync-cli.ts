@@ -6,7 +6,7 @@ import { syncBank } from './bank-sync.js';
 import { MonobankConnector } from './connectors/monobank.js';
 import { EnableBankingConnector } from './connectors/enablebanking.js';
 import { requester, type RequestObserver } from './connectors/http.js';
-import { ConnectorError } from './connectors/types.js';
+import { failureCode } from './sync-failure.js';
 import { AttemptRecorder, sanitizePath } from './import-runs.js';
 import { loadEnableBankingCredentials } from './enablebanking-credentials.js';
 import { BANK_SLUGS, isBankSlug, type BankSlug } from './connectors/banks.js';
@@ -148,12 +148,7 @@ main().catch((error) => {
   process.stderr.write(
     JSON.stringify({
       event: 'bank_sync_failed',
-      code:
-        error instanceof ConnectorError
-          ? error.code
-          : error instanceof Error && error.message === 'consent_pending'
-            ? 'consent_pending'
-            : 'configuration_or_sync_error',
+      code: failureCode(error),
     }) + '\n',
   );
   process.exitCode = 1;

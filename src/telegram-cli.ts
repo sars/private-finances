@@ -357,6 +357,9 @@ async function main(): Promise<void> {
       // A bank approval lasts days, not months, and when it lapses the imports
       // stop without a word anywhere else.
       await credentialReminders.enqueueBankConsents();
+      // A bank whose imports have stopped for some other reason — latched for a
+      // person, or silent for a day — is announced the same way.
+      await credentialReminders.enqueueStoppedImports();
       await credentialReminders.dispatchOne();
       if (
         process.env.TELEGRAM_AUTO_QUESTIONS === 'true' ||

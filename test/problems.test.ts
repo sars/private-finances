@@ -90,7 +90,7 @@ test('an approval is announced one day before it lapses, not five', async () => 
   try {
     assert.deepEqual(await expiry(3), []);
     const soon = await expiry(0.5);
-    assert.deepEqual(ids(soon), ['bank:enablebanking:rodion:lhv']);
+    assert.deepEqual(ids(soon), ['bank:enablebanking:rodion:lhv:approval']);
     // The bank as the owner knows it, never the integration provider's name.
     assert.match(
       soon[0]!.title,

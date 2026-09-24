@@ -8,8 +8,10 @@
  * disagree with the totals.
  *
  * The scheduler's own state — a latch, a rate-limit cooldown — lives in files
- * on the server that the web process deliberately does not read; a connection
- * that has stopped shows up here through its last complete run growing old.
+ * on the server that the web process deliberately does not read. What it
+ * announces about them reaches `bank_sync_runs.retry_reason`, which is how a
+ * latched connection shows as stopped here rather than only through its last
+ * complete run growing old.
  */
 import type { Executor } from './database.js';
 import {
@@ -136,13 +138,41 @@ export function describeConnection(connection: string): {
   };
 }
 
+/**
+ * What a connection is doing, as a screen should say it.
+ *
+ * `bank_sync_runs.state` is written by the import itself, so a process that
+ * dies mid-run leaves it at `running` forever: on 23 September 2026 a
+ * database restart killed an import of Kate's Monobank and the Bank imports
+ * page went on saying "Importing now" for a day. A run is only running while
+ * its lease is live, and a connection the scheduler has latched for a person
+ * is stopped whatever the last import wrote. `interrupted` is a run that died
+ * and is already due to be retried.
+ */
+export function connectionState(
+  row: Record<string, unknown>,
+  now: Date,
+): string {
+  const state = String(row.state);
+  const lease = iso(row.lease_until);
+  if (state === 'running' && lease && Date.parse(lease) > now.getTime())
+    return 'running';
+  if (row.retry_reason === 'blocked') return 'stopped';
+  // A dead run the scheduler has recognised and put on the transient backoff
+  // will be retried by itself; one it has not looked at yet may still be
+  // waiting for a person.
+  if (state === 'running')
+    return row.retry_reason === 'transient' ? 'interrupted' : 'stopped';
+  return state;
+}
+
 export async function importStatus(
   db: Executor,
   now: Date = new Date(),
 ): Promise<ImportStatus> {
   const at = now.toISOString();
   const runs = await db.query(
-    'SELECT connection,state,last_success_at,error_code,retry_after,retry_reason FROM bank_sync_runs ORDER BY connection',
+    'SELECT connection,state,lease_until,last_success_at,error_code,retry_after,retry_reason FROM bank_sync_runs ORDER BY connection',
   );
   const windows = await db.query(
     `SELECT connection,
@@ -231,7 +261,7 @@ export async function importStatus(
     return {
       connection,
       ...described,
-      state: String(row.state),
+      state: connectionState(row, now),
       lastSuccessAt: iso(row.last_success_at),
       errorCode: row.error_code ? String(row.error_code) : null,
       lastRunAt: iso(window?.last_run_at),
