@@ -1092,6 +1092,23 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (66)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=67'))
+        .rows.length
+    ) {
+      // A bank import that has stopped is announced in Telegram through the
+      // same outbox as an expiring approval, so the check constraint has to
+      // accept its name. Replaced rather than widened, as at version 56;
+      // nothing is written, and every existing row already satisfies it.
+      await tx.query(
+        'ALTER TABLE credential_reminders DROP CONSTRAINT IF EXISTS credential_reminders_credential_check',
+      );
+      await tx.query(
+        `ALTER TABLE credential_reminders ADD CONSTRAINT credential_reminders_credential_check
+         CHECK(credential IN ('openai_api_key','bank_consent','ibkr_flex_token','bank_import'))`,
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (67)');
+    }
   });
 }
 

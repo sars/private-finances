@@ -177,8 +177,10 @@ test('holdings HTTP routes are shared by the household, need CSRF, and value in 
     assert.equal(carried.rows[0].carried, true);
     assert.equal(carried.series.length, 2);
     // Reading the automatic figures is for today only, and reports each feed.
+    // A date that is already past, so this cannot become today and pass: the
+    // fixture's own date, 24 September 2026, did exactly that on the day.
     assert.equal(
-      (await post('/api/holdings/read-feeds', { csrf, asOf: '2026-09-24' }))
+      (await post('/api/holdings/read-feeds', { csrf, asOf: '2026-01-01' }))
         .status,
       400,
     );

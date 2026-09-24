@@ -274,6 +274,38 @@ export async function recordNextAttempt(
 }
 
 /**
+ * When the newest attempt for this connection began, if it can no longer be
+ * running and never said how it ended.
+ *
+ * Such an attempt is a process that died — a database restart under it, an
+ * out-of-memory kill — before it could write anything about the bank. It is
+ * the one kind of latched run whose cause is known not to be the bank, so the
+ * scheduler may try again on the transient backoff instead of waiting for a
+ * person. Both conditions are required. The lease is claimed a moment after the
+ * attempt opens and renewed every minute for five, and a run that misses its
+ * renewal gives up, so no live lease ten minutes in means nothing is running;
+ * the ten minutes cover the moment between opening the attempt and claiming.
+ */
+const INTERRUPTED_MS = 10 * 60000;
+export async function interruptedAttemptStartedAt(
+  db: Executor,
+  connection: string,
+): Promise<number | null> {
+  const found = await db.query(
+    `SELECT a.started_at FROM bank_sync_attempts a
+     LEFT JOIN bank_sync_runs r ON r.connection = a.connection
+     WHERE a.connection = $1
+       AND a.outcome = 'running'
+       AND a.started_at < now() - ($2 || ' milliseconds')::interval
+       AND (r.lease_until IS NULL OR r.lease_until < now())
+       AND a.started_at = (SELECT max(started_at) FROM bank_sync_attempts WHERE connection = $1)`,
+    [connection, String(INTERRUPTED_MS)],
+  );
+  const started = found.rows[0]?.started_at;
+  return started ? new Date(started as string).getTime() : null;
+}
+
+/**
  * The cursor is the row's own order key, so a page cannot skip or repeat.
  *
  * Both halves are checked against the shape the columns actually hold, not

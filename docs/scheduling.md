@@ -119,6 +119,23 @@ approval buys exactly one attempt — a run that fails again writes a fresh latc
 now newer than the session, so a bank broken for some other reason still waits
 for a human. Monobank holds a token rather than a consent and is unaffected.
 
+A second thing lifts a latch: evidence that the run behind it died before it
+heard from the bank. The latch is also the lock that keeps two runs apart, so a
+run killed mid-import leaves it looking like a bank waiting for a person. When
+the newest `bank_sync_attempts` row for the connection began within ten minutes
+of the latch, is still `running`, is more than ten minutes old and holds no live
+lease, the scheduler removes the latch and retries on the transient backoff (one
+hour, three, then a day) measured from when that run began. A bank that refused
+something is recorded as a failed attempt and stays latched. A lost database
+connection is itself reported as `transient`, and the scheduler reads the last
+`bank_sync_failed` line of the import's stderr, so a PostgreSQL restart no longer
+latches anything. See
+[the 23 September incident](incidents/2026-09-23-import-latched-on-database-restart.md).
+
+A latched connection shows as stopped on the Bank imports page and in the
+Problems list (Home and System health) as soon as the scheduler announces
+`blocked`; one stopped for three hours or more is sent to Telegram once.
+
 Otherwise: investigate the sanitized failure status and repair/revalidate
 credentials or consent before removing the affected `.blocked` file. After an
 interrupted run, check job/lease state and recovery first. Never clear latches in

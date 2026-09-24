@@ -32,6 +32,7 @@
 import type { Executor } from './database.js';
 import type { CredentialHealth } from './credential-health.js';
 import { backupHealth, type BackupHealth } from './backup-health.js';
+import { connectionState } from './import-status.js';
 import {
   bankLabel,
   bankSlug,
@@ -154,7 +155,7 @@ function at(instant: string, now: Date): string {
  */
 async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
   const runs = await db.query(
-    'SELECT connection,state,last_success_at,error_code,retry_after,retry_reason FROM bank_sync_runs ORDER BY connection',
+    'SELECT connection,state,lease_until,last_success_at,error_code,retry_after,retry_reason FROM bank_sync_runs ORDER BY connection',
   );
   const consents = await db.query(
     "SELECT owner,bank,expires_at FROM bank_consents WHERE status='authorized'",
@@ -191,9 +192,12 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
         : '';
     // Most specific first: an approval that has lapsed explains everything
     // else, and a credential the bank rejected explains a stalled run.
+    // An approval has its own id: its notice ladder is sent elsewhere, and the
+    // Telegram notice for a stopped import must not say the same thing twice.
+    const approval = { ...base, id: `${base.id}:approval` };
     if (consentAt && Date.parse(consentAt) <= now.getTime())
       problems.push({
-        ...base,
+        ...approval,
         severity: 'critical',
         title: `${label} has stopped: the bank approval expired`,
         detail:
@@ -202,7 +206,7 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
       });
     else if (consentAt && Date.parse(consentAt) - now.getTime() <= 24 * 3600000)
       problems.push({
-        ...base,
+        ...approval,
         severity: 'critical',
         title: `${label} approval expires within a day`,
         detail:
@@ -218,10 +222,11 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
         since: lastSuccess,
       });
     else if (
-      row.state === 'failed' &&
-      row.error_code !== 'transient' &&
-      row.error_code !== 'rate_limit' &&
-      row.error_code !== 'consent_pending'
+      connectionState(row, now) === 'stopped' ||
+      (row.state === 'failed' &&
+        row.error_code !== 'transient' &&
+        row.error_code !== 'rate_limit' &&
+        row.error_code !== 'consent_pending')
     )
       problems.push({
         ...base,
@@ -260,6 +265,33 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
       });
   }
   return problems;
+}
+
+/**
+ * How long a bank must have been without a complete run before its stopping is
+ * worth a Telegram message. A database restart kills an import now and then,
+ * and the scheduler retries it within about an hour and a half, so a message
+ * sent the moment the screen says "stopped" would mostly announce things that
+ * have already mended themselves.
+ */
+const NOTIFY_AFTER_MS = 3 * 3600000;
+
+/**
+ * The bank imports that have stopped and are worth telling the household about
+ * in Telegram: critical, not an approval (those have their own notices), and
+ * without a complete run for long enough that it is not mending by itself.
+ */
+export async function stoppedImportProblems(
+  db: Executor,
+  now: Date = new Date(),
+): Promise<Problem[]> {
+  return (await bankProblems(db, now)).filter(
+    (problem) =>
+      problem.severity === 'critical' &&
+      !problem.id.endsWith(':approval') &&
+      problem.since !== null &&
+      now.getTime() - Date.parse(problem.since) >= NOTIFY_AFTER_MS,
+  );
 }
 
 /** The exchange rates every converted total is built on. */
