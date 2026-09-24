@@ -9,7 +9,29 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**1a4e0c19d6802a4cdde1090d7b2f9c5b8a0fdae0**, live since September 23, 2026 at
+**6d613a14d5d79c39387a1dcf49835639a30be1ec**, live since September 24, 2026 at
+schema version 67, deployed with `deploy/release.sh`: both services active,
+schema 67, 4,220 transactions, server tests and the migration rehearsal passed.
+It carries PR #151 and adds migration 67, which lets the reminder outbox carry
+`bank_import` notices.
+
+**A database restart no longer stops a bank unseen.** The unattended upgrade that
+restarted PostgreSQL on 23 September also killed an import of Kate's Monobank
+four minutes in. The failure read as unknown, the scheduler latched the
+connection, and for 29 hours nothing imported while the Bank imports page said
+"Importing now", Home and System health said nothing and no message was sent.
+Now a lost database connection is `transient`; the scheduler reads the last
+`bank_sync_failed` line; a latch whose run left its attempt open with no live
+lease is lifted on the transient backoff; a dead `running` row reads as stopped;
+a latched bank is a Problem at once; System health shows the Problems list; and
+a bank stopped for three hours is sent to Telegram once. See
+[the incident note](incidents/2026-09-23-import-latched-on-database-restart.md).
+Verified on the server: the first firing on this release, 08:40 UTC, lifted
+Kate's latch by itself; the import finished at 08:47 `succeeded` across 7
+accounts with 9 payments changed, and `bank_sync_runs` reads `succeeded` with no
+wait. Nothing was typed on the server.
+
+**1a4e0c19d6802a4cdde1090d7b2f9c5b8a0fdae0**, superseded September 24, 2026, at
 schema version 66, deployed with `deploy/release.sh`: both services active,
 schema 66, 4,219 transactions, server tests and the migration rehearsal passed.
 It carries PR #149 and adds migration 66, `telegram_poll_cursor.polled_at`.

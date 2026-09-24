@@ -1,6 +1,6 @@
 # 2026-09-23: a database restart stopped Kate's Monobank for a day
 
-Status / severity / affected release: fixed in code, pending deploy / medium /
+Status / severity / affected release: closed, fixed in 6d613a1 / medium /
 02304dd and 1a4e0c1.
 Impact: no data changed or lost. `monobank:katya` imported nothing from 03:04 UTC
 on 23 September; every half-hourly firing afterwards exited `blocked` without a
