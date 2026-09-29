@@ -162,10 +162,8 @@ export class ConsentService {
   }
   /**
    * The longest approval, in milliseconds, the provider says this bank
-   * accepts. A request past it is refused. The default is this maximum: in
-   * September 2026 a ten-day request to LHV ended back on its login page after
-   * sign-in, while the provider's own link, asking for the maximum, went
-   * through (docs/bank-consent.md).
+   * accepts. A request past it is refused. The default is this maximum, so an
+   * approval is renewed as rarely as the bank allows.
    */
   private async maximumApproval(
     credentials: ConsentCredentials,
