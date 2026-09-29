@@ -19,6 +19,21 @@ editable; left blank on the plain form it means the bank's own. The page shows
 each bank by the name the owner uses; the form sends the provider's registered
 name, and that is what `bank_consents.bank` stores.
 
+The form also takes an approval length in whole days. Left blank, the request
+asks for the longest the bank allows: before each approval the server reads the
+provider's bank list (`GET /aspsps` for that country, personal) and takes the
+bank's `maximum_consent_validity`, less one minute so the provider's clock never
+sees the request as past it. A length above that maximum is refused rather than
+shortened, and an approval does not start if the provider publishes no maximum
+for the bank. The bank may still shorten what it grants; the expiry shown is the
+one the provider returns.
+
+Until 29 September 2026 every request asked for ten days. That month LHV began
+refusing it: after a successful Smart-ID sign-in the browser was returned to
+LHV's login page and never came back, while a link made from the provider's own
+control panel, which asks for the maximum, reached LHV's confirmation page with
+the same sign-in. LHV's maximum through the provider is 180 days.
+
 Starting an approval for a bank that already has a live one — by mistake, or to
 renew — records only the attempt (its state, country and requested bound in
 `requested_expires_at`). The row stays `authorized` with its real expiry until
@@ -47,11 +62,12 @@ notice that has not yet been sent. See `enqueueBankConsents` in
 
 The server signs AIS requests, stores only a hash of the 15-minute state token,
 checks the authenticated callback owner, and claims each state once before
-exchanging the code. The initial access request is bounded to ten days; the bank
-may shorten it. Session IDs are written atomically to mode-600 files under
+exchanging the code. The access request is bounded by the length the owner
+chose, or the bank's published maximum; the bank may shorten it. Session IDs are written atomically to mode-600 files under
 /var/lib/private-finances-consent, separately for each owner and bank. Neither
 codes nor session IDs are logged or returned on the connections page. Referrer
-headers are disabled. Only /auth and /sessions POSTs are supported; no payments.
+headers are disabled. Only /auth and /sessions POSTs and the /aspsps bank list are supported; no
+payments.
 
 Configuration: ENABLEBANKING_APPLICATION_ID, ENABLEBANKING_PRIVATE_KEY_FILE,
 ENABLEBANKING_SESSION_DIRECTORY and PUBLIC_ORIGIN in the restricted app.env.

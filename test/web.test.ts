@@ -200,12 +200,14 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
   );
   let starts = 0;
   let finishes = 0;
+  const lengths: Array<number | undefined> = [];
   const config: WebConfig = {
     consent: {
-      start: async (owner, bank, country) => {
+      start: async (owner, bank, country, days) => {
         assert.equal(owner, 'rodion');
         assert.equal(bank, 'Wise');
         assert.equal(country, 'LV');
+        lengths.push(days);
         starts++;
         return 'https://tilisy.enablebanking.com/ais/start?auth=synthetic';
       },
@@ -256,11 +258,16 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
       redirect: 'manual',
     });
     assert.equal(demoImport.status, 403);
-    const startConsent = (token: string) =>
+    const startConsent = (token: string, days = '') =>
       fetch(base + '/connections/enablebanking/start', {
         method: 'POST',
         headers: { cookie },
-        body: new URLSearchParams({ csrf: token, bank: 'Wise', country: 'lv' }),
+        body: new URLSearchParams({
+          csrf: token,
+          bank: 'Wise',
+          country: 'lv',
+          days,
+        }),
       });
     assert.equal((await startConsent('invalid')).status, 403);
     assert.equal(starts, 0);
@@ -273,6 +280,11 @@ test('PostgreSQL mode requires credentials and enforces owner writes', async () 
       ),
     );
     assert.equal(starts, 1);
+    // Blank is the bank's maximum; a number is whole days; anything else stops here.
+    assert.equal((await startConsent(csrf, '30')).status, 200);
+    assert.notEqual((await startConsent(csrf, '30.5')).status, 200);
+    assert.notEqual((await startConsent(csrf, '0')).status, 200);
+    assert.deepEqual(lengths, [undefined, 30]);
     const callback = await fetch(
       base +
         '/connections/enablebanking/callback?state=test-state&code=test-code',

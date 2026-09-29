@@ -19,6 +19,15 @@ export type ConsentPost = (
   body: Record<string, unknown>,
   headers: Record<string, string>,
 ) => Promise<unknown>;
+/** A single, non-retrying read of the provider's bank list for one country. */
+export type ConsentGet = (
+  path: '/aspsps',
+  query: { country: string; psu_type: 'personal' },
+  headers: Record<string, string>,
+) => Promise<unknown>;
+const DAY_MS = 86400000;
+/** The longest approval the owner may ask for, whatever a bank publishes. */
+const MAX_APPROVAL_DAYS = 730;
 export class ConsentError extends Error {
   constructor() {
     super('Bank connection could not be completed. Start a new connection.');
@@ -44,6 +53,22 @@ const productionPost: ConsentPost = async (path, body, headers) => {
     redirect: 'error',
     signal: AbortSignal.timeout(15000),
   });
+  return readJson(response);
+};
+const productionGet: ConsentGet = async (path, query, headers) => {
+  if (path !== '/aspsps') throw new ConsentError();
+  const url = new URL(`https://api.enablebanking.com${path}`);
+  url.searchParams.set('country', query.country);
+  url.searchParams.set('psu_type', query.psu_type);
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+    redirect: 'error',
+    signal: AbortSignal.timeout(15000),
+  });
+  return readJson(response);
+};
+async function readJson(response: Response): Promise<unknown> {
   if (!response.ok) {
     await response.body?.cancel();
     throw new ConsentError();
@@ -64,7 +89,7 @@ const productionPost: ConsentPost = async (path, body, headers) => {
     await reader.cancel();
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-};
+}
 
 /** AIS consent contract: https://enablebanking.com/docs/api/reference/#user-sessions */
 export class ConsentService {
@@ -77,6 +102,7 @@ export class ConsentService {
       redirectUrl: string;
       secretDirectory: string;
       post?: ConsentPost;
+      get?: ConsentGet;
     },
   ) {
     try {
@@ -134,15 +160,75 @@ export class ConsentService {
       }),
     );
   }
-  async start(owner: Owner, bank: Bank, country: string): Promise<string> {
+  /**
+   * The longest approval, in milliseconds, the provider says this bank
+   * accepts. A request past it is refused. The default is this maximum: in
+   * September 2026 a ten-day request to LHV ended back on its login page after
+   * sign-in, while the provider's own link, asking for the maximum, went
+   * through (docs/bank-consent.md).
+   */
+  private async maximumApproval(
+    credentials: ConsentCredentials,
+    bank: Bank,
+    country: string,
+  ): Promise<number> {
+    const list = object(
+      await (this.config.get ?? productionGet)(
+        '/aspsps',
+        { country, psu_type: 'personal' },
+        {
+          Authorization: `Bearer ${signJwt(credentials.applicationId, credentials.privateKey)}`,
+          Accept: 'application/json',
+        },
+      ),
+    );
+    if (!Array.isArray(list.aspsps)) throw new ConsentError();
+    const entry = list.aspsps.find(
+      (a: unknown) =>
+        !!a &&
+        typeof a === 'object' &&
+        (a as Record<string, unknown>).name === bank &&
+        (a as Record<string, unknown>).country === country,
+    ) as Record<string, unknown> | undefined;
+    const seconds = entry?.maximum_consent_validity;
+    if (
+      typeof seconds !== 'number' ||
+      !Number.isSafeInteger(seconds) ||
+      seconds < DAY_MS / 1000
+    )
+      throw new ConsentError();
+    return Math.min(seconds * 1000, MAX_APPROVAL_DAYS * DAY_MS);
+  }
+  /**
+   * Start an approval. `days` is how long the owner asks for; left out, it is
+   * the bank's maximum. More than the bank allows is refused rather than
+   * quietly shortened, so the owner never approves a length they did not see.
+   */
+  async start(
+    owner: Owner,
+    bank: Bank,
+    country: string,
+    days?: number,
+  ): Promise<string> {
     ownerCheck(owner);
-    if (!isBankName(bank) || !/^[A-Z]{2}$/.test(country))
+    if (
+      !isBankName(bank) ||
+      !/^[A-Z]{2}$/.test(country) ||
+      (days !== undefined && (!Number.isSafeInteger(days) || days < 1))
+    )
       throw new ConsentError();
     const credentials = this.credentials(owner);
+    const maximum = await this.maximumApproval(credentials, bank, country);
+    if (days !== undefined && days * DAY_MS > maximum) throw new ConsentError();
     const state = randomBytes(32).toString('base64url');
     const digest = hash(state);
-    // A bounded initial consent; provider may shorten this further.
-    const expiry = new Date(Date.now() + 10 * 86400000).toISOString();
+    // A minute inside the bank's limit, so the provider's clock — which reads
+    // "now" after ours — never sees the request as past it. The bank may
+    // shorten the approval further.
+    const expiry = new Date(
+      Date.now() +
+        Math.min(days === undefined ? maximum : days * DAY_MS, maximum - 60000),
+    ).toISOString();
     try {
       // An approval that is live stays live: the owner starting another
       // attempt for the same bank — by mistake, or to renew — must not turn

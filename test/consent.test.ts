@@ -5,10 +5,23 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { memoryDatabase } from '../src/database.js';
-import { ConsentService, type ConsentPost } from '../src/consent.js';
+import {
+  ConsentService,
+  type ConsentGet,
+  type ConsentPost,
+} from '../src/consent.js';
+import { BANK_NAMES } from '../src/connectors/banks.js';
 const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
   .privateKey.export({ type: 'pkcs8', format: 'pem' })
   .toString();
+/** The provider's bank list: every bank we know, in any country asked, up to 180 days. */
+const aspsps: ConsentGet = async (_path, query) => ({
+  aspsps: BANK_NAMES.map((name) => ({
+    name,
+    country: query.country,
+    maximum_consent_validity: 180 * 86400,
+  })),
+});
 
 test('consent binds owner and bank, stores only hashed state, claims once, saves private session', async () => {
   const db = memoryDatabase(),
@@ -52,6 +65,7 @@ test('consent binds owner and bank, stores only hashed state, claims once, saves
     privateKey,
     applicationId: 'synthetic',
     redirectUrl: 'https://example.com/callback',
+    get: aspsps,
     secretDirectory: dir,
     post,
   });
@@ -117,6 +131,7 @@ test('expired and uncertain callbacks cannot be exchanged again; failed storage 
     credentialsByOwner: {
       katya: { applicationId: 'synthetic-katya', privateKey },
     },
+    get: aspsps,
     secretDirectory: join(dir, 'missing'),
     post,
   });
@@ -153,6 +168,7 @@ test('authorization rejects an untrusted redirect host', async () => {
     privateKey,
     applicationId: 'synthetic',
     redirectUrl: 'https://example.com/callback',
+    get: aspsps,
     secretDirectory: tmpdir(),
     post: async () => ({
       url: 'https://auth.enablebanking.com.evil.example/ais/start',
@@ -182,6 +198,7 @@ test('owner credentials sign both consent endpoints and wrong-owner state cannot
       katya: { applicationId: 'synthetic-katya', privateKey },
     },
     redirectUrl: 'https://example.com/callback',
+    get: aspsps,
     secretDirectory: dir,
     post: async (path, body, headers) => {
       const header = JSON.parse(
@@ -239,6 +256,7 @@ test('missing owner credentials fail before network without using Rodion fallbac
     applicationId: 'synthetic-legacy-rodion',
     privateKey,
     redirectUrl: 'https://example.com/callback',
+    get: aspsps,
     secretDirectory: tmpdir(),
     post: (async (_path, body) => {
       calls++;
@@ -307,6 +325,7 @@ test('starting another approval leaves a live one authorised until the new one s
     privateKey,
     applicationId: 'synthetic',
     redirectUrl: 'https://example.com/callback',
+    get: aspsps,
     secretDirectory: dir,
     post,
   });
@@ -354,5 +373,84 @@ test('starting another approval leaves a live one authorised until the new one s
   } finally {
     await rm(dir, { recursive: true, force: true });
     await db.close?.();
+  }
+});
+
+test('approval length: blank asks for the bank maximum, a number for that many days, more than the bank allows is refused', async () => {
+  const db = memoryDatabase(),
+    dir = await mkdtemp(join(tmpdir(), 'consent-'));
+  const asked: number[] = [];
+  let lookups = 0;
+  const service = new ConsentService({
+    db,
+    privateKey,
+    applicationId: 'synthetic',
+    redirectUrl: 'https://example.com/callback',
+    get: async (path, query, headers) => {
+      lookups++;
+      assert.equal(path, '/aspsps');
+      assert.deepEqual(query, { country: 'EE', psu_type: 'personal' });
+      assert.match(headers.Authorization!, /^Bearer /);
+      return {
+        aspsps: [
+          { name: 'LHV Pank', country: 'LV', maximum_consent_validity: 86400 },
+          {
+            name: 'LHV Pank',
+            country: 'EE',
+            maximum_consent_validity: 15552000,
+          },
+        ],
+      };
+    },
+    secretDirectory: dir,
+    post: async (_path, body) => {
+      const until = (body.access as { valid_until: string }).valid_until;
+      asked.push((Date.parse(until) - Date.now()) / 86400000);
+      return {
+        url: 'https://tilisy.enablebanking.com/ais/start?sessionid=synthetic',
+      };
+    },
+  });
+  try {
+    await service.initialize();
+    await service.start('rodion', 'LHV Pank', 'EE');
+    // Just inside the bank's 180 days, so the provider never sees it as past.
+    assert.ok(asked[0]! < 180 && asked[0]! > 179.99, String(asked[0]));
+    await service.start('rodion', 'LHV Pank', 'EE', 30);
+    assert.equal(Math.round(asked[1]!), 30);
+    await assert.rejects(service.start('rodion', 'LHV Pank', 'EE', 181));
+    await assert.rejects(service.start('rodion', 'LHV Pank', 'EE', 0));
+    await assert.rejects(service.start('rodion', 'LHV Pank', 'EE', 1.5));
+    assert.equal(asked.length, 2);
+    // A malformed length is refused before the provider is asked anything.
+    assert.equal(lookups, 3);
+  } finally {
+    await db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('approval does not start when the provider does not say how long the bank allows', async () => {
+  const db = memoryDatabase();
+  let posts = 0;
+  const service = new ConsentService({
+    db,
+    privateKey,
+    applicationId: 'synthetic',
+    redirectUrl: 'https://example.com/callback',
+    get: async () => ({ aspsps: [{ name: 'Wise', country: 'LV' }] }),
+    secretDirectory: tmpdir(),
+    post: async () => {
+      posts++;
+      return {};
+    },
+  });
+  try {
+    await service.initialize();
+    await assert.rejects(service.start('rodion', 'Wise', 'LV'));
+    assert.equal(posts, 0);
+    assert.deepEqual(await service.list('rodion'), []);
+  } finally {
+    await db.close();
   }
 });
