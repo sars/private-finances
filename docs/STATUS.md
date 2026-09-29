@@ -9,7 +9,21 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**6d613a14d5d79c39387a1dcf49835639a30be1ec**, live since September 24, 2026 at
+**24f0c4d8055436e6223e6571351a5b423f88bd25**, live since September 29, 2026 at
+schema version 67, deployed with `deploy/release.sh`: both services active,
+schema 67, 4,278 transactions, server tests (716 pass, 0 fail) and the migration
+rehearsal passed. It carries PR #153 and has no migration.
+
+**An approval asks the bank for its longest allowed length.** Before each
+approval the server reads the provider's published maximum for the bank, and
+Bank connections takes an optional shorter length in days; see "LHV renewal"
+below and [bank consent](bank-consent.md). Verified after the switch: the live
+Bank connections bundle carries the new field. The first release attempt
+stalled after the server tests had passed, because the SSH session from the
+operator's machine went silent; it was stopped before the switch, cleaned up,
+and the second attempt went through.
+
+**6d613a14d5d79c39387a1dcf49835639a30be1ec**, superseded September 29, 2026, live since September 24, 2026 at
 schema version 67, deployed with `deploy/release.sh`: both services active,
 schema 67, 4,220 transactions, server tests and the migration rehearsal passed.
 It carries PR #151 and adds migration 67, which lets the reminder outbox carry
@@ -1253,10 +1267,10 @@ approval. A link made from Enable Banking's control panel with the same sign-in
 reached LHV's confirmation page. The provider lists LHV with one method (redirect)
 and a 180-day maximum, and our request differed only in asking for ten days.
 
-Implemented and tested on branch `fix/lhv-approval-length`, not yet deployed:
-the approval asks for the bank's published maximum unless the owner enters a
-shorter length on Bank connections ([bank consent](bank-consent.md)). Pending:
-deploy, then one LHV approval attempt to confirm that the length was the cause.
+Deployed in 24f0c4d: the approval asks for the bank's published maximum unless
+the owner enters a shorter length on Bank connections
+([bank consent](bank-consent.md)). Pending: one LHV approval attempt by the owner
+to confirm that the length was the cause.
 If LHV still returns to its login page, the next step is Enable Banking support.
 
 ## Standing limits
