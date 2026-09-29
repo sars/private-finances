@@ -28,11 +28,11 @@ shortened, and an approval does not start if the provider publishes no maximum
 for the bank. The bank may still shorten what it grants; the expiry shown is the
 one the provider returns.
 
-Until 29 September 2026 every request asked for ten days. That month LHV began
-refusing it: after a successful Smart-ID sign-in the browser was returned to
-LHV's login page and never came back, while a link made from the provider's own
-control panel, which asks for the maximum, reached LHV's confirmation page with
-the same sign-in. LHV's maximum through the provider is 180 days.
+Until 29 September 2026 every request asked for ten days; LHV's maximum through
+the provider is 180 days.
+
+Approving LHV takes two sign-ins: after choosing accounts, LHV shows its login
+page again, and signing in a second time finishes the approval.
 
 Starting an approval for a bank that already has a live one — by mistake, or to
 renew — records only the attempt (its state, country and requested bound in
@@ -52,8 +52,8 @@ next run lifts the latch on its own and imports — nothing has to be cleared on
 the server. See "Failures and disablement" in [scheduling](scheduling.md) for how
 the two files are compared and why one approval permits only one attempt.
 
-An approval lasts days rather than months, and when it lapses the imports stop
-without any other sign. The Telegram loop therefore checks every authorised
+An approval ends — after days or months, depending on the bank and the length
+asked for — and when it lapses the imports stop without any other sign. The Telegram loop therefore checks every authorised
 approval on each pass and sends a notice five, two and one day before it ends,
 and again on the day itself — worded to say which bank, whose approval, and that
 nothing is importing until it is renewed. Renewing an approval retires any

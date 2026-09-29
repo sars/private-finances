@@ -1249,8 +1249,8 @@ missing, with its rows listed and out of every total.
 Private Tailscale HTTPS deployment with per-owner authentication. Bank imports run
 on enabled systemd timers for seven instances: Enable Banking `rodion-wise`,
 `rodion-revolut`, `rodion-swedbank`, `katya-wise` and `rodion-lhv`, plus
-Monobank `rodion` and `katya`. The LHV approval lapsed on September 27 and LHV
-imports are stopped until it is renewed; see "LHV renewal" below. Daily
+Monobank `rodion` and `katya`. LHV was renewed on September 29 for 180 days,
+after two days stopped; see "LHV renewal" below. Daily
 commercial FX ingestion, household report delivery, Telegram clarification
 questions with owner replies and confirmation, bounded AI categorization, and
 receipt photos through the paired family Telegram chat are all working. Home and
@@ -1259,19 +1259,9 @@ transfers and incomplete bank coverage stay visible rather than hidden.
 
 ## LHV renewal
 
-Since September 27 every attempt to renew the LHV approval, on desktop and on
-iPhone, ended after a successful Smart-ID sign-in back on LHV's login page
-(`api.lhv.eu/psd2/ui/auth/login`); the server log shows no callback after the
-29 September 11:49 UTC start, and `bank_consents` still holds the lapsed
-approval. A link made from Enable Banking's control panel with the same sign-in
-reached LHV's confirmation page. The provider lists LHV with one method (redirect)
-and a 180-day maximum, and our request differed only in asking for ten days.
-
-Deployed in 24f0c4d: the approval asks for the bank's published maximum unless
-the owner enters a shorter length on Bank connections
-([bank consent](bank-consent.md)). Pending: one LHV approval attempt by the owner
-to confirm that the length was the cause.
-If LHV still returns to its login page, the next step is Enable Banking support.
+LHV lapsed on September 27 and was renewed on September 29 for 180 days, until
+28 March 2027. The earlier attempts had stopped at LHV's second sign-in, which
+is part of its approval flow, not an error. The next import succeeded.
 
 ## Standing limits
 
