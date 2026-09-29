@@ -1234,13 +1234,30 @@ missing, with its rows listed and out of every total.
 
 Private Tailscale HTTPS deployment with per-owner authentication. Bank imports run
 on enabled systemd timers for seven instances: Enable Banking `rodion-wise`,
-`rodion-revolut`, `rodion-swedbank`, `katya-wise` and `rodion-lhv` (waiting on
-the owner's approval), plus Monobank `rodion` and `katya`. Daily
+`rodion-revolut`, `rodion-swedbank`, `katya-wise` and `rodion-lhv`, plus
+Monobank `rodion` and `katya`. The LHV approval lapsed on September 27 and LHV
+imports are stopped until it is renewed; see "LHV renewal" below. Daily
 commercial FX ingestion, household report delivery, Telegram clarification
 questions with owner replies and confirmation, bounded AI categorization, and
 receipt photos through the paired family Telegram chat are all working. Home and
 Analytics use explicit periods and separately marked historical estimates. Unknown
 transfers and incomplete bank coverage stay visible rather than hidden.
+
+## LHV renewal
+
+Since September 27 every attempt to renew the LHV approval, on desktop and on
+iPhone, ended after a successful Smart-ID sign-in back on LHV's login page
+(`api.lhv.eu/psd2/ui/auth/login`); the server log shows no callback after the
+29 September 11:49 UTC start, and `bank_consents` still holds the lapsed
+approval. A link made from Enable Banking's control panel with the same sign-in
+reached LHV's confirmation page. The provider lists LHV with one method (redirect)
+and a 180-day maximum, and our request differed only in asking for ten days.
+
+Implemented and tested on branch `fix/lhv-approval-length`, not yet deployed:
+the approval asks for the bank's published maximum unless the owner enters a
+shorter length on Bank connections ([bank consent](bank-consent.md)). Pending:
+deploy, then one LHV approval attempt to confirm that the length was the cause.
+If LHV still returns to its login page, the next step is Enable Banking support.
 
 ## Standing limits
 

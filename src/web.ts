@@ -159,7 +159,12 @@ export type WebConfig = {
   telegram?: TelegramClarifications;
   classifierFor?: (owner: Owner) => Promise<Classifier>;
   consent?: {
-    start(owner: Owner, bank: BankName, country: string): Promise<string>;
+    start(
+      owner: Owner,
+      bank: BankName,
+      country: string,
+      days?: number,
+    ): Promise<string>;
     finish(owner: Owner, state: string, code: string): Promise<void>;
     list(
       owner: Owner,
@@ -1123,7 +1128,7 @@ export function web(
           ? await config.consent.list(actor)
           : [];
         html(
-          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>${escape(bankListSentence())}</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANKS.map((b) => `<option value="${escape(b.name)}">${escape(b.label)}</option>`).join('')}</select></label><label>Country code for the bank connection (blank for the bank's own)<input name="country" pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
+          `<h1>Bank connections</h1><p>Signed in as ${escape(actor)}. Approve only your own bank accounts.</p><h2>Monobank</h2><p>${config.monobankJarsExcluded ? 'Regular accounts only. Jars are excluded from future imports; any previously imported records remain visible.' : 'All API-listed regular accounts and jars are in import scope.'}</p><h2>${escape(bankListSentence())}</h2>${config.consent ? `<p>First link your accounts in Enable Banking's application settings. Then start the separate bank approval below. Keep Tailscale connected when returning here.</p><form method="post" action="/connections/enablebanking/start"><input type="hidden" name="csrf" value="${csrf}"><label>Bank<select name="bank">${BANKS.map((b) => `<option value="${escape(b.name)}">${escape(b.label)}</option>`).join('')}</select></label><label>Country code for the bank connection (blank for the bank's own)<input name="country" pattern="[A-Za-z]{2}" maxlength="2" placeholder="e.g. LV"></label><label>Approval length in days (blank for the longest the bank allows)<input name="days" inputmode="numeric" pattern="[1-9][0-9]{0,2}" maxlength="3"></label><button>Start bank approval</button></form>` : '<p>Bank approval is not configured yet.</p>'}${connections.map((c) => `<section class="total"><h2>${escape(c.bank)} · ${escape(c.country)}</h2><p>${escape(c.status)} · Valid until ${escape(c.expiry)}</p></section>`).join('')}<p>Approving access does not automatically start transaction imports or classify spending.</p>`,
         );
         return;
       }
@@ -1681,7 +1686,16 @@ export function web(
           // the provider rather than being second-guessed here.
           const country =
             (form.country ?? '').trim().toUpperCase() || bankCountry(bank);
-          const target = await config.consent.start(actor, bank, country);
+          // Blank asks for the bank's maximum; anything else is whole days.
+          const daysText = (form.days ?? '').trim();
+          if (daysText && !/^[1-9][0-9]{0,2}$/.test(daysText))
+            throw new Error('invalid_approval_days');
+          const target = await config.consent.start(
+            actor,
+            bank,
+            country,
+            daysText ? Number(daysText) : undefined,
+          );
           const destination = new URL(target);
           if (
             destination.protocol !== 'https:' ||

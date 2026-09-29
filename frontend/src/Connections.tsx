@@ -54,6 +54,8 @@ export default function Connections() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [bank, setBank] = useState('Wise');
   const [country, setCountry] = useState('LV');
+  /** Blank asks for the longest approval the bank allows. */
+  const [days, setDays] = useState('');
   /** Choosing a bank chooses its country too; the field stays editable. */
   function chooseBank(name: string) {
     setBank(name);
@@ -120,6 +122,10 @@ export default function Connections() {
       setError('Enter a two-letter country code, such as LV.');
       return;
     }
+    if (days && !/^[1-9][0-9]{0,2}$/.test(days)) {
+      setError('Enter the approval length as whole days, or leave it blank.');
+      return;
+    }
     setStarting(true);
     setError('');
     try {
@@ -127,13 +133,13 @@ export default function Connections() {
         method: 'POST',
         credentials: 'same-origin',
         headers: { Accept: 'application/json' },
-        body: new URLSearchParams({ csrf: session.csrf, bank, country }),
+        body: new URLSearchParams({ csrf: session.csrf, bank, country, days }),
       });
       if (!response.ok)
         throw new Error(
           response.status === 403
             ? 'Your session changed. Reload before starting bank approval.'
-            : `We couldn’t start approval for ${bankLabel(session.banks, bank)} in ${country}. Check the country code and try again.`,
+            : `We couldn’t start approval for ${bankLabel(session.banks, bank)} in ${country}. Check the country code${days ? ', and that the bank allows an approval that long,' : ''} and try again.`,
         );
       const data = await response.json();
       const destination = new URL(data.redirect);
@@ -265,6 +271,31 @@ export default function Connections() {
                             className="mt-1.5 text-xs text-muted-foreground"
                           >
                             Two-letter country code, for example LV for Latvia.
+                          </p>
+                        </Field>
+                        <Field
+                          label="Approval length in days"
+                          htmlFor="connection-days"
+                        >
+                          <Input
+                            id="connection-days"
+                            value={days}
+                            onChange={(e) =>
+                              setDays(e.target.value.replace(/\D/g, ''))
+                            }
+                            placeholder="Longest the bank allows"
+                            inputMode="numeric"
+                            maxLength={3}
+                            pattern="[1-9][0-9]{0,2}"
+                            disabled={starting}
+                            aria-describedby="connection-days-help"
+                          />
+                          <p
+                            id="connection-days-help"
+                            className="mt-1.5 text-xs text-muted-foreground"
+                          >
+                            Leave blank for the longest the bank allows. A
+                            shorter approval means renewing sooner.
                           </p>
                         </Field>
                         <Button
