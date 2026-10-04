@@ -113,6 +113,10 @@ function verdict(
 ): { health: Health; text: string } {
   if (c.consent && Date.parse(c.consent.expiresAt) <= now)
     return { health: 'attention', text: 'Approval expired' };
+  // A failure the owner has already answered by approving the bank again is a
+  // wait for the next timer, not something to act on.
+  if (c.reconnectedAt && (c.state === 'failed' || c.state === 'stopped'))
+    return { health: 'waiting', text: 'Reconnected, imports at next check' };
   if (c.state === 'never_run')
     return { health: 'waiting', text: 'Waiting for its first import' };
   if (c.state === 'failed')
@@ -253,7 +257,7 @@ function ConnectionCard({
             {c.consent.status !== 'authorized' ? ` · ${c.consent.status}` : ''}
           </p>
         )}
-        {c.errorCode && (
+        {c.errorCode && !c.reconnectedAt && (
           <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs leading-relaxed">
             <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
             <p>

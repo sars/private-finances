@@ -379,7 +379,7 @@ export class ConsentService {
       temporary = undefined;
       installed = destination;
       await this.config.db.query(
-        "UPDATE bank_consents SET status='authorized',expires_at=$3 WHERE owner=$1 AND state_hash=$2 AND status='processing'",
+        "UPDATE bank_consents SET status='authorized',expires_at=$3,authorized_at=now() WHERE owner=$1 AND state_hash=$2 AND status='processing'",
         [owner, digest, access.valid_until],
       );
     } catch {

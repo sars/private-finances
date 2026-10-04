@@ -66,6 +66,13 @@ export type ImportConnection = {
    */
   nextAttemptAt: string | null;
   retryReason: string | null;
+  /**
+   * When the owner approved this bank again, if that came after its last
+   * import attempt. A failure older than the approval has been answered and
+   * only waits for the scheduler's next timer, so the screens say so rather
+   * than asking for a reconnection already made. See `reconnectedConnections`.
+   */
+  reconnectedAt: string | null;
 };
 
 export type ImportRun = {
@@ -166,6 +173,56 @@ export function connectionState(
   return state;
 }
 
+/**
+ * How long an approval answers a failed import before the failure counts
+ * again. Every bank's timer fires every thirty minutes and the first one after
+ * an approval lifts the scheduler's latch and tries, so two hours is four
+ * chances; a bank still untried after that is stuck for some other reason and
+ * goes back to saying so.
+ */
+const RECONNECT_GRACE_MS = 2 * 3600000;
+
+/**
+ * Banks the owner has approved again since their last import attempt, keyed by
+ * connection, with when they did.
+ *
+ * A refused credential and a latched run both stay on the connection until the
+ * scheduler tries again, and the scheduler only tries on its next timer. On 4
+ * October 2026 Swedbank was approved four seconds after a timer had passed it
+ * by, and for half an hour Home went on telling the owner to reconnect a bank
+ * they just had. A failure older than the approval has been answered: what is
+ * left is a wait, not a fault.
+ */
+export async function reconnectedConnections(
+  db: Executor,
+  now: Date,
+): Promise<Map<string, string>> {
+  const consents = await db.query(
+    `SELECT owner,bank,authorized_at FROM bank_consents
+     WHERE status='authorized' AND authorized_at > $1::timestamptz`,
+    [new Date(now.getTime() - RECONNECT_GRACE_MS).toISOString()],
+  );
+  if (!consents.rows.length) return new Map();
+  const attempts = await db.query(
+    `SELECT connection, max(started_at) AS at FROM bank_sync_attempts
+     WHERE connection LIKE 'enablebanking:%' GROUP BY connection`,
+  );
+  const lastAttempt = new Map(
+    attempts.rows.map((row) => [String(row.connection), iso(row.at)]),
+  );
+  const reconnected = new Map<string, string>();
+  for (const row of consents.rows) {
+    const name = String(row.bank);
+    const approvedAt = iso(row.authorized_at);
+    if (!approvedAt || !isBankName(name)) continue;
+    const connection = `enablebanking:${String(row.owner)}:${bankSlug(name)}`;
+    const attemptedAt = lastAttempt.get(connection);
+    if (!attemptedAt || Date.parse(attemptedAt) < Date.parse(approvedAt))
+      reconnected.set(connection, approvedAt);
+  }
+  return reconnected;
+}
+
 export async function importStatus(
   db: Executor,
   now: Date = new Date(),
@@ -212,6 +269,7 @@ export async function importStatus(
      ORDER BY w.completed_at DESC LIMIT 40`,
   );
 
+  const reconnected = await reconnectedConnections(db, now);
   const windowByConnection = new Map(
     windows.rows.map((row) => [String(row.connection), row]),
   );
@@ -273,6 +331,7 @@ export async function importStatus(
       consent: consentByConnection.get(connection) ?? null,
       nextAttemptAt: iso(row.retry_after),
       retryReason: row.retry_reason ? String(row.retry_reason) : null,
+      reconnectedAt: reconnected.get(connection) ?? null,
     };
   });
   // A bank approved but never imported has no run row yet; it is still a
@@ -294,6 +353,7 @@ export async function importStatus(
         consent,
         nextAttemptAt: null,
         retryReason: null,
+        reconnectedAt: null,
       });
   connections.sort((a, b) =>
     a.owner === b.owner

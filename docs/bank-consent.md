@@ -52,6 +52,16 @@ next run lifts the latch on its own and imports — nothing has to be cleared on
 the server. See "Failures and disablement" in [scheduling](scheduling.md) for how
 the two files are compared and why one approval permits only one attempt.
 
+That next run is up to half an hour away, and until it happens the connection
+still carries the failure. So each approval records `bank_consents.authorized_at`
+(schema 68), and a failure older than the bank's latest approval reads as
+answered: Home shows "<bank> was reconnected and imports at its next check" as a
+warning instead of "needs reconnecting", and the Bank imports card says
+"Reconnected, imports at next check" without the reconnect advice. If the next
+attempt fails again, or nothing has tried within two hours of the approval, the
+original problem comes back. See `reconnectedConnections` in
+`src/import-status.ts`.
+
 An approval ends — after days or months, depending on the bank and the length
 asked for — and when it lapses the imports stop without any other sign. The Telegram loop therefore checks every authorised
 approval on each pass and sends a notice five, two and one day before it ends,
