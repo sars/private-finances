@@ -1109,6 +1109,20 @@ async function applyMigrations(db: Database): Promise<void> {
       );
       await tx.query('INSERT INTO schema_versions(version) VALUES (67)');
     }
+    if (
+      !(await tx.query('SELECT version FROM schema_versions WHERE version=68'))
+        .rows.length
+    ) {
+      // When the owner last approved a bank. A failed import keeps saying
+      // "reconnect this bank" until the scheduler's next attempt, which can be
+      // half an hour after the owner already has; this is what lets the
+      // screens tell an answered failure from an open one. Existing rows stay
+      // null: no approval date was ever recorded, and none is invented.
+      await tx.query(
+        'ALTER TABLE bank_consents ADD COLUMN IF NOT EXISTS authorized_at timestamptz',
+      );
+      await tx.query('INSERT INTO schema_versions(version) VALUES (68)');
+    }
   });
 }
 

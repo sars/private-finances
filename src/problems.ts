@@ -32,7 +32,7 @@
 import type { Executor } from './database.js';
 import type { CredentialHealth } from './credential-health.js';
 import { backupHealth, type BackupHealth } from './backup-health.js';
-import { connectionState } from './import-status.js';
+import { connectionState, reconnectedConnections } from './import-status.js';
 import {
   bankLabel,
   bankSlug,
@@ -171,6 +171,7 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
     if (at && isBankName(name))
       expiry.set(`${String(row.owner)}:${bankSlug(name)}`, at);
   }
+  const reconnected = await reconnectedConnections(db, now);
   const problems: Problem[] = [];
   for (const row of runs.rows) {
     const connection = String(row.connection);
@@ -195,6 +196,13 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
     // An approval has its own id: its notice ladder is sent elsewhere, and the
     // Telegram notice for a stopped import must not say the same thing twice.
     const approval = { ...base, id: `${base.id}:approval` };
+    const refused = row.error_code === 'auth';
+    const waitingForPerson =
+      connectionState(row, now) === 'stopped' ||
+      (row.state === 'failed' &&
+        row.error_code !== 'transient' &&
+        row.error_code !== 'rate_limit' &&
+        row.error_code !== 'consent_pending');
     if (consentAt && Date.parse(consentAt) <= now.getTime())
       problems.push({
         ...approval,
@@ -213,7 +221,19 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
           'Approve it again on the Bank connections page or the imports stop.',
         since: consentAt,
       });
-    else if (row.error_code === 'auth')
+    else if (reconnected.has(connection) && (refused || waitingForPerson))
+      // The owner has already done the one thing this would ask of them. Kept
+      // on the list, as a warning, because the totals are still short this
+      // bank until the import runs — but not as a request to reconnect again.
+      problems.push({
+        ...base,
+        severity: 'warning',
+        title: `${label} was reconnected and imports at its next check`,
+        detail:
+          'Nothing more is needed. The next scheduled import, within about half an hour, picks the new approval up.',
+        since: reconnected.get(connection)!,
+      });
+    else if (refused)
       problems.push({
         ...base,
         severity: 'critical',
@@ -221,13 +241,7 @@ async function bankProblems(db: Executor, now: Date): Promise<Problem[]> {
         detail: 'The bank refused the credentials this connection holds.',
         since: lastSuccess,
       });
-    else if (
-      connectionState(row, now) === 'stopped' ||
-      (row.state === 'failed' &&
-        row.error_code !== 'transient' &&
-        row.error_code !== 'rate_limit' &&
-        row.error_code !== 'consent_pending')
-    )
+    else if (waitingForPerson)
       problems.push({
         ...base,
         severity: 'critical',

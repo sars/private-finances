@@ -128,6 +128,77 @@ test('one bank with several things wrong is one row, naming the most specific', 
   }
 });
 
+test('a refused bank the owner has approved again waits instead of asking twice', async () => {
+  const db = await healthy();
+  const attempt = (startedAt: string) =>
+    db.query(
+      `INSERT INTO bank_sync_attempts(id,connection,started_at,from_at,to_at,outcome,error_code)
+       VALUES(gen_random_uuid(),'enablebanking:rodion:lhv',$1,$2,$1,'failed','auth')`,
+      [startedAt, hoursAgo(72)],
+    );
+  const approve = (at: string) =>
+    db.query("UPDATE bank_consents SET authorized_at=$1 WHERE owner='rodion'", [
+      at,
+    ]);
+  try {
+    await db.query(
+      `UPDATE bank_sync_runs SET state='failed',error_code='auth',retry_reason='blocked',last_success_at=$1
+       WHERE connection='enablebanking:rodion:lhv'`,
+      [hoursAgo(30)],
+    );
+    await attempt(hoursAgo(10));
+    // Approved before the failure: the failure stands.
+    await approve(hoursAgo(11));
+    let { problems } = await systemProblems(db, { now: NOW });
+    assert.match(problems[0]!.title, /LHV · Rodion needs reconnecting/);
+    assert.equal(problems[0]!.severity, 'critical');
+
+    // Approved after it: a wait for the next timer, not a second request.
+    await approve(hoursAgo(0.1));
+    ({ problems } = await systemProblems(db, { now: NOW }));
+    assert.equal(problems.length, 1);
+    assert.equal(problems[0]!.severity, 'warning');
+    assert.match(
+      problems[0]!.title,
+      /was reconnected and imports at its next check/,
+    );
+    assert.equal(problems[0]!.since, hoursAgo(0.1));
+
+    // The next attempt is refused too: the approval did not help, so say so.
+    await attempt(hoursAgo(0.05));
+    ({ problems } = await systemProblems(db, { now: NOW }));
+    assert.match(problems[0]!.title, /needs reconnecting/);
+  } finally {
+    await db.close();
+  }
+});
+
+test('an approval nothing has tried for two hours stops excusing the failure', async () => {
+  const db = await healthy();
+  try {
+    await db.query(
+      `UPDATE bank_sync_runs SET state='failed',error_code='sync_failed',retry_reason='blocked',last_success_at=$1
+       WHERE connection='enablebanking:rodion:lhv'`,
+      [hoursAgo(30)],
+    );
+    await db.query(
+      "UPDATE bank_consents SET authorized_at=$1 WHERE owner='rodion'",
+      [hoursAgo(1)],
+    );
+    let { problems } = await systemProblems(db, { now: NOW });
+    assert.equal(problems[0]!.severity, 'warning');
+    await db.query(
+      "UPDATE bank_consents SET authorized_at=$1 WHERE owner='rodion'",
+      [hoursAgo(3)],
+    );
+    ({ problems } = await systemProblems(db, { now: NOW }));
+    assert.match(problems[0]!.title, /stopped and is waiting to be looked at/);
+    assert.equal(problems[0]!.severity, 'critical');
+  } finally {
+    await db.close();
+  }
+});
+
 test('a run left for review is reported, but an ordinary retry is not', async () => {
   const db = await healthy();
   const failWith = async (code: string) => {

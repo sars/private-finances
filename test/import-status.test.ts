@@ -119,6 +119,16 @@ test('the imports view is a reading of what the importer recorded', async () => 
     assert.equal(wiseRow!.runs24h, 0);
     assert.equal(wiseRow!.consent?.expiresAt, '2026-09-22T14:04:49.000Z');
     assert.deepEqual(wiseRow!.accounts, []);
+    assert.equal(wiseRow!.reconnectedAt, null);
+
+    // Approved again after that failure: the screen waits for the next timer
+    // rather than asking for the reconnection a second time.
+    await db.query(
+      "UPDATE bank_consents SET authorized_at=now() WHERE owner='katya'",
+    );
+    const answered = (await importStatus(db, new Date())).connections[0]!;
+    assert.ok(answered.reconnectedAt);
+    assert.equal(answered.errorCode, 'rate_limit');
 
     // Approved and never imported is still a connection the owner waits on.
     assert.equal(lhvRow!.consent?.country, 'EE');

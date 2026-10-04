@@ -330,6 +330,16 @@ test('starting another approval leaves a live one authorised until the new one s
     post,
   });
   const live = async () => (await service.list('rodion'))[0]!;
+  // When the owner last approved, which the screens compare against the last
+  // import attempt to tell an answered failure from an open one.
+  const approvedAt = async () =>
+    Number(
+      (
+        await db.query(
+          "SELECT extract(epoch FROM authorized_at)::float8 AS at FROM bank_consents WHERE owner='rodion' AND bank='Wise'",
+        )
+      ).rows[0]!.at,
+    );
   try {
     await service.initialize();
     // A first approval, completed.
@@ -337,6 +347,8 @@ test('starting another approval leaves a live one authorised until the new one s
     await service.finish('rodion', state, 'code-1');
     const first = await live();
     assert.equal(first.status, 'authorized');
+    const firstApproval = await approvedAt();
+    assert.ok(firstApproval > 0);
 
     // A second attempt is started and abandoned: the live one is untouched.
     await service.start('rodion', 'Wise', 'LV');
@@ -353,6 +365,7 @@ test('starting another approval leaves a live one authorised until the new one s
     accept = false;
     await assert.rejects(service.finish('rodion', state, 'code-2'));
     assert.deepEqual(await live(), first);
+    assert.equal(await approvedAt(), firstApproval);
 
     // A renewal that succeeds replaces it, with the new expiry.
     accept = true;
@@ -362,6 +375,7 @@ test('starting another approval leaves a live one authorised until the new one s
     assert.equal(renewed.status, 'authorized');
     assert.equal(renewed.expiry, new Date(sessionExpiry).toISOString());
     assert.ok(Date.parse(renewed.expiry) > Date.parse(first.expiry));
+    assert.ok((await approvedAt()) > firstApproval);
 
     // A bank with no live approval still reads "failed" when refused.
     accept = false;
