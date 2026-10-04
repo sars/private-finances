@@ -9,7 +9,23 @@ release with `origin/main` rather than reconstructing it by hand.
 
 ## Deployed release
 
-**24f0c4d8055436e6223e6571351a5b423f88bd25**, live since September 29, 2026 at
+**023a2247b2c77828024fc2414716746b13a00546**, live since October 4, 2026 at
+schema version 68, deployed with `deploy/release.sh`: both services active,
+schema 68, 4,328 transactions, server tests (718 pass, 0 fail) and the migration
+rehearsal passed. It carries PR #156 and adds migration 68,
+`bank_consents.authorized_at`.
+
+**A reconnected bank no longer asks to be reconnected again.** Approving a bank
+did not clear its last import failure; that waited for the scheduler's next
+timer, up to half an hour later, and Home kept saying "needs reconnecting" in
+the meantime (Swedbank, 4 October, approved four seconds after a timer). A
+failure older than the bank's latest approval now reads as answered: a warning
+on Home and "Reconnected, imports at next check" on Bank imports. A further
+failure, or two hours with no attempt, brings the original problem back. See
+[bank consent](bank-consent.md). Approvals made before this release have no
+recorded time, so the change applies from the next approval on.
+
+**24f0c4d8055436e6223e6571351a5b423f88bd25**, superseded October 4, 2026, live since September 29, 2026 at
 schema version 67, deployed with `deploy/release.sh`: both services active,
 schema 67, 4,278 transactions, server tests (716 pass, 0 fail) and the migration
 rehearsal passed. It carries PR #153 and has no migration.
@@ -257,8 +273,8 @@ evening started from, and its story follows.
 The owner asked why a payment they had just made produced no Telegram question.
 It had matched an owner-confirmed rule, so triage called it decided and asked
 nobody — and the rule pointed at the root catch-all, which the automatic write
-refuses to file anything under. `ready` is triage's word for *decided, nothing
-to ask*, and the question lane only selects `ready` rows carrying their own
+refuses to file anything under. `ready` is triage's word for _decided, nothing
+to ask_, and the question lane only selects `ready` rows carrying their own
 question text, or rows that are `deferred` or `uncertain`. So the payment was
 neither classified nor asked about, and nothing would have looked at it again.
 The state test and the write test are now one function, so they cannot drift
@@ -366,7 +382,7 @@ written under it stay.
 Sterling is withdrawn as a **display** currency: totals report in hryvnia, euro
 or dollars. None of the four banks quote GBP at all, so it gets no secondary
 source and a sterling payment on a day the primary source left empty stays
-missing, which is the standing rule. Payments *made* in sterling are unaffected
+missing, which is the standing rule. Payments _made_ in sterling are unaffected
 and still convert.
 
 Two fixes to the conversion status page came with it. The strip counted every
@@ -1537,8 +1553,8 @@ root catch-all, which the automatic write refuses to file anything under. The
 payment was neither classified nor asked about, and the only reason anyone
 noticed is that the owner went looking for a question that never arrived.
 
-`ready` is triage's word for *decided, nothing to ask*. It could also mean
-*decided, and nothing written*, because the state it stored and the
+`ready` is triage's word for _decided, nothing to ask_. It could also mean
+_decided, and nothing written_, because the state it stored and the
 classification it wrote used two separate copies of the same test and only the
 write knew about the catch-all. The question lane selects `ready` rows that
 carry their own question text, or rows that are `deferred` or `uncertain`, so
@@ -1768,7 +1784,7 @@ test suite.
 **A healthy run recorded no requests at all.** The observer was wired into the
 requester's refusal branch only, so a successful request — the overwhelming
 majority — reported nothing. The first real import wrote its stages and no
-requests. Both observer tests had asserted on a *refused* request, which is
+requests. Both observer tests had asserted on a _refused_ request, which is
 exactly the path that worked. Every request reports now, with its status, byte
 size and duration, and a request that never produced a response at all reports
 with no status, which is the failure nothing else records. Fixed in PR #97.
